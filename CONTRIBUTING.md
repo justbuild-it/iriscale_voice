@@ -20,7 +20,7 @@ No direct pushes to `main` — including maintainers, including one-line fixes.
 
 A release is its own small PR:
 
-1. Bump the version in **all three** places — `VERSION=` in `bin/notify.sh`,
+1. Bump the version in **all three** places — `VERSION=` in `bin/iriscale-voice`,
    `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (`test/run.sh`
    fails if they disagree). `claude plugin update` only re-copies on a version
    change, so a fix without a bump never reaches installed users.
@@ -41,17 +41,17 @@ Users get it with `/plugin marketplace update iriscale`.
 
 ```sh
 sh test/run.sh                          # silent, uses a throwaway config dir
-IRISCALE_VOICE_DEBUG=1 sh bin/notify.sh Stop < payload.json
+IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json
 claude plugin validate .
 claude plugin uninstall iriscale-voice@iriscale && claude plugin install iriscale-voice@iriscale
 ```
 
-Never run `notify.sh set …` against your real `~/.claude/iriscale-voice.conf` from a
+Never run `iriscale-voice set …` against your real `~/.claude/iriscale-voice.conf` from a
 test — set `CLAUDE_CONFIG_DIR` to a scratch dir (the harness already does).
 
 ## Adding another agent
 
 See `docs/PLATFORMS.md`. An adapter PR needs: the field/event aliases in
-`bin/notify.sh`, a synthetic payload test, and `docs/install/<agent>.md` with the exact
+`bin/iriscale-voice`, a synthetic payload test, and `docs/install/<agent>.md` with the exact
 config to paste. If you can, include a real payload captured from the agent — that's
 the one thing maintainers can't produce for agents they don't run.

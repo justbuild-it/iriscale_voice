@@ -36,10 +36,16 @@ Then run `/voice test` — you should hear it. That's it; the `standard` preset 
 /voice mute              # silence, stays installed      /voice unmute
 /voice quiet 22-8        # nothing between 10 pm and 8 am
 /voice status            # what's configured
+/voice config list       # every setting: current value, default, meaning
+/voice help              # everything else
 ```
 
 Or edit `~/.claude/iriscale-voice.conf` by hand — it's just `key=value` lines. Every
 knob is in [docs/CONFIG.md](docs/CONFIG.md).
+
+The same thing exists as a normal command, **`iriscale-voice`**, for use outside Claude
+Code (`iriscale-voice --help`, `iriscale-voice config list`, …). One symlink puts it on
+your PATH — see [docs/CONFIG.md → Command line](docs/CONFIG.md#command-line).
 
 ## What it says
 
@@ -56,7 +62,7 @@ Underscores and hyphens are spoken as spaces, so name sessions like `payments-ap
 ## How it works
 
 Claude Code [hooks](https://code.claude.com/docs/en/hooks) call one POSIX shell
-script, [`bin/notify.sh`](bin/notify.sh), with the event's JSON on stdin. The script
+script, [`bin/iriscale-voice`](bin/iriscale-voice), with the event's JSON on stdin. The script
 resolves the session name, applies your preset and gates (quiet hours, mute lists,
 minimum turn length), then speaks through the OS: `System.Speech` on Windows, `say`
 on macOS, `spd-say`/`espeak` on Linux (falling back to a desktop notification, then a
@@ -79,7 +85,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
 
 ```sh
 sh test/run.sh                                  # 72 checks, every event × every preset, silent
-IRISCALE_VOICE_DEBUG=1 sh bin/notify.sh Stop < payload.json
+IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json
 claude plugin validate .                        # manifests
 claude plugin marketplace add /path/to/checkout && claude plugin install iriscale-voice@iriscale
 ```

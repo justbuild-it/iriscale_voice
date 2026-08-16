@@ -41,7 +41,7 @@ re-scoped as a cross-platform Claude Code plugin for open-source release.
       instead of hand-editing `settings.json`. Repo doubles as its own marketplace
       (`.claude-plugin/plugin.json` + `marketplace.json`, `hooks/hooks.json`).
       _Scaffolded 2026-08-15; NOT yet verified end-to-end via `/plugin install`._
-- [x] **Cross-platform speaker** in `bin/notify.sh`: Windows (`powershell.exe` +
+- [x] **Cross-platform speaker** in `bin/iriscale-voice`: Windows (`powershell.exe` +
       System.Speech), macOS (`say`), Linux (`spd-say` → `espeak-ng` → `espeak` →
       `notify-send` → bell). Zero external dependencies — no `jq`, `node`, or
       `python`. Verified 2026-08-15 that `jq` is absent even on a dev machine and
@@ -130,14 +130,14 @@ Researched 2026-08-16. Six CLIs copied Claude Code's hook shape (JSON on stdin,
 `session_id`/`cwd`/`Stop`/`PermissionRequest`), so one script + alias layers covers
 them. Order below is by adapter effort × user base.
 
-- [ ] **0.1.3 — alias layers in `notify.sh`**: payload from stdin *or* argv (Codex
+- [ ] **0.1.3 — alias layers in `iriscale-voice`**: payload from stdin *or* argv (Codex
       `notify`); field aliases (`sessionId`, `conversation_id`, `thread-id`,
       `workspace_roots[0]`…); event aliases (`agentStop`/`AfterAgent`/`TaskComplete`
       → Stop, `errorOccurred`/`stop{status=error}` → StopFailure,
       `permissionRequest`/`Notification{ToolPermission}` → PermissionRequest,
       `notification{agent_idle}` → idle_prompt). Synthetic-payload tests per agent.
 - [ ] **0.1.4–0.1.5 — Codex CLI, Copilot CLI, Grok Build, Gemini CLI** install snippets
-      (`docs/install/<agent>.md`) + `notify.sh install <agent>` that prints the
+      (`docs/install/<agent>.md`) + `iriscale-voice install <agent>` that prints the
       snippet with the absolute path filled in. Copilot has the best three-state
       coverage (`agentStop` / `permissionRequest` / `errorOccurred`).
 - [ ] **0.1.8 — Junie CLI, Cursor, Devin CLI, OpenCode/Kilo CLI** (OpenCode needs a

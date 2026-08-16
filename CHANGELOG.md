@@ -8,7 +8,11 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 ## [0.1.2] — 2026-08-16
 
 ### Added
-- **Standard command-line interface** on `bin/notify.sh`: `--help`/`-h`, `--version`/`-V`,
+- **The command is now `iriscale-voice`** (was `bin/notify.sh`). Named after the product,
+  no extension, executable bit set — like `gh` or `claude`. `/voice` (fully
+  `/iriscale-voice:voice`), the plugin `iriscale-voice`, and the command `iriscale-voice`
+  now all share one name. Docs cover putting it on PATH for use outside Claude Code.
+- **Standard command-line interface** on `bin/iriscale-voice`: `--help`/`-h`, `--version`/`-V`,
   `status`, `config list` (every key with current value, default and meaning),
   `config get|set|unset|path|edit`, `events`, `presets`, `say`, `test`, `mute`,
   `unmute`. Unknown commands exit 2 with usage. `/voice` maps onto it 1:1.
