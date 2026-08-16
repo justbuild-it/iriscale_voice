@@ -1,0 +1,13 @@
+{
+  "name": "iriscale",
+  "owner": { "name": "Iriscale", "url": "https://github.com/justbuild-it" },
+  "description": "Iriscale open-source tools for coding agents.",
+  "plugins": [
+    {
+      "name": "iriscale-voice",
+      "source": "./",
+      "description": "Let your coding agents tell you when they are done and need attention.",
+      "version": "0.1.0"
+    }
+  ]
+}

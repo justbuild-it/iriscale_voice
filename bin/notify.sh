@@ -1,0 +1,231 @@
+#!/bin/sh
+# iriscale_voice — let your coding agents tell you when they're done or need you.
+#
+# Called by Claude Code hooks with the hook's JSON payload on stdin:
+#   notify.sh <event>          event: Stop | StopFailure | PermissionRequest |
+#                                     permission_prompt | idle_prompt | agent_completed |
+#                                     SubagentStop | SessionEnd | stamp
+# Also a tiny CLI for the /iriscale-voice slash command:
+#   notify.sh status | test | set <key> <value> | mute | unmute | speak "<text>"
+#
+# Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
+# OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
+#
+# Env:  IRISCALE_VOICE_OFF=1    mute everything
+#       IRISCALE_VOICE_DEBUG=1  print the decision instead of speaking
+
+EVENT="${1:-Stop}"
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+CONF="$CLAUDE_DIR/iriscale-voice.conf"
+STATE="${TMPDIR:-/tmp}/iriscale-voice"
+[ -d "$STATE" ] || mkdir -p "$STATE" 2>/dev/null
+
+# ---------- tiny helpers ------------------------------------------------------
+# Pull a string field out of flat-ish JSON without jq. Takes the FIRST occurrence
+# (a greedy sed took the last one, which for session files is inside the
+# `formerNames` array — so /rename'd sessions spoke their old name). Good enough
+# for the fields we read (ids, paths, tool names). Not a JSON parser.
+jget() { printf '%s' "$2" | tr -d '\n' | grep -o '"'"$1"'"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 | sed 's/^[^:]*:[[:space:]]*"//; s/"$//'; }
+
+# config lookup: cfg <key> <default>. File is key=value, '#' comments, no quoting.
+# Precedence: conf file > plugin setting (CLAUDE_PLUGIN_OPTION_<KEY>, from the
+# userConfig block in plugin.json) > built-in default.
+cfg() {
+    v=""
+    [ -f "$CONF" ] && v=$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONF" | tail -n1 | tr -d '\r')
+    if [ -z "$v" ]; then
+        envkey="CLAUDE_PLUGIN_OPTION_$(printf '%s' "$1" | tr 'a-z.' 'A-Z_')"
+        v=$(eval "printf '%s' \"\${$envkey:-}\"")
+    fi
+    [ -n "$v" ] && printf '%s' "$v" || printf '%s' "$2"
+}
+cfg_set() {   # cfg_set <key> <value>  (create/replace the line, keep everything else)
+    [ -f "$CONF" ] || : > "$CONF"
+    if grep -q "^[[:space:]]*$1[[:space:]]*=" "$CONF" 2>/dev/null; then
+        sed "s|^[[:space:]]*$1[[:space:]]*=.*|$1=$2|" "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"
+    else
+        printf '%s=%s\n' "$1" "$2" >> "$CONF"
+    fi
+}
+now() { date +%s; }
+os() {
+    case "$(uname -s 2>/dev/null)" in
+        Darwin) echo mac ;;
+        MINGW*|MSYS*|CYGWIN*|Windows_NT) echo win ;;
+        *) echo linux ;;
+    esac
+}
+# keep spoken text shell-safe for every backend: letters, digits, basic punctuation
+clean() { printf '%s' "$1" | tr -c 'A-Za-z0-9 .,:;!?()/&%+-' ' ' | tr -s ' '; }
+hour_now() { date +%H | sed 's/^0//'; }
+
+# ---------- presets -----------------------------------------------------------
+# preset_events <preset>  -> space-separated list of events that speak
+preset_events() {
+    case "$1" in
+        basic)    echo "Stop idle_prompt" ;;
+        verbose)  echo "Stop StopFailure PermissionRequest idle_prompt agent_completed SubagentStop SessionEnd" ;;
+        off)      echo "" ;;
+        *)        echo "Stop StopFailure PermissionRequest idle_prompt" ;;   # standard
+    esac
+}
+preset_min_turn() { case "$1" in standard) echo 30 ;; *) echo 0 ;; esac; }
+
+# ---------- speaking backends -------------------------------------------------
+speak() {
+    text=$(clean "$1")
+    vol=$(cfg volume 100); rate=$(cfg rate 0); voice=$(cfg voice "")
+    case "$(os)" in
+        win)
+            ps="Add-Type -AssemblyName System.Speech; \$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; \$s.Volume=$vol; \$s.Rate=$rate;"
+            [ -n "$voice" ] && ps="$ps try { \$s.SelectVoice('$voice') } catch {};"
+            ps="$ps \$s.Speak('$text')"
+            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ps" >/dev/null 2>&1 ;;
+        mac)
+            # say: rate is words/min (default ~175); map our -10..10 onto 120..300
+            wpm=$((175 + rate * 12))
+            if [ -n "$voice" ]; then say -v "$voice" -r "$wpm" "$text" 2>/dev/null
+            else say -r "$wpm" "$text" 2>/dev/null; fi ;;
+        *)
+            if command -v spd-say >/dev/null 2>&1; then spd-say -w -r "$((rate * 10))" "$text" 2>/dev/null
+            elif command -v espeak-ng >/dev/null 2>&1; then espeak-ng "$text" 2>/dev/null
+            elif command -v espeak >/dev/null 2>&1; then espeak "$text" 2>/dev/null
+            elif command -v notify-send >/dev/null 2>&1; then notify-send "Claude Code" "$text" 2>/dev/null
+            else printf '\a'; fi ;;
+    esac
+}
+
+# serialize across concurrent sessions so two announcements never overlap.
+# mkdir is atomic everywhere; flock isn't on macOS.
+with_lock() {
+    lock="$STATE/speak.lock"; i=0
+    while ! mkdir "$lock" 2>/dev/null; do
+        # stale lock (a killed speaker) — steal after 20s
+        if [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then rmdir "$lock" 2>/dev/null; continue; fi
+        i=$((i+1)); [ "$i" -gt 40 ] && break; sleep 0.5
+    done
+    "$@"
+    rmdir "$lock" 2>/dev/null
+}
+
+# ---------- CLI subcommands (used by the /iriscale-voice slash command) -------
+case "$EVENT" in
+    status)
+        p=$(cfg preset standard)
+        echo "iriscale_voice"
+        echo "  config:   $CONF $( [ -f "$CONF" ] && echo '' || echo '(not created yet - using defaults)')"
+        echo "  enabled:  $(cfg enabled true)   preset: $p   speaks on: $(preset_events "$p")"
+        echo "  quiet:    $(cfg quiet_hours none)   min_turn: $(cfg min_turn_seconds "$(preset_min_turn "$p")")s"
+        echo "  muted:    $(cfg mute_sessions none)   only: $(cfg only_sessions all)"
+        echo "  voice:    $(cfg voice default)   volume: $(cfg volume 100)   rate: $(cfg rate 0)   os: $(os)"
+        echo "  log:      $(cfg log "$CLAUDE_DIR/iriscale-voice.log")"
+        exit 0 ;;
+    set)    [ -n "$2" ] || { echo "usage: notify.sh set <key> <value>"; exit 2; }
+            cfg_set "$2" "$3"; echo "$2=$3"; exit 0 ;;
+    mute)   cfg_set enabled false; echo "muted (enabled=false)"; exit 0 ;;
+    unmute) cfg_set enabled true;  echo "unmuted (enabled=true)"; exit 0 ;;
+    speak)  speak "${2:-iriscale voice test}"; exit 0 ;;
+    test)   speak "iriscale voice is working"; echo "spoke a test phrase via $(os) backend"; exit 0 ;;
+esac
+
+# ---------- hook path ---------------------------------------------------------
+payload=$(cat 2>/dev/null)
+sid=$(jget session_id "$payload")
+
+if [ "$EVENT" = "stamp" ]; then
+    [ -n "$sid" ] && now > "$STATE/$sid.start"
+    exit 0
+fi
+
+# resolve a friendly session name: /rename'd name -> cwd folder -> "Claude"
+name=""
+if [ -n "$sid" ] && [ -d "$CLAUDE_DIR/sessions" ]; then
+    f=$(grep -l "\"sessionId\":\"$sid\"" "$CLAUDE_DIR"/sessions/*.json 2>/dev/null | head -n1)
+    [ -n "$f" ] && name=$(jget name "$(cat "$f")")
+fi
+if [ -z "$name" ]; then
+    cwd=$(jget cwd "$payload")
+    name=$(printf '%s' "$cwd" | sed 's#\\\\#/#g; s#\\#/#g; s#/*$##; s#.*/##')
+fi
+[ -z "$name" ] && name="Claude"
+spoken_name=$(printf '%s' "$name" | tr '_-' '  ')
+
+# ---------- decide ------------------------------------------------------------
+reason=""
+preset=$(cfg preset standard)
+[ -n "$IRISCALE_VOICE_OFF" ]            && reason="muted via IRISCALE_VOICE_OFF"
+[ -z "$reason" ] && [ "$(cfg enabled true)" != "true" ] && reason="disabled (enabled=false)"
+
+if [ -z "$reason" ]; then
+    # per-event override wins:  event.Stop=off  /  event.SubagentStop=on
+    ov=$(cfg "event.$EVENT" "")
+    case "$ov" in
+        off|false|0) reason="event $EVENT is off in config" ;;
+        on|true|1)   : ;;
+        *) case " $(preset_events "$preset") " in
+               *" $EVENT "*) : ;;
+               *) reason="event $EVENT is off in preset $preset" ;;
+           esac ;;
+    esac
+fi
+
+if [ -z "$reason" ]; then
+    qh=$(cfg quiet_hours "")          # e.g. 22-8
+    if [ -n "$qh" ]; then
+        qs=${qh%-*}; qe=${qh#*-}; h=$(hour_now)
+        if [ "$qs" -lt "$qe" ]; then [ "$h" -ge "$qs" ] && [ "$h" -lt "$qe" ] && reason="quiet hours ($qh)"
+        elif [ "$qs" -gt "$qe" ]; then { [ "$h" -ge "$qs" ] || [ "$h" -lt "$qe" ]; } && reason="quiet hours ($qh)"; fi
+    fi
+fi
+
+if [ -z "$reason" ]; then
+    only=$(cfg only_sessions ""); mute=$(cfg mute_sessions "")
+    [ -n "$only" ] && case ",$only," in *",$name,"*) : ;; *) reason="$name not in only_sessions" ;; esac
+    [ -n "$mute" ] && case ",$mute," in *",$name,"*) reason="$name is in mute_sessions" ;; esac
+fi
+
+elapsed=""
+if [ -n "$sid" ] && [ -f "$STATE/$sid.start" ]; then
+    elapsed=$(( $(now) - $(cat "$STATE/$sid.start") ))
+fi
+if [ -z "$reason" ] && [ "$EVENT" = "Stop" ]; then
+    min=$(cfg min_turn_seconds "$(preset_min_turn "$preset")")
+    [ -n "$elapsed" ] && [ "$min" -gt 0 ] && [ "$elapsed" -lt "$min" ] && reason="turn took ${elapsed}s, under min_turn_seconds=$min"
+fi
+
+# ---------- phrase ------------------------------------------------------------
+case "$EVENT" in
+    Stop)              tail="done" ;;
+    StopFailure)       why=$(jget reason "$payload"); [ -z "$why" ] && why=$(jget error "$payload")
+                       tail="stopped with an error"; [ -n "$why" ] && tail="stopped: $(printf '%s' "$why" | tr '_' ' ')" ;;
+    PermissionRequest) tool=$(jget tool_name "$payload")
+                       tail="needs permission"; [ -n "$tool" ] && tail="wants to use $tool"
+                       if [ "$tool" = "Bash" ]; then
+                           cmd=$(jget command "$payload" | cut -c1-60); [ -n "$cmd" ] && tail="wants to run $cmd"
+                       fi ;;
+    permission_prompt) tail="needs permission" ;;
+    idle_prompt)       tail="is waiting for you" ;;
+    agent_completed)   tail="agent finished" ;;
+    SubagentStop)      tail="subagent done" ;;
+    SessionEnd)        tail="session ended"; [ -n "$sid" ] && rm -f "$STATE/$sid.start" ;;
+    *)                 tail="$EVENT" ;;
+esac
+# elapsed time on completion, when it's long enough to matter
+if [ "$EVENT" = "Stop" ] && [ -n "$elapsed" ] && [ "$elapsed" -ge 60 ] && [ "$(cfg say_elapsed true)" = "true" ]; then
+    m=$((elapsed / 60)); tail="$tail after $m minute$( [ "$m" -ne 1 ] && echo s)"
+fi
+line="$spoken_name $tail"
+
+# ---------- act ---------------------------------------------------------------
+if [ -n "$IRISCALE_VOICE_DEBUG" ]; then
+    if [ -n "$reason" ]; then echo "SKIP  [$EVENT] ($reason)  would say: $line"
+    else echo "SPEAK [$EVENT] $line"; fi
+    exit 0
+fi
+[ -n "$reason" ] && exit 0
+
+log=$(cfg log "$CLAUDE_DIR/iriscale-voice.log")
+[ "$log" != "none" ] && printf '%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$EVENT" "$line" >> "$log" 2>/dev/null
+
+if [ "$(cfg serialize true)" = "true" ]; then with_lock speak "$line"; else speak "$line"; fi
+exit 0
