@@ -52,12 +52,33 @@ folder name → "Claude". Underscores and hyphens are spoken as spaces
 (`iriscale_voice` → "iriscale voice"). So `/rename` your sessions and you'll know
 which terminal is talking.
 
+## Command line
+
+The same script the hooks call is a small CLI. `--help` is the source of truth; the
+table above is kept in sync with `config list` by a test.
+
+```sh
+sh bin/notify.sh --help              # all commands
+sh bin/notify.sh status              # what's configured, what will speak
+sh bin/notify.sh config list         # every key: current value, default, meaning
+sh bin/notify.sh config get preset
+sh bin/notify.sh config set preset basic
+sh bin/notify.sh config unset quiet_hours
+sh bin/notify.sh config path         # where the file is
+sh bin/notify.sh events              # every event, when it fires, what it says
+sh bin/notify.sh presets
+sh bin/notify.sh test                # speak a test phrase
+sh bin/notify.sh --version
+```
+
+Installed via the plugin, the script lives at
+`~/.claude/plugins/cache/iriscale/iriscale-voice/<version>/bin/notify.sh`; inside
+Claude Code use `/voice <command>` instead.
+
 ## Debugging
 
 ```sh
 IRISCALE_VOICE_DEBUG=1 sh bin/notify.sh Stop < payload.json   # prints the decision, never speaks
-sh bin/notify.sh status                                       # what's configured
-sh bin/notify.sh test                                         # speak a test phrase
 tail ~/.claude/iriscale-voice.log                             # what actually fired
 ```
 

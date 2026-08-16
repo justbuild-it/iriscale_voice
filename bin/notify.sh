@@ -2,18 +2,14 @@
 # iriscale_voice — let your coding agents tell you when they're done or need you.
 #
 # Called by Claude Code hooks with the hook's JSON payload on stdin:
-#   notify.sh <event>          event: Stop | StopFailure | PermissionRequest |
-#                                     permission_prompt | idle_prompt | agent_completed |
-#                                     SubagentStop | SessionEnd | stamp
-# Also a tiny CLI for the /iriscale-voice slash command:
-#   notify.sh status | test | set <key> <value> | mute | unmute | speak "<text>"
+#   notify.sh <event>          (see `notify.sh events`)
+# Also a CLI, used by the /voice slash command and by humans:
+#   notify.sh --help
 #
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
-#
-# Env:  IRISCALE_VOICE_OFF=1    mute everything
-#       IRISCALE_VOICE_DEBUG=1  print the decision instead of speaking
 
+VERSION="0.1.2"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -108,24 +104,135 @@ with_lock() {
     rmdir "$lock" 2>/dev/null
 }
 
-# ---------- CLI subcommands (used by the /iriscale-voice slash command) -------
+# ---------- CLI ---------------------------------------------------------------
+# All settings, with their default and one-line meaning. Single source of truth for
+# `config list`, `config get`, and `--help`; docs/CONFIG.md mirrors it.
+#   key | default | description
+settings_table() {
+    p=$(cfg preset standard)
+    cat <<EOF
+preset|standard|off, basic, standard, verbose — how much gets spoken
+enabled|true|false = silent (\`mute\` / \`unmute\`)
+event.<Event>|(preset)|on/off — override one event regardless of preset (see \`events\`)
+quiet_hours|(none)|22-8 style, 24h, may wrap midnight; nothing speaks inside the window
+min_turn_seconds|$(preset_min_turn "$p")|don't say "done" for turns shorter than this; errors and permission prompts still speak
+say_elapsed|true|append "after N minutes" to "done" for turns of 60s or more
+repeat_cooldown|60|seconds; identical line for the same session inside the window is said once; 0 disables
+mute_sessions|(none)|comma-separated session names to never announce
+only_sessions|(none = all)|comma-separated; if set, announce ONLY these
+voice|(OS default)|Windows: e.g. Microsoft Zira Desktop; macOS: any from \`say -v ?\`; Linux: ignored
+rate|0|speaking speed, -10 slow .. 10 fast
+volume|100|0-100 (Windows only; others use system volume)
+serialize|true|queue announcements so concurrent sessions never overlap
+log|$CLAUDE_DIR/iriscale-voice.log|tab-separated activity log; \`none\` disables
+EOF
+}
+events_table() {
+    cat <<'EOF'
+Stop|turn finished|"<session> done" (+ "after N minutes")
+StopFailure|turn died: rate limit, billing, auth, server|"<session> stopped: rate limit"
+PermissionRequest|Claude wants to run a tool|"<session> wants to run git push" / "wants to use Edit"
+idle_prompt|Claude has been waiting for your input|"<session> is waiting for you"
+agent_completed|a background agent finished|"<session> agent finished"
+SubagentStop|a subagent stopped|"<session> sub agent done"
+SessionEnd|session closed|"<session> session ended"
+stamp|(internal) marks turn start for min_turn_seconds|—
+EOF
+}
+usage() {
+    cat <<EOF
+iriscale-voice $VERSION — let your coding agents tell you when they are done and need attention.
+
+USAGE
+  notify.sh <COMMAND> [ARGS]
+  notify.sh <EVENT>  < payload.json        (how the hooks call it)
+
+COMMANDS
+  status                 what's configured and what will speak
+  test                   speak a test phrase out loud
+  say <text>             speak arbitrary text
+  mute | unmute          silence / restore (sets enabled=false/true)
+  config list            every setting: key, current value, default, meaning
+  config get <key>       print one setting's current value
+  config set <key> <v>   set one setting   (alias: set <key> <v>)
+  config unset <key>     remove a setting, back to preset/default
+  config path            print the config file path
+  config edit            open the config file in \$EDITOR
+  presets                the four presets and what each speaks
+  events                 every event, when it fires, what it says
+  help, -h, --help       this text          -V, --version   print version
+
+ENVIRONMENT
+  IRISCALE_VOICE_OFF=1        mute everything, no file edits
+  IRISCALE_VOICE_DEBUG=1      print the decision instead of speaking
+  CLAUDE_CONFIG_DIR           where the config lives (default ~/.claude)
+
+FILES
+  $CONF
+  $(cfg log "$CLAUDE_DIR/iriscale-voice.log")
+
+Inside Claude Code the same commands are available as /voice <command>.
+Docs: https://github.com/justbuild-it/iriscale_voice
+EOF
+}
+cli_status() {
+    p=$(cfg preset standard)
+    echo "iriscale-voice $VERSION"
+    echo "  config:   $CONF $( [ -f "$CONF" ] && echo '' || echo '(not created yet - using defaults)')"
+    echo "  enabled:  $(cfg enabled true)   preset: $p   speaks on: $(preset_events "$p")"
+    echo "  quiet:    $(cfg quiet_hours none)   min_turn: $(cfg min_turn_seconds "$(preset_min_turn "$p")")s   cooldown: $(cfg repeat_cooldown 60)s"
+    echo "  muted:    $(cfg mute_sessions none)   only: $(cfg only_sessions all)"
+    echo "  voice:    $(cfg voice default)   volume: $(cfg volume 100)   rate: $(cfg rate 0)   os: $(os)"
+    echo "  log:      $(cfg log "$CLAUDE_DIR/iriscale-voice.log")"
+    ov=$( [ -f "$CONF" ] && grep '^event\.' "$CONF" | grep -v '=$' | tr '\n' ' ' )
+    [ -n "$ov" ] && echo "  overrides: $ov"
+    return 0
+}
+cli_config() {
+    sub="$1"; shift
+    case "$sub" in
+        list|ls|"")
+            printf '%-18s %-26s %-22s %s\n' KEY CURRENT DEFAULT MEANING
+            settings_table | while IFS='|' read -r k d m; do
+                case "$k" in "event.<Event>") cur=$( [ -f "$CONF" ] && grep '^event\.' "$CONF" | grep -v '=$' | tr '\n' ' ' ); [ -z "$cur" ] && cur="(none)";;
+                             *) cur=$(cfg "$k" ""); [ -z "$cur" ] && cur="(default)";; esac
+                printf '%-18s %-26s %-22s %s\n' "$k" "$cur" "$d" "$m"
+            done
+            echo; echo "file: $CONF"; [ -f "$CONF" ] || echo "(not created yet)"
+            ;;
+        get)   [ -n "$1" ] || { echo "usage: notify.sh config get <key>" >&2; return 2; }
+               v=$(cfg "$1" ""); if [ -n "$v" ]; then echo "$v"; else echo "(unset - using default)"; fi ;;
+        set)   [ -n "$1" ] || { echo "usage: notify.sh config set <key> <value>" >&2; return 2; }
+               cfg_set "$1" "$2"; echo "$1=$2" ;;
+        unset|rm) [ -n "$1" ] || { echo "usage: notify.sh config unset <key>" >&2; return 2; }
+               [ -f "$CONF" ] && { sed "/^[[:space:]]*$1[[:space:]]*=/d" "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"; }
+               echo "unset $1" ;;
+        path)  echo "$CONF" ;;
+        edit)  [ -f "$CONF" ] || : > "$CONF"; "${EDITOR:-vi}" "$CONF" ;;
+        *)     echo "unknown: config $sub  (try: list, get, set, unset, path, edit)" >&2; return 2 ;;
+    esac
+}
+
 case "$EVENT" in
-    status)
-        p=$(cfg preset standard)
-        echo "iriscale_voice"
-        echo "  config:   $CONF $( [ -f "$CONF" ] && echo '' || echo '(not created yet - using defaults)')"
-        echo "  enabled:  $(cfg enabled true)   preset: $p   speaks on: $(preset_events "$p")"
-        echo "  quiet:    $(cfg quiet_hours none)   min_turn: $(cfg min_turn_seconds "$(preset_min_turn "$p")")s"
-        echo "  muted:    $(cfg mute_sessions none)   only: $(cfg only_sessions all)"
-        echo "  voice:    $(cfg voice default)   volume: $(cfg volume 100)   rate: $(cfg rate 0)   os: $(os)"
-        echo "  log:      $(cfg log "$CLAUDE_DIR/iriscale-voice.log")"
-        exit 0 ;;
-    set)    [ -n "$2" ] || { echo "usage: notify.sh set <key> <value>"; exit 2; }
-            cfg_set "$2" "$3"; echo "$2=$3"; exit 0 ;;
-    mute)   cfg_set enabled false; echo "muted (enabled=false)"; exit 0 ;;
-    unmute) cfg_set enabled true;  echo "unmuted (enabled=true)"; exit 0 ;;
-    speak)  speak "${2:-iriscale voice test}"; exit 0 ;;
-    test)   speak "iriscale voice is working"; echo "spoke a test phrase via $(os) backend"; exit 0 ;;
+    help|-h|--help)  usage; exit 0 ;;
+    -V|--version|version) echo "$VERSION"; exit 0 ;;
+    status)  cli_status; exit $? ;;
+    config)  shift; cli_config "$@"; exit $? ;;
+    set)     [ -n "$2" ] || { echo "usage: notify.sh set <key> <value>" >&2; exit 2; }
+             cfg_set "$2" "$3"; echo "$2=$3"; exit 0 ;;
+    get)     shift; cli_config get "$@"; exit $? ;;
+    unset)   shift; cli_config unset "$@"; exit $? ;;
+    mute)    cfg_set enabled false; echo "muted (enabled=false)"; exit 0 ;;
+    unmute)  cfg_set enabled true;  echo "unmuted (enabled=true)"; exit 0 ;;
+    presets)
+        for p in off basic standard verbose; do printf '  %-9s %s\n' "$p" "$(preset_events "$p" | sed 's/^$/(nothing)/')"; done
+        echo; echo "  standard also skips 'done' for turns under 30s (min_turn_seconds)."; exit 0 ;;
+    events)
+        printf '  %-18s %-46s %s\n' EVENT "WHEN IT FIRES" "WHAT IT SAYS"
+        events_table | while IFS='|' read -r e w s; do printf '  %-18s %-46s %s\n' "$e" "$w" "$s"; done; exit 0 ;;
+    say|speak) shift; speak "${*:-iriscale voice test}"; exit 0 ;;
+    test)    speak "iriscale voice is working"; echo "spoke a test phrase via $(os) backend"; exit 0 ;;
+    -*)      echo "unknown option: $EVENT" >&2; usage >&2; exit 2 ;;
 esac
 
 # ---------- hook path ---------------------------------------------------------
