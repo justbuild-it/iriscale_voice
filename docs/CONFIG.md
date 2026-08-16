@@ -42,6 +42,7 @@ Precedence, highest first:
 | `rate` | `0` | speaking speed, -10 (slow) to 10 (fast) |
 | `volume` | `100` | 0–100 (Windows only; others use system volume) |
 | `serialize` | `true` | queue announcements so concurrent sessions never talk over each other |
+| `repeat_cooldown` | `60` | seconds; the *same* announcement for the *same* session inside this window is said once. Guards against a looping subagent or a double-firing hook. `0` disables |
 | `log` | `~/.claude/iriscale-voice.log` | tab-separated `time  event  text`. `none` to disable |
 
 ## Session names

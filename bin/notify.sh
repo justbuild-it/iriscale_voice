@@ -206,7 +206,7 @@ case "$EVENT" in
     permission_prompt) tail="needs permission" ;;
     idle_prompt)       tail="is waiting for you" ;;
     agent_completed)   tail="agent finished" ;;
-    SubagentStop)      tail="subagent done" ;;
+    SubagentStop)      tail="sub agent done" ;;      # "subagent" gets read as "soob-agent"
     SessionEnd)        tail="session ended"; [ -n "$sid" ] && rm -f "$STATE/$sid.start" ;;
     *)                 tail="$EVENT" ;;
 esac
@@ -215,6 +215,18 @@ if [ "$EVENT" = "Stop" ] && [ -n "$elapsed" ] && [ "$elapsed" -ge 60 ] && [ "$(c
     m=$((elapsed / 60)); tail="$tail after $m minute$( [ "$m" -ne 1 ] && echo s)"
 fi
 line="$spoken_name $tail"
+
+# repeat guard: the same announcement for the same session within repeat_cooldown
+# seconds is noise (a subagent looping, a hook double-firing) — say it once.
+cool=$(cfg repeat_cooldown 60)
+lastf="$STATE/${sid:-nosid}.last"
+if [ -z "$reason" ] && [ "$cool" -gt 0 ] 2>/dev/null && [ -f "$lastf" ]; then
+    last_t=$(sed -n '1p' "$lastf"); last_line=$(sed -n '2p' "$lastf")
+    if [ "$last_line" = "$line" ] && [ $(( $(now) - ${last_t:-0} )) -lt "$cool" ]; then
+        reason="same announcement within ${cool}s (repeat_cooldown)"
+    fi
+fi
+[ -z "$reason" ] && printf '%s\n%s\n' "$(now)" "$line" > "$lastf" 2>/dev/null
 
 # ---------- act ---------------------------------------------------------------
 if [ -n "$IRISCALE_VOICE_DEBUG" ]; then

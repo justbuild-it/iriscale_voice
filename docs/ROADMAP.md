@@ -38,8 +38,16 @@ re-scoped as a cross-platform Claude Code plugin for open-source release.
       through Git Bash with a Windows-style `${CLAUDE_PLUGIN_ROOT}`. Old
       `speak-notify.ps1` hooks removed from `settings.json` (backup
       `settings.json.20260815-pre-plugin.bak`). Always-on cost: ~97 tokens/session.
-      _Still to observe live: the `idle_prompt` Notification matcher arriving, and
-      `PermissionRequest` firing (rare under `defaultMode: auto`)._
+      _Observed live 2026-08-16 in `iriscale-voice.log`: `idle_prompt` matcher
+      arrives, `PermissionRequest` fires even under `defaultMode: auto`, `Stop` carries
+      elapsed time. Both formerly-unverified items are now confirmed._
+      **Incident 2026-08-16 (v0.1.1):** "sub agent done" repeated every ~32 s. Two
+      causes: (1) an early test batch had run `set event.SubagentStop on` against the
+      LIVE conf before the throwaway-config harness existed — test pollution, not a
+      user setting; (2) a background subagent fired `SubagentStop` in a loop and nothing
+      deduped it. Fixed by cleaning the conf, adding `repeat_cooldown` (default 60 s:
+      identical line + same session inside the window speaks once), and saying
+      "sub agent" (TTS read "subagent" as "soob-agent"). Tests: 45.
       Found+fixed during this: greedy `sed` in `jget` matched the LAST `"name":` in a
       session file — inside `formerNames` — so any `/rename`d session spoke its OLD
       name. Regression test added.

@@ -22,6 +22,7 @@ expect() {   # expect <SPEAK|SKIP> <event> [payload]
 }
 
 echo "syntax:"; sh -n "$S" && bash --posix -n "$S" 2>/dev/null; echo "  ok"
+sh "$S" set repeat_cooldown 0 >/dev/null     # the matrix below repeats lines on purpose
 
 for preset in off basic standard verbose; do
     sh "$S" set preset $preset >/dev/null
@@ -60,6 +61,17 @@ mkdir -p "$CLAUDE_CONFIG_DIR/sessions"
 printf '%s' '{"pid":1,"sessionId":"renamed-1","cwd":"/x/y","name":"new_name","status":"idle","formerNames":[{"name":"old-name","renamedAt":1}]}' > "$CLAUDE_CONFIG_DIR/sessions/1.json"
 out=$(printf '%s' '{"session_id":"renamed-1","cwd":"/x/y"}' | sh "$S" Stop)
 case "$out" in *"new name done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL renamed session: $out" ;; esac
+
+# repeat guard: same line twice inside the cooldown -> second is SKIP; a different line still SPEAKs
+sh "$S" set repeat_cooldown 60 >/dev/null; sh "$S" set preset verbose >/dev/null
+R='{"session_id":"loop-1","cwd":"/x/loopy"}'
+expect SPEAK SubagentStop "$R"
+expect SKIP  SubagentStop "$R"
+expect SPEAK idle_prompt  "$R"
+sh "$S" set repeat_cooldown 0 >/dev/null
+# pronunciation: never say "subagent" as one word
+out=$(printf '%s' '{"session_id":"p","cwd":"/x/y"}' | sh "$S" SubagentStop)
+case "$out" in *"sub agent done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL pronunciation: $out" ;; esac
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
