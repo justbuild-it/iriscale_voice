@@ -100,13 +100,30 @@ re-scoped as a cross-platform Claude Code plugin for open-source release.
 - [ ] **Phone push** when away — Claude Code's Remote Control push
       (`agentPushNotifEnabled`) already covers part of this; document how they combine.
 
-## Tier 4 — Beyond Claude Code
+## Tier 4 — Beyond Claude Code (see docs/PLATFORMS.md for the full matrix)
 
-- [ ] **Cursor adapter.** Cursor's `hooks.json` has a `stop` event that receives JSON
-      on stdin — same shape of idea, different field names, no session naming
-      (use workspace folder). Unverified whether Cursor exposes failure or
-      permission-prompt events; check before promising parity.
-- [ ] Other agents with hook systems as they appear.
+Researched 2026-08-16. Six CLIs copied Claude Code's hook shape (JSON on stdin,
+`session_id`/`cwd`/`Stop`/`PermissionRequest`), so one script + alias layers covers
+them. Order below is by adapter effort × user base.
+
+- [ ] **v0.2 — alias layers in `notify.sh`**: payload from stdin *or* argv (Codex
+      `notify`); field aliases (`sessionId`, `conversation_id`, `thread-id`,
+      `workspace_roots[0]`…); event aliases (`agentStop`/`AfterAgent`/`TaskComplete`
+      → Stop, `errorOccurred`/`stop{status=error}` → StopFailure,
+      `permissionRequest`/`Notification{ToolPermission}` → PermissionRequest,
+      `notification{agent_idle}` → idle_prompt). Synthetic-payload tests per agent.
+- [ ] **v0.2 — Codex CLI, Copilot CLI, Grok Build, Gemini CLI** install snippets
+      (`docs/install/<agent>.md`) + `notify.sh install <agent>` that prints the
+      snippet with the absolute path filled in. Copilot has the best three-state
+      coverage (`agentStop` / `permissionRequest` / `errorOccurred`).
+- [ ] **v0.3 — Junie CLI, Cursor, Devin CLI, OpenCode/Kilo CLI** (OpenCode needs a
+      ~20-line TS plugin that shells out to the script).
+- [ ] **v0.4 — Windsurf/Cascade, Cline, Aider** (done-only signals).
+- [ ] Backlog: Amp (TS plugin), Kiro (payload undocumented).
+- [-] Zed, Warp, Roo Code, Kilo extension — no shell hook exists; only built-in
+      sound settings. Re-check when Zed's hooks proposal (#57890) lands.
+- Constraint: only Claude Code is installed on the maintainers' machine, so every
+  other adapter is written to spec and verified by users' logs, not by us.
 
 ## Cut
 
