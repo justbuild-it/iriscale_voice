@@ -54,31 +54,46 @@ which terminal is talking.
 
 ## Command line
 
-The same script the hooks call is a small CLI. `--help` is the source of truth; the
-table above is kept in sync with `config list` by a test.
+The command is named after the product: **`iriscale-voice`**. It's the same script the
+hooks call. `--help` is the source of truth; the table above is kept in sync with
+`config list` by a test.
 
 ```sh
-sh bin/notify.sh --help              # all commands
-sh bin/notify.sh status              # what's configured, what will speak
-sh bin/notify.sh config list         # every key: current value, default, meaning
-sh bin/notify.sh config get preset
-sh bin/notify.sh config set preset basic
-sh bin/notify.sh config unset quiet_hours
-sh bin/notify.sh config path         # where the file is
-sh bin/notify.sh events              # every event, when it fires, what it says
-sh bin/notify.sh presets
-sh bin/notify.sh test                # speak a test phrase
-sh bin/notify.sh --version
+iriscale-voice --help              # all commands
+iriscale-voice status              # what's configured, what will speak
+iriscale-voice config list         # every key: current value, default, meaning
+iriscale-voice config get preset
+iriscale-voice config set preset basic
+iriscale-voice config unset quiet_hours
+iriscale-voice config path         # where the file is
+iriscale-voice events              # every event, when it fires, what it says
+iriscale-voice presets
+iriscale-voice test                # speak a test phrase
+iriscale-voice --version
 ```
 
-Installed via the plugin, the script lives at
-`~/.claude/plugins/cache/iriscale/iriscale-voice/<version>/bin/notify.sh`; inside
-Claude Code use `/voice <command>` instead.
+**Inside Claude Code** you don't need any of this — `/voice <command>` runs the same
+thing (`/voice config list`, `/voice preset basic`, `/voice help`).
+
+**Outside Claude Code** (other agents, scripts, or just preference), put it on your PATH
+once. The plugin installs it at
+`~/.claude/plugins/cache/iriscale/iriscale-voice/<version>/bin/iriscale-voice`; from a
+git checkout it's `bin/iriscale-voice`.
+
+```sh
+# macOS / Linux
+ln -s "$(pwd)/bin/iriscale-voice" ~/.local/bin/iriscale-voice
+# Windows (Git Bash)
+ln -s "$(pwd)/bin/iriscale-voice" /usr/bin/iriscale-voice      # or any dir on PATH
+```
+
+Then `iriscale-voice --help` works anywhere. Until you do that, `sh bin/iriscale-voice …`
+from the checkout works too.
 
 ## Debugging
 
 ```sh
-IRISCALE_VOICE_DEBUG=1 sh bin/notify.sh Stop < payload.json   # prints the decision, never speaks
+IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json   # prints the decision, never speaks
 tail ~/.claude/iriscale-voice.log                             # what actually fired
 ```
 

@@ -11,7 +11,7 @@ Codex CLI, Copilot CLI, Grok Build, Gemini CLI, Junie CLI and Devin CLI all run 
 shell command per lifecycle event with **JSON on stdin**, and most use the same field
 names (`session_id`, `cwd`, `hook_event_name`, `tool_name`, events `Stop` /
 `PermissionRequest`). Grok and Devin will even read `~/.claude/settings.json`
-directly. So `bin/notify.sh` is already ~90 % of an adapter for six agents; the work
+directly. So `bin/iriscale-voice` is already ~90 % of an adapter for six agents; the work
 is a field-alias layer, an event-alias layer, and per-agent install snippets.
 
 ## Matrix
@@ -26,7 +26,7 @@ is a field-alias layer, an event-alias layer, and per-agent install snippets.
 | 5 | **Junie CLI** (JetBrains) | `hooks` in `~/.junie/config.json` | `Stop` | `PermissionRequest` | `StopFailure` (`error`) | no session/cwd → falls back to "Claude"/folder unknown | small; name from `$PWD` | 0.1.8 |
 | 6 | **Cursor** | `~/.cursor/hooks.json`, `.cursor/hooks.json` | `stop` w/ `status: completed` | — (only pre-hooks; no "user is being asked" event) | `stop` w/ `status: error` | partial: `conversation_id`, `workspace_roots[]`, no cwd | small: status→event, name from `workspace_roots[0]` | 0.1.8 |
 | 7 | **Devin CLI** | `~/.config/devin/config.json`, `.devin/hooks.v1.json` (also reads `.claude/settings.json`) | `Stop` | `PermissionRequest` | — | partial: `session_id`, `DEVIN_PROJECT_DIR` env | tiny | 0.1.8 |
-| 8 | **OpenCode / Kilo CLI** | JS/TS plugin in `~/.config/opencode/plugins/` | `session.idle` | `permission.asked` | `session.error` | yes | medium: a 20-line TS plugin that shells to `notify.sh` | 0.1.8 |
+| 8 | **OpenCode / Kilo CLI** | JS/TS plugin in `~/.config/opencode/plugins/` | `session.idle` | `permission.asked` | `session.error` | yes | medium: a 20-line TS plugin that shells to `iriscale-voice` | 0.1.8 |
 | 9 | **Windsurf / Cascade** | `~/.codeium/windsurf/hooks.json` | `post_cascade_response` | — | — | partial (`trajectory_id`) | small, done-only | 0.1.12 |
 | 10 | **Cline** (VS Code) | executable in `~/Documents/Cline/Hooks/` | `TaskComplete` | — | `TaskCancel` (also on error) | partial (`taskId`, `workspaceRoots`) | small; Windows support unverified | 0.1.12 |
 | 11 | **Aider** | `--notifications-command "cmd"` | yes (no payload) | — | — | no | trivial, done-only | 0.1.12 |
@@ -36,7 +36,7 @@ is a field-alias layer, an event-alias layer, and per-agent install snippets.
 
 ## Design for multi-agent support (0.1.3)
 
-Keep one script. Add three thin layers, all inside `bin/notify.sh`:
+Keep one script. Add three thin layers, all inside `bin/iriscale-voice`:
 
 1. **Payload source** — stdin (everyone) **or** last argv (Codex `notify`).
 2. **Field aliases** — `session_id | sessionId | conversation_id | thread-id | taskId`,
@@ -48,7 +48,7 @@ Keep one script. Add three thin layers, all inside `bin/notify.sh`:
    `idle_prompt ← notification{agent_idle}`.
 
 Then `docs/install/<agent>.md` with the exact JSON to paste for each, and a
-`notify.sh install <agent>` helper that prints (not writes) that snippet with the
+`iriscale-voice install <agent>` helper that prints (not writes) that snippet with the
 absolute script path filled in. Writing into another tool's config file is left to the
 user for now — those files are theirs.
 

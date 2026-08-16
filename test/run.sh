@@ -4,7 +4,7 @@
 # Uses a throwaway config so it never touches ~/.claude/iriscale-voice.conf.
 
 here=$(cd "$(dirname "$0")" && pwd)
-S="$here/../bin/notify.sh"
+S="$here/../bin/iriscale-voice"
 export IRISCALE_VOICE_DEBUG=1
 export CLAUDE_CONFIG_DIR="${TMPDIR:-/tmp}/iriscale-voice-test-$$"
 mkdir -p "$CLAUDE_CONFIG_DIR"

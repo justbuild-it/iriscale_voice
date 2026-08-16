@@ -2,9 +2,9 @@
 # iriscale_voice — let your coding agents tell you when they're done or need you.
 #
 # Called by Claude Code hooks with the hook's JSON payload on stdin:
-#   notify.sh <event>          (see `notify.sh events`)
+#   iriscale-voice <event>          (see `iriscale-voice events`)
 # Also a CLI, used by the /voice slash command and by humans:
-#   notify.sh --help
+#   iriscale-voice --help
 #
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
@@ -144,8 +144,8 @@ usage() {
 iriscale-voice $VERSION — let your coding agents tell you when they are done and need attention.
 
 USAGE
-  notify.sh <COMMAND> [ARGS]
-  notify.sh <EVENT>  < payload.json        (how the hooks call it)
+  iriscale-voice <COMMAND> [ARGS]
+  iriscale-voice <EVENT>  < payload.json        (how the hooks call it)
 
 COMMANDS
   status                 what's configured and what will speak
@@ -200,11 +200,11 @@ cli_config() {
             done
             echo; echo "file: $CONF"; [ -f "$CONF" ] || echo "(not created yet)"
             ;;
-        get)   [ -n "$1" ] || { echo "usage: notify.sh config get <key>" >&2; return 2; }
+        get)   [ -n "$1" ] || { echo "usage: iriscale-voice config get <key>" >&2; return 2; }
                v=$(cfg "$1" ""); if [ -n "$v" ]; then echo "$v"; else echo "(unset - using default)"; fi ;;
-        set)   [ -n "$1" ] || { echo "usage: notify.sh config set <key> <value>" >&2; return 2; }
+        set)   [ -n "$1" ] || { echo "usage: iriscale-voice config set <key> <value>" >&2; return 2; }
                cfg_set "$1" "$2"; echo "$1=$2" ;;
-        unset|rm) [ -n "$1" ] || { echo "usage: notify.sh config unset <key>" >&2; return 2; }
+        unset|rm) [ -n "$1" ] || { echo "usage: iriscale-voice config unset <key>" >&2; return 2; }
                [ -f "$CONF" ] && { sed "/^[[:space:]]*$1[[:space:]]*=/d" "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"; }
                echo "unset $1" ;;
         path)  echo "$CONF" ;;
@@ -218,7 +218,7 @@ case "$EVENT" in
     -V|--version|version) echo "$VERSION"; exit 0 ;;
     status)  cli_status; exit $? ;;
     config)  shift; cli_config "$@"; exit $? ;;
-    set)     [ -n "$2" ] || { echo "usage: notify.sh set <key> <value>" >&2; exit 2; }
+    set)     [ -n "$2" ] || { echo "usage: iriscale-voice set <key> <value>" >&2; exit 2; }
              cfg_set "$2" "$3"; echo "$2=$3"; exit 0 ;;
     get)     shift; cli_config get "$@"; exit $? ;;
     unset)   shift; cli_config unset "$@"; exit $? ;;

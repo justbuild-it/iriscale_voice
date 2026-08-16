@@ -7,8 +7,8 @@ allowed-tools: Bash(sh *)
 The user ran `/voice $ARGUMENTS` to configure their spoken Claude Code notifications.
 Apply it by running the plugin's CLI — do not edit files by hand.
 
-CLI: `sh "${CLAUDE_PLUGIN_ROOT}/bin/notify.sh" <command> [args]` — it has standard
-help; when unsure run `sh "${CLAUDE_PLUGIN_ROOT}/bin/notify.sh" --help`.
+CLI: `sh "${CLAUDE_PLUGIN_ROOT}/bin/iriscale-voice" <command> [args]` — it has standard
+help; when unsure run `sh "${CLAUDE_PLUGIN_ROOT}/bin/iriscale-voice" --help`.
 
 Map the arguments (first word is the action; pass the rest through unchanged):
 
