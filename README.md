@@ -62,11 +62,18 @@ minimum turn length), then speaks through the OS: `System.Speech` on Windows, `s
 on macOS, `spd-say`/`espeak` on Linux (falling back to a desktop notification, then a
 bell). No `jq`, `node`, or `python` needed.
 
+## Other agents
+
+Claude Code today. Codex CLI, Copilot CLI, Grok Build and Gemini CLI use the same
+hook shape and are next; Cursor, Junie, Devin, OpenCode and more are mapped out in
+[docs/PLATFORMS.md](docs/PLATFORMS.md). If you use one of them and want it sooner,
+open an issue with a sample hook payload — that's the only thing we can't produce here.
+
 ## Roadmap
 
 Spoken one-line summaries of *what* was done, escalation when a permission prompt sits
-unanswered, earcons, a multi-session status board, and a Cursor adapter — tracked in
-[docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
+unanswered, earcons, a multi-session status board, and the other-agent adapters above —
+tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
 
 ## Develop
 
