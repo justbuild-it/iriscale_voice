@@ -78,7 +78,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
 ## Develop
 
 ```sh
-sh test/run.sh                                  # 41 checks, every event × every preset, silent
+sh test/run.sh                                  # 72 checks, every event × every preset, silent
 IRISCALE_VOICE_DEBUG=1 sh bin/notify.sh Stop < payload.json
 claude plugin validate .                        # manifests
 claude plugin marketplace add /path/to/checkout && claude plugin install iriscale-voice@iriscale

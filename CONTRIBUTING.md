@@ -20,10 +20,15 @@ No direct pushes to `main` — including maintainers, including one-line fixes.
 
 A release is its own small PR:
 
-1. Bump `version` in **both** `.claude-plugin/plugin.json` and
-   `.claude-plugin/marketplace.json` — `claude plugin update` only re-copies on a
-   version change, so a fix without a bump never reaches installed users.
-   - patch: fixes · minor: new events/settings/agents · major: breaking config changes
+1. Bump the version in **all three** places — `VERSION=` in `bin/notify.sh`,
+   `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (`test/run.sh`
+   fails if they disagree). `claude plugin update` only re-copies on a version
+   change, so a fix without a bump never reaches installed users.
+   - **Versioning policy:** while we're pre-1.0, every release — fixes and features
+     alike — bumps the **patch** number: 0.1.1 → 0.1.2 → 0.1.3. Small, frequent,
+     visible releases beat batching. The minor number bumps only for a config- or
+     behavior-breaking change (e.g. renamed keys); 1.0.0 when the config format is
+     frozen.
 2. Move `[Unreleased]` in `CHANGELOG.md` under the new version with today's date.
 3. Merge, then tag and publish notes from the changelog:
    ```sh

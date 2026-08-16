@@ -73,5 +73,29 @@ sh "$S" set repeat_cooldown 0 >/dev/null
 out=$(printf '%s' '{"session_id":"p","cwd":"/x/y"}' | sh "$S" SubagentStop)
 case "$out" in *"sub agent done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL pronunciation: $out" ;; esac
 
+# ---- CLI ----
+ok() { if [ "$1" = "$2" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $3: got '$1' wanted '$2'"; fi; }
+sh "$S" --help >/dev/null 2>&1;            ok $? 0 "--help exit"
+sh "$S" --help | grep '^USAGE' >/dev/null;         ok $? 0 "--help has USAGE"
+sh "$S" -h    | grep 'config list' >/dev/null;     ok $? 0 "-h lists config"
+sh "$S" --bogus >/dev/null 2>&1;           ok $? 2 "unknown option exits 2"
+sh "$S" config nope >/dev/null 2>&1;       ok $? 2 "unknown config sub exits 2"
+sh "$S" config set rate 3 >/dev/null;      ok "$(sh "$S" config get rate)" 3 "config set/get"
+sh "$S" config unset rate >/dev/null;      ok "$(sh "$S" config get rate)" "(unset - using default)" "config unset"
+ok "$(sh "$S" config path)" "$CLAUDE_CONFIG_DIR/iriscale-voice.conf" "config path"
+sh "$S" config list | grep '^repeat_cooldown' >/dev/null;  ok $? 0 "config list has repeat_cooldown"
+sh "$S" events | grep 'PermissionRequest' >/dev/null;      ok $? 0 "events lists PermissionRequest"
+sh "$S" presets | grep '^  verbose' >/dev/null;            ok $? 0 "presets lists verbose"
+# version must agree in script, plugin.json, marketplace.json (release process guard)
+v_script=$(sh "$S" --version)
+v_plugin=$(grep -o '"version": *"[^"]*"' "$here/../.claude-plugin/plugin.json"      | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
+v_market=$(grep -o '"version": *"[^"]*"' "$here/../.claude-plugin/marketplace.json" | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
+ok "$v_plugin" "$v_script" "plugin.json version == script VERSION"
+ok "$v_market" "$v_script" "marketplace.json version == script VERSION"
+# every settings key documented in CONFIG.md
+for k in $(sh "$S" config list | awk 'NR>1 && $1 !~ /^(file:|\(|$)/ {print $1}' | sed 's/\.<Event>//'); do
+    grep -q "\`$k" "$here/../docs/CONFIG.md"; ok $? 0 "docs/CONFIG.md documents $k"
+done
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

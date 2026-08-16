@@ -5,11 +5,26 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-08-16
+
 ### Added
+- **Standard command-line interface** on `bin/notify.sh`: `--help`/`-h`, `--version`/`-V`,
+  `status`, `config list` (every key with current value, default and meaning),
+  `config get|set|unset|path|edit`, `events`, `presets`, `say`, `test`, `mute`,
+  `unmute`. Unknown commands exit 2 with usage. `/voice` maps onto it 1:1.
 - `docs/PLATFORMS.md`: support matrix for 14 other coding agents (Codex CLI, Copilot CLI,
   Grok Build, Gemini CLI, Junie, Cursor, Devin, OpenCode/Kilo, Windsurf, Cline, Aider,
-  Amp, Kiro, and the ones with no hook system), with adapter plan and effort per agent.
-- `CHANGELOG.md` (this file) and a documented release process in `CONTRIBUTING.md`.
+  Amp, Kiro, and the ones with no hook system), with adapter plan and effort per agent
+  (#1).
+- `CHANGELOG.md` and a documented release process in `CONTRIBUTING.md` (#1).
+- Tests: CLI behaviour, and a guard that the version in `bin/notify.sh`, `plugin.json`
+  and `marketplace.json` agree; every `config list` key must be documented in
+  `docs/CONFIG.md`. 72 checks.
+
+### Changed
+- **Versioning policy:** every release bumps the patch number (0.1.1 → 0.1.2 → …) —
+  small, frequent, visible releases. Roadmap re-numbered accordingly with a per-release
+  plan through 0.1.12.
 
 ## [0.1.1] — 2026-08-16
 
@@ -49,6 +64,7 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/justbuild-it/iriscale_voice/releases/tag/v0.1.0
