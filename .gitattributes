@@ -1,0 +1,5 @@
+# Shell scripts and manifests must stay LF everywhere - CRLF breaks sh on Windows checkouts.
+* text=auto eol=lf
+*.sh text eol=lf
+*.json text eol=lf
+*.md text eol=lf
