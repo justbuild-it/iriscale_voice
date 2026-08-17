@@ -5,6 +5,19 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.5] — 2026-08-17
+
+### Changed
+- **5× faster on Windows.** Every hook event ran ~1.5–1.8 s of shell before speaking,
+  because each config lookup spawned `sed | tail | tr` and each JSON field `grep | head |
+  sed` — ~40 external processes at 25–50 ms each on MSYS. The config file is now read once
+  into memory, and every lookup, JSON field, path basename and name-cleanup step uses
+  shell builtins only. Hook path 1479 → 283 ms (best of 5); `status` 1739 → 455 ms;
+  test suite 82 → 26 s. macOS/Linux fork cheaply so gain less, but still run fewer
+  processes.
+- Test guard: the hook path may spawn at most one text-processing tool (`sed`, `grep`,
+  `tr`, `awk`, `cut`, `head`, `tail`, `cat`, `find`), measured with PATH shims. 89 checks.
+
 ## [0.1.4] — 2026-08-17
 
 ### Fixed
@@ -94,7 +107,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.1...v0.1.2
