@@ -109,5 +109,18 @@ for f in "$here"/../commands/*.md; do
     grep -q "^description:" "$f"; ok $? 0 "commands/$n.md has a description"
 done
 
+# Performance guard: the hook path must stay nearly spawn-free (each external process
+# costs 25-50 ms on Windows/MSYS; v0.1.4 spawned ~40 and took 1.8 s per event).
+# Count externals by putting logging shims for the usual suspects first on PATH.
+SHIM="$CLAUDE_CONFIG_DIR/shim"; mkdir -p "$SHIM"; : > "$SHIM/.log"
+for tool in sed grep tr awk cut head tail cat find; do
+    real=$(command -v $tool)
+    printf '#!/bin/sh\necho %s >> "%s"\nexec "%s" "$@"\n' "$tool" "$SHIM/.log" "$real" > "$SHIM/$tool"; chmod +x "$SHIM/$tool"
+done
+sh "$S" set preset standard >/dev/null; : > "$SHIM/.log"
+printf '%s' '{"session_id":"perf-1","cwd":"/x/perf_svc","tool_name":"Bash","tool_input":{"command":"ls"}}' | PATH="$SHIM:$PATH" sh "$S" PermissionRequest >/dev/null
+spawns=$(wc -l < "$SHIM/.log" | tr -d ' ')
+if [ "$spawns" -le 1 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook path spawned $spawns text-tool processes (limit 1): $(sort "$SHIM/.log" | uniq -c | tr '\n' ' ')"; fi
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
