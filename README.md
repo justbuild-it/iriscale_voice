@@ -21,7 +21,7 @@ Inside Claude Code:
 /plugin install iriscale-voice@iriscale
 ```
 
-Then run `/voice test` — you should hear it. That's it; the `standard` preset is on.
+Then run `/iriscale-voice test` — you should hear it. That's it; the `standard` preset is on.
 
 > Windows: hooks run through Git Bash, which nearly every Claude Code install on
 > Windows already has. If `sh` isn't on your PATH, install
@@ -30,14 +30,14 @@ Then run `/voice test` — you should hear it. That's it; the `standard` preset 
 ## Choose how chatty
 
 ```
-/voice preset basic      # done + waiting for you. Nothing else.
-/voice preset standard   # + errors + "wants to run …". Quiet on turns under 30 s.  (default)
-/voice preset verbose    # + subagents, session end
-/voice mute              # silence, stays installed      /voice unmute
-/voice quiet 22-8        # nothing between 10 pm and 8 am
-/voice status            # what's configured
-/voice config list       # every setting: current value, default, meaning
-/voice help              # everything else
+/iriscale-voice preset basic      # done + waiting for you. Nothing else.
+/iriscale-voice preset standard   # + errors + "wants to run …". Quiet on turns under 30 s.  (default)
+/iriscale-voice preset verbose    # + subagents, session end
+/iriscale-voice mute              # silence, stays installed      /iriscale-voice unmute
+/iriscale-voice quiet 22-8        # nothing between 10 pm and 8 am
+/iriscale-voice status            # what's configured
+/iriscale-voice config list       # every setting: current value, default, meaning
+/iriscale-voice help              # everything else
 ```
 
 Or edit `~/.claude/iriscale-voice.conf` by hand — it's just `key=value` lines. Every

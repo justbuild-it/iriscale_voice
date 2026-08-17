@@ -1,10 +1,10 @@
 ---
-description: Configure iriscale voice notifications. Usage: /voice [status|test|help|preset <basic|standard|verbose|off>|mute|unmute|quiet <start-end|off>|config list|config get <key>|config set <key> <value>|config unset <key>|events|presets|say <text>]
+description: Configure iriscale voice notifications. Usage: /iriscale-voice [status|test|help|preset <basic|standard|verbose|off>|mute|unmute|quiet <start-end|off>|config list|config get <key>|config set <key> <value>|config unset <key>|events|presets|say <text>]
 disable-model-invocation: true
 allowed-tools: Bash(sh *)
 ---
 
-The user ran `/voice $ARGUMENTS` to configure their spoken Claude Code notifications.
+The user ran `/iriscale-voice $ARGUMENTS` to configure their spoken Claude Code notifications.
 Apply it by running the plugin's CLI — do not edit files by hand.
 
 CLI: `sh "${CLAUDE_PLUGIN_ROOT}/bin/iriscale-voice" <command> [args]` — it has standard

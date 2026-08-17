@@ -97,5 +97,13 @@ for k in $(sh "$S" config list | awk 'NR>1 && $1 !~ /^(file:|\(|$)/ {print $1}' 
     grep -q "\`$k" "$here/../docs/CONFIG.md"; ok $? 0 "docs/CONFIG.md documents $k"
 done
 
+# bundled slash commands must not collide with Claude Code built-ins (short-form
+# /name is shadowed by the built-in). /voice was — it's Claude Code's dictation toggle.
+BUILTINS="voice config help model plugin plugins clear compact cost doctor exit init login logout memory mcp permissions pr review resume status terminal-setup vim rename export reload-plugins hooks agents skills bug"
+for f in "$here"/../commands/*.md; do
+    n=$(basename "$f" .md)
+    case " $BUILTINS " in *" $n "*) fail=$((fail+1)); echo "FAIL command '$n' collides with a Claude Code built-in /$n" ;; *) pass=$((pass+1)) ;; esac
+done
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
