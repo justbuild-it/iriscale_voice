@@ -19,22 +19,22 @@ is a field-alias layer, an event-alias layer, and per-agent install snippets.
 | # | Agent | Mechanism | done | needs input | error | session + cwd | Adapter effort | Status |
 |---|---|---|---|---|---|---|---|---|
 | — | **Claude Code** | plugin hooks | `Stop` | `PermissionRequest`, `Notification:idle_prompt` | `StopFailure` | yes | — | **shipped** |
-| 1 | **Codex CLI** (OpenAI) | `~/.codex/hooks.json` (same shape as Claude) **or** `notify = ["cmd"]` in `config.toml` (JSON as last argv arg, `agent-turn-complete` only) | `Stop` | `PermissionRequest` | — | yes (`session_id`, `cwd`) | tiny: accept payload from argv for `notify` | 0.1.3–0.1.5 |
-| 2 | **Copilot CLI** (GitHub) | `~/.copilot/hooks/*.json`, `.github/hooks/*.json` | `agentStop`, `notification:agent_idle` | `permissionRequest`, `notification:permission_prompt` | `errorOccurred` | yes (`sessionId`, `cwd` — camelCase) | small: camelCase aliases + event map. Best three-state coverage of any non-Claude agent | 0.1.3–0.1.5 |
-| 3 | **Grok Build** (xAI) | `~/.grok/hooks/*.json` (also reads `.claude/settings.json`) | `Stop` | `Notification` (subtypes unverified) | `StopFailure` | yes (`sessionId`, `cwd`) | tiny | 0.1.3–0.1.5 |
-| 4 | **Gemini CLI** (Google) | `hooks` in `~/.gemini/settings.json` | `AfterAgent` | `Notification` w/ `notification_type: ToolPermission` | — | yes (`session_id`, `cwd`) | small: event map | 0.1.3–0.1.5 |
-| 5 | **Junie CLI** (JetBrains) | `hooks` in `~/.junie/config.json` | `Stop` | `PermissionRequest` | `StopFailure` (`error`) | no session/cwd → falls back to "Claude"/folder unknown | small; name from `$PWD` | 0.1.8 |
-| 6 | **Cursor** | `~/.cursor/hooks.json`, `.cursor/hooks.json` | `stop` w/ `status: completed` | — (only pre-hooks; no "user is being asked" event) | `stop` w/ `status: error` | partial: `conversation_id`, `workspace_roots[]`, no cwd | small: status→event, name from `workspace_roots[0]` | 0.1.8 |
-| 7 | **Devin CLI** | `~/.config/devin/config.json`, `.devin/hooks.v1.json` (also reads `.claude/settings.json`) | `Stop` | `PermissionRequest` | — | partial: `session_id`, `DEVIN_PROJECT_DIR` env | tiny | 0.1.8 |
-| 8 | **OpenCode / Kilo CLI** | JS/TS plugin in `~/.config/opencode/plugins/` | `session.idle` | `permission.asked` | `session.error` | yes | medium: a 20-line TS plugin that shells to `iriscale-voice` | 0.1.8 |
-| 9 | **Windsurf / Cascade** | `~/.codeium/windsurf/hooks.json` | `post_cascade_response` | — | — | partial (`trajectory_id`) | small, done-only | 0.1.12 |
-| 10 | **Cline** (VS Code) | executable in `~/Documents/Cline/Hooks/` | `TaskComplete` | — | `TaskCancel` (also on error) | partial (`taskId`, `workspaceRoots`) | small; Windows support unverified | 0.1.12 |
-| 11 | **Aider** | `--notifications-command "cmd"` | yes (no payload) | — | — | no | trivial, done-only | 0.1.12 |
+| 1 | **Codex CLI** (OpenAI) | `~/.codex/hooks.json` (same shape as Claude) **or** `notify = ["cmd"]` in `config.toml` (JSON as last argv arg, `agent-turn-complete` only) | `Stop` | `PermissionRequest` | — | yes (`session_id`, `cwd`) | tiny: accept payload from argv for `notify` | 0.1.4–0.1.6 |
+| 2 | **Copilot CLI** (GitHub) | `~/.copilot/hooks/*.json`, `.github/hooks/*.json` | `agentStop`, `notification:agent_idle` | `permissionRequest`, `notification:permission_prompt` | `errorOccurred` | yes (`sessionId`, `cwd` — camelCase) | small: camelCase aliases + event map. Best three-state coverage of any non-Claude agent | 0.1.4–0.1.6 |
+| 3 | **Grok Build** (xAI) | `~/.grok/hooks/*.json` (also reads `.claude/settings.json`) | `Stop` | `Notification` (subtypes unverified) | `StopFailure` | yes (`sessionId`, `cwd`) | tiny | 0.1.4–0.1.6 |
+| 4 | **Gemini CLI** (Google) | `hooks` in `~/.gemini/settings.json` | `AfterAgent` | `Notification` w/ `notification_type: ToolPermission` | — | yes (`session_id`, `cwd`) | small: event map | 0.1.4–0.1.6 |
+| 5 | **Junie CLI** (JetBrains) | `hooks` in `~/.junie/config.json` | `Stop` | `PermissionRequest` | `StopFailure` (`error`) | no session/cwd → falls back to "Claude"/folder unknown | small; name from `$PWD` | 0.1.9 |
+| 6 | **Cursor** | `~/.cursor/hooks.json`, `.cursor/hooks.json` | `stop` w/ `status: completed` | — (only pre-hooks; no "user is being asked" event) | `stop` w/ `status: error` | partial: `conversation_id`, `workspace_roots[]`, no cwd | small: status→event, name from `workspace_roots[0]` | 0.1.9 |
+| 7 | **Devin CLI** | `~/.config/devin/config.json`, `.devin/hooks.v1.json` (also reads `.claude/settings.json`) | `Stop` | `PermissionRequest` | — | partial: `session_id`, `DEVIN_PROJECT_DIR` env | tiny | 0.1.9 |
+| 8 | **OpenCode / Kilo CLI** | JS/TS plugin in `~/.config/opencode/plugins/` | `session.idle` | `permission.asked` | `session.error` | yes | medium: a 20-line TS plugin that shells to `iriscale-voice` | 0.1.9 |
+| 9 | **Windsurf / Cascade** | `~/.codeium/windsurf/hooks.json` | `post_cascade_response` | — | — | partial (`trajectory_id`) | small, done-only | 0.1.13 |
+| 10 | **Cline** (VS Code) | executable in `~/Documents/Cline/Hooks/` | `TaskComplete` | — | `TaskCancel` (also on error) | partial (`taskId`, `workspaceRoots`) | small; Windows support unverified | 0.1.13 |
+| 11 | **Aider** | `--notifications-command "cmd"` | yes (no payload) | — | — | no | trivial, done-only | 0.1.13 |
 | 12 | **Amp** (Sourcegraph) | TS plugin `agent.end`; built-in bell only | `agent.end` | — | — | partial | medium | backlog |
 | 13 | **Kiro CLI** | `.kiro/hooks/*.json` `Stop` | yes | — | — | undocumented | unknown | backlog |
 | — | **Zed, Warp, Roo Code, Kilo (extension)** | no shell hook — built-in sound/notification settings only | | | | | not possible today | — |
 
-## Design for multi-agent support (0.1.3)
+## Design for multi-agent support (0.1.4)
 
 Keep one script. Add three thin layers, all inside `bin/iriscale-voice`:
 

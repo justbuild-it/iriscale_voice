@@ -5,6 +5,17 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-08-17
+
+### Fixed
+- **`/voice` did nothing — it's a Claude Code built-in.** Claude Code has its own `/voice`
+  (dictation mode: hold / tap / off), and built-ins shadow a plugin's short-form command
+  name, so `/voice help` toggled dictation instead of reaching us. The slash command is now
+  **`/iriscale-voice`** (`/iriscale-voice help`, `/iriscale-voice config list`, …) —
+  same name as the plugin and the CLI, no collision. If you ran the bare `/voice` while
+  this was broken, Claude Code's dictation mode is now on: `/voice off` turns it back off.
+- Test added: no bundled command may share a name with a Claude Code built-in.
+
 ## [0.1.2] — 2026-08-16
 
 ### Added
@@ -68,7 +79,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/justbuild-it/iriscale_voice/releases/tag/v0.1.0

@@ -55,3 +55,11 @@ See `docs/PLATFORMS.md`. An adapter PR needs: the field/event aliases in
 `bin/iriscale-voice`, a synthetic payload test, and `docs/install/<agent>.md` with the exact
 config to paste. If you can, include a real payload captured from the agent — that's
 the one thing maintainers can't produce for agents they don't run.
+
+## Naming things users type
+
+Slash commands, the CLI, config keys: name them after the product or the thing itself,
+never after the mechanism. And check for collisions first — Claude Code's built-in
+`/voice` (dictation mode) silently shadowed ours for a whole release. `test/run.sh`
+now fails if a bundled command shares a name with a known built-in; extend that list
+when Claude Code adds commands.

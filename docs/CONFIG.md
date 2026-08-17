@@ -1,12 +1,12 @@
 # Configuration
 
-Most people never need this page. Pick a preset with `/voice preset basic` and you're
+Most people never need this page. Pick a preset with `/iriscale-voice preset basic` and you're
 done. Everything below is for tuning.
 
 ## Where settings live
 
 `~/.claude/iriscale-voice.conf` — plain `key=value`, one per line, `#` for comments.
-Created on first `/voice` command; safe to edit by hand; re-read on every event, so
+Created on first `/iriscale-voice` command; safe to edit by hand; re-read on every event, so
 there is nothing to restart. It lives outside the plugin folder so updates never
 touch it.
 
@@ -31,7 +31,7 @@ Precedence, highest first:
 | key | default | meaning |
 |---|---|---|
 | `preset` | `standard` | see above |
-| `enabled` | `true` | `false` = silent. `/voice mute` sets this |
+| `enabled` | `true` | `false` = silent. `/iriscale-voice mute` sets this |
 | `event.<Event>` | *(from preset)* | `on`/`off` — override one event regardless of preset. Events: `Stop`, `StopFailure`, `PermissionRequest`, `idle_prompt`, `agent_completed`, `SubagentStop`, `SessionEnd` |
 | `quiet_hours` | *(none)* | `22-8` style, 24-hour, may wrap midnight. Nothing speaks inside the window |
 | `min_turn_seconds` | `30` (standard) / `0` | don't announce "done" for turns shorter than this. Errors and permission prompts ignore it — those always speak |
@@ -72,8 +72,8 @@ iriscale-voice test                # speak a test phrase
 iriscale-voice --version
 ```
 
-**Inside Claude Code** you don't need any of this — `/voice <command>` runs the same
-thing (`/voice config list`, `/voice preset basic`, `/voice help`).
+**Inside Claude Code** you don't need any of this — `/iriscale-voice <command>` runs the same
+thing (`/iriscale-voice config list`, `/iriscale-voice preset basic`, `/iriscale-voice help`).
 
 **Outside Claude Code** (other agents, scripts, or just preference), put it on your PATH
 once. The plugin installs it at
