@@ -15,8 +15,8 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.1 | Repeat guard, "sub agent" pronunciation | shipped 2026-08-16 |
 | 0.1.2 | Standard CLI (`--help`, `config list/get/set/unset/path`, `events`, `presets`, `--version`); command renamed `iriscale-voice`; patch-per-release policy; version-consistency test | shipped 2026-08-16 |
 | 0.1.3 | Fix: slash command renamed `/voice` → `/iriscale-voice` (`/voice` is a Claude Code built-in) | shipped 2026-08-17 |
-| 0.1.4 | Fix: one command file per subcommand → `/iriscale-voice:status` etc.; upgrade/restart note | this PR |
-| 0.1.5 | Perf: read config once, zero process spawns per lookup (Windows hook latency ~1 s → ~50 ms); suite fast again | next |
+| 0.1.4 | Fix: one command file per subcommand → `/iriscale-voice:status` etc.; upgrade/restart note | shipped 2026-08-17 |
+| 0.1.5 | Perf: builtins-only hook path (Windows 1479 → 283 ms per event; suite 82 → 26 s); spawn-count guard | this PR |
 | 0.1.6 | Multi-agent alias layers (payload from argv, field + event aliases) + synthetic payload tests | next |
 | 0.1.7 | Codex CLI + Copilot CLI install snippets, `install <agent>` helper | |
 | 0.1.8 | Grok Build + Gemini CLI snippets | |

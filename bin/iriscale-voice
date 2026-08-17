@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.4"
+VERSION="0.1.5"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -17,24 +17,69 @@ STATE="${TMPDIR:-/tmp}/iriscale-voice"
 [ -d "$STATE" ] || mkdir -p "$STATE" 2>/dev/null
 
 # ---------- tiny helpers ------------------------------------------------------
-# Pull a string field out of flat-ish JSON without jq. Takes the FIRST occurrence
-# (a greedy sed took the last one, which for session files is inside the
-# `formerNames` array — so /rename'd sessions spoke their old name). Good enough
-# for the fields we read (ids, paths, tool names). Not a JSON parser.
-jget() { printf '%s' "$2" | tr -d '\n' | grep -o '"'"$1"'"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1 | sed 's/^[^:]*:[[:space:]]*"//; s/"$//'; }
+# PERFORMANCE NOTE. This script runs on every hook event, and on Windows/MSYS each
+# external process (sed, grep, tr...) costs 25-50 ms to spawn. The first versions
+# spawned ~40 of them per event and took ~1.8 s before speaking. So the hot paths
+# below use only shell builtins: the config file is read ONCE into memory and every
+# lookup is parameter expansion + case. Keep it that way.
+NL='
+'
+CR=$(printf '\r')
 
-# config lookup: cfg <key> <default>. File is key=value, '#' comments, no quoting.
-# Precedence: conf file > plugin setting (CLAUDE_PLUGIN_OPTION_<KEY>, from the
-# userConfig block in plugin.json) > built-in default.
-cfg() {
-    v=""
-    [ -f "$CONF" ] && v=$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$CONF" | tail -n1 | tr -d '\r')
-    if [ -z "$v" ]; then
-        envkey="CLAUDE_PLUGIN_OPTION_$(printf '%s' "$1" | tr 'a-z.' 'A-Z_')"
-        v=$(eval "printf '%s' \"\${$envkey:-}\"")
-    fi
-    [ -n "$v" ] && printf '%s' "$v" || printf '%s' "$2"
+# Pull a string field out of flat-ish JSON without jq: first occurrence of "key",
+# then optional whitespace, ':', whitespace, and a double-quoted value. Not a JSON
+# parser — good enough for the ids, paths and tool names we read. Zero spawns.
+jget() {
+    j=$2
+    case $j in *"\"$1\""*) ;; *) return 0 ;; esac
+    r=${j#*"\"$1\""}
+    while case $r in ' '*|"	"*|"$NL"*|"$CR"*) true ;; *) false ;; esac; do r=${r#?}; done
+    case $r in ':'*) r=${r#:} ;; *) return 0 ;; esac
+    while case $r in ' '*|"	"*|"$NL"*|"$CR"*) true ;; *) false ;; esac; do r=${r#?}; done
+    case $r in '"'*) r=${r#\"} ;; *) return 0 ;; esac
+    printf '%s' "${r%%\"*}"
 }
+
+# Config: key=value lines, '#' comments, no quoting. Loaded once into CONF_DATA
+# (normalized: trimmed, CR stripped, comments dropped). Last occurrence of a key wins.
+CONF_DATA=""
+load_conf() {
+    CONF_DATA=""
+    [ -f "$CONF" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        line=${line%"$CR"}
+        case $line in *=*) ;; *) continue ;; esac          # skips blanks and non key=value lines
+        k=${line%%=*}; v=${line#*=}
+        while case $k in ' '*|"	"*) true ;; *) false ;; esac; do k=${k#?}; done
+        while case $k in *' '|*"	") true ;; *) false ;; esac; do k=${k%?}; done
+        while case $v in ' '*|"	"*) true ;; *) false ;; esac; do v=${v#?}; done
+        while case $v in *' '|*"	") true ;; *) false ;; esac; do v=${v%?}; done
+        case $k in '#'*|'') continue ;; esac                # comments
+        CONF_DATA="$CONF_DATA$k=$v$NL"
+    done < "$CONF"
+}
+load_conf
+
+# cfgv VAR <key> <default> — assign the setting to VAR with no subshell (use this on
+# the hook path: $(cfg ...) forks, ~14 ms each on MSYS).  cfg <key> <default> prints.
+# Precedence: conf file > plugin setting (CLAUDE_PLUGIN_OPTION_<KEY>) > default.
+cfgv() {
+    _k=$2; _v=""; _rest=$CONF_DATA
+    while [ -n "$_rest" ]; do
+        _line=${_rest%%"$NL"*}; _rest=${_rest#*"$NL"}
+        case $_line in "$_k="*) _v=${_line#*=} ;; esac
+    done
+    if [ -z "$_v" ] && [ "$HAVE_PLUGIN_OPTS" = 1 ]; then
+        _envkey=CLAUDE_PLUGIN_OPTION_$(printf '%s' "$_k" | tr 'a-z.' 'A-Z_')
+        eval "_v=\${$_envkey:-}"
+    fi
+    [ -n "$_v" ] || _v=$3
+    eval "$1=\$_v"
+}
+cfg() { cfgv _out "$1" "$2"; printf '%s' "$_out"; }
+# only pay for the env-var fallback if the plugin host actually exported options
+HAVE_PLUGIN_OPTS=0
+case "$(env 2>/dev/null)" in *CLAUDE_PLUGIN_OPTION_*) HAVE_PLUGIN_OPTS=1 ;; esac
 cfg_set() {   # cfg_set <key> <value>  (create/replace the line, keep everything else)
     [ -f "$CONF" ] || : > "$CONF"
     if grep -q "^[[:space:]]*$1[[:space:]]*=" "$CONF" 2>/dev/null; then
@@ -42,8 +87,9 @@ cfg_set() {   # cfg_set <key> <value>  (create/replace the line, keep everything
     else
         printf '%s=%s\n' "$1" "$2" >> "$CONF"
     fi
+    load_conf
 }
-now() { date +%s; }
+now() { printf "%s" "$NOW"; }   # NOW is set once, at the top of the hook path
 os() {
     case "$(uname -s 2>/dev/null)" in
         Darwin) echo mac ;;
@@ -53,7 +99,7 @@ os() {
 }
 # keep spoken text shell-safe for every backend: letters, digits, basic punctuation
 clean() { printf '%s' "$1" | tr -c 'A-Za-z0-9 .,:;!?()/&%+-' ' ' | tr -s ' '; }
-hour_now() { date +%H | sed 's/^0//'; }
+hour_now() { h=$(date +%H); h=${h#0}; printf '%s' "${h:-0}"; }
 
 # ---------- presets -----------------------------------------------------------
 # preset_events <preset>  -> space-separated list of events that speak
@@ -70,7 +116,7 @@ preset_min_turn() { case "$1" in standard) echo 30 ;; *) echo 0 ;; esac; }
 # ---------- speaking backends -------------------------------------------------
 speak() {
     text=$(clean "$1")
-    vol=$(cfg volume 100); rate=$(cfg rate 0); voice=$(cfg voice "")
+    cfgv vol volume 100; cfgv rate rate 0; cfgv voice voice ""
     case "$(os)" in
         win)
             ps="Add-Type -AssemblyName System.Speech; \$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; \$s.Volume=$vol; \$s.Rate=$rate;"
@@ -236,36 +282,47 @@ case "$EVENT" in
 esac
 
 # ---------- hook path ---------------------------------------------------------
-payload=$(cat 2>/dev/null)
+NOW=$(date +%s)
+payload=""; while IFS= read -r _l || [ -n "$_l" ]; do payload="$payload$_l$NL"; done 2>/dev/null
 sid=$(jget session_id "$payload")
 
 if [ "$EVENT" = "stamp" ]; then
-    [ -n "$sid" ] && now > "$STATE/$sid.start"
+    [ -n "$sid" ] && printf '%s\n' "$NOW" > "$STATE/$sid.start"
     exit 0
 fi
 
-# resolve a friendly session name: /rename'd name -> cwd folder -> "Claude"
+# resolve a friendly session name: /rename'd name -> cwd folder -> "Claude".
+# Session files are one JSON line each; scan them with builtins (no grep).
 name=""
 if [ -n "$sid" ] && [ -d "$CLAUDE_DIR/sessions" ]; then
-    f=$(grep -l "\"sessionId\":\"$sid\"" "$CLAUDE_DIR"/sessions/*.json 2>/dev/null | head -n1)
-    [ -n "$f" ] && name=$(jget name "$(cat "$f")")
+    for f in "$CLAUDE_DIR"/sessions/*.json; do
+        [ -f "$f" ] || continue
+        IFS= read -r sj < "$f" || :
+        case $sj in *"\"sessionId\":\"$sid\""*) name=$(jget name "$sj"); break ;; esac
+    done
 fi
 if [ -z "$name" ]; then
     cwd=$(jget cwd "$payload")
-    name=$(printf '%s' "$cwd" | sed 's#\\\\#/#g; s#\\#/#g; s#/*$##; s#.*/##')
+    # basename of a JSON-escaped Windows or POSIX path: C:\\Users\\x\\proj\\ -> proj
+    while case $cwd in *\\) true ;; *) false ;; esac; do cwd=${cwd%\\}; done
+    while case $cwd in */) true ;; *) false ;; esac; do cwd=${cwd%/}; done
+    name=${cwd##*\\}; name=${name##*/}
 fi
 [ -z "$name" ] && name="Claude"
-spoken_name=$(printf '%s' "$name" | tr '_-' '  ')
+# speak '_' and '-' as spaces, with builtins
+spoken_name=""; _n=$name
+while [ -n "$_n" ]; do _c=${_n%"${_n#?}"}; _n=${_n#?}; case $_c in _|-) _c=' ' ;; esac; spoken_name="$spoken_name$_c"; done
 
 # ---------- decide ------------------------------------------------------------
 reason=""
-preset=$(cfg preset standard)
+cfgv preset preset standard
 [ -n "$IRISCALE_VOICE_OFF" ]            && reason="muted via IRISCALE_VOICE_OFF"
-[ -z "$reason" ] && [ "$(cfg enabled true)" != "true" ] && reason="disabled (enabled=false)"
+cfgv enabled enabled true
+[ -z "$reason" ] && [ "$enabled" != "true" ] && reason="disabled (enabled=false)"
 
 if [ -z "$reason" ]; then
     # per-event override wins:  event.Stop=off  /  event.SubagentStop=on
-    ov=$(cfg "event.$EVENT" "")
+    cfgv ov "event.$EVENT" ""
     case "$ov" in
         off|false|0) reason="event $EVENT is off in config" ;;
         on|true|1)   : ;;
@@ -277,7 +334,7 @@ if [ -z "$reason" ]; then
 fi
 
 if [ -z "$reason" ]; then
-    qh=$(cfg quiet_hours "")          # e.g. 22-8
+    cfgv qh quiet_hours ""          # e.g. 22-8
     if [ -n "$qh" ]; then
         qs=${qh%-*}; qe=${qh#*-}; h=$(hour_now)
         if [ "$qs" -lt "$qe" ]; then [ "$h" -ge "$qs" ] && [ "$h" -lt "$qe" ] && reason="quiet hours ($qh)"
@@ -286,17 +343,17 @@ if [ -z "$reason" ]; then
 fi
 
 if [ -z "$reason" ]; then
-    only=$(cfg only_sessions ""); mute=$(cfg mute_sessions "")
+    cfgv only only_sessions ""; cfgv mute mute_sessions ""
     [ -n "$only" ] && case ",$only," in *",$name,"*) : ;; *) reason="$name not in only_sessions" ;; esac
     [ -n "$mute" ] && case ",$mute," in *",$name,"*) reason="$name is in mute_sessions" ;; esac
 fi
 
 elapsed=""
 if [ -n "$sid" ] && [ -f "$STATE/$sid.start" ]; then
-    elapsed=$(( $(now) - $(cat "$STATE/$sid.start") ))
+    IFS= read -r started < "$STATE/$sid.start" || started=0; elapsed=$(( NOW - ${started:-0} ))
 fi
 if [ -z "$reason" ] && [ "$EVENT" = "Stop" ]; then
-    min=$(cfg min_turn_seconds "$(preset_min_turn "$preset")")
+    cfgv min min_turn_seconds "$(preset_min_turn "$preset")"
     [ -n "$elapsed" ] && [ "$min" -gt 0 ] && [ "$elapsed" -lt "$min" ] && reason="turn took ${elapsed}s, under min_turn_seconds=$min"
 fi
 
@@ -308,7 +365,7 @@ case "$EVENT" in
     PermissionRequest) tool=$(jget tool_name "$payload")
                        tail="needs permission"; [ -n "$tool" ] && tail="wants to use $tool"
                        if [ "$tool" = "Bash" ]; then
-                           cmd=$(jget command "$payload" | cut -c1-60); [ -n "$cmd" ] && tail="wants to run $cmd"
+                           cmd=$(jget command "$payload"); cmd=$(printf '%.60s' "$cmd"); [ -n "$cmd" ] && tail="wants to run $cmd"
                        fi ;;
     permission_prompt) tail="needs permission" ;;
     idle_prompt)       tail="is waiting for you" ;;
@@ -318,22 +375,23 @@ case "$EVENT" in
     *)                 tail="$EVENT" ;;
 esac
 # elapsed time on completion, when it's long enough to matter
-if [ "$EVENT" = "Stop" ] && [ -n "$elapsed" ] && [ "$elapsed" -ge 60 ] && [ "$(cfg say_elapsed true)" = "true" ]; then
+cfgv say_elapsed say_elapsed true
+if [ "$EVENT" = "Stop" ] && [ -n "$elapsed" ] && [ "$elapsed" -ge 60 ] && [ "$say_elapsed" = "true" ]; then
     m=$((elapsed / 60)); tail="$tail after $m minute$( [ "$m" -ne 1 ] && echo s)"
 fi
 line="$spoken_name $tail"
 
 # repeat guard: the same announcement for the same session within repeat_cooldown
 # seconds is noise (a subagent looping, a hook double-firing) — say it once.
-cool=$(cfg repeat_cooldown 60)
+cfgv cool repeat_cooldown 60
 lastf="$STATE/${sid:-nosid}.last"
 if [ -z "$reason" ] && [ "$cool" -gt 0 ] 2>/dev/null && [ -f "$lastf" ]; then
-    last_t=$(sed -n '1p' "$lastf"); last_line=$(sed -n '2p' "$lastf")
-    if [ "$last_line" = "$line" ] && [ $(( $(now) - ${last_t:-0} )) -lt "$cool" ]; then
+    { IFS= read -r last_t; IFS= read -r last_line; } < "$lastf"
+    if [ "$last_line" = "$line" ] && [ $(( NOW - ${last_t:-0} )) -lt "$cool" ]; then
         reason="same announcement within ${cool}s (repeat_cooldown)"
     fi
 fi
-[ -z "$reason" ] && printf '%s\n%s\n' "$(now)" "$line" > "$lastf" 2>/dev/null
+[ -z "$reason" ] && printf '%s\n%s\n' "$NOW" "$line" > "$lastf" 2>/dev/null
 
 # ---------- act ---------------------------------------------------------------
 if [ -n "$IRISCALE_VOICE_DEBUG" ]; then
@@ -343,8 +401,9 @@ if [ -n "$IRISCALE_VOICE_DEBUG" ]; then
 fi
 [ -n "$reason" ] && exit 0
 
-log=$(cfg log "$CLAUDE_DIR/iriscale-voice.log")
+cfgv log log "$CLAUDE_DIR/iriscale-voice.log"
 [ "$log" != "none" ] && printf '%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$EVENT" "$line" >> "$log" 2>/dev/null
 
-if [ "$(cfg serialize true)" = "true" ]; then with_lock speak "$line"; else speak "$line"; fi
+cfgv serialize serialize true
+if [ "$serialize" = "true" ]; then with_lock speak "$line"; else speak "$line"; fi
 exit 0

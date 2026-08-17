@@ -63,3 +63,13 @@ never after the mechanism. And check for collisions first — Claude Code's buil
 `/voice` (dictation mode) silently shadowed ours for a whole release. `test/run.sh`
 now fails if a bundled command shares a name with a known built-in; extend that list
 when Claude Code adds commands.
+
+## Keep the hook path cheap
+
+`bin/iriscale-voice` runs on every hook event. On Windows/MSYS each external process
+(`sed`, `grep`, `tr`, ...) costs 25-50 ms to spawn, and 0.1.4 spent ~1.8 s per event that
+way. Rules: read the config once (`load_conf`); use `cfgv VAR key default` (assigns, no
+subshell) instead of `$(cfg ...)` on the hook path; extract JSON fields with `jget` (pure
+shell); prefer parameter expansion over `sed`/`tr`. `test/run.sh` fails if the hook path
+spawns more than one text tool. If you must add a process, add it to a CLI path, not the
+event path.
