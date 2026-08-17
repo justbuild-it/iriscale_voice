@@ -3,13 +3,13 @@
 #
 # Called by Claude Code hooks with the hook's JSON payload on stdin:
 #   iriscale-voice <event>          (see `iriscale-voice events`)
-# Also a CLI, used by the /iriscale-voice slash command and by humans:
+# Also a CLI, used by the /iriscale-voice:* slash commands and by humans:
 #   iriscale-voice --help
 #
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.3"
+VERSION="0.1.4"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -171,7 +171,7 @@ FILES
   $CONF
   $(cfg log "$CLAUDE_DIR/iriscale-voice.log")
 
-Inside Claude Code the same commands are available as /iriscale-voice <command>.
+Inside Claude Code: /iriscale-voice:<command>  (type /iriscale-voice: and autocomplete lists them).
 Docs: https://github.com/justbuild-it/iriscale_voice
 EOF
 }

@@ -26,8 +26,9 @@ sh "$S" set repeat_cooldown 0 >/dev/null     # the matrix below repeats lines on
 
 for preset in off basic standard verbose; do
     sh "$S" set preset $preset >/dev/null
+    speaks=$(sh "$S" status | sed -n 's/.*speaks on: //p')      # once per preset, not per event
     for ev in Stop StopFailure PermissionRequest idle_prompt agent_completed SubagentStop SessionEnd; do
-        case " $(sh "$S" status | sed -n 's/.*speaks on: //p') " in
+        case " $speaks " in
             *" $ev "*) expect SPEAK $ev ;;
             *)          expect SKIP  $ev ;;
         esac
@@ -97,12 +98,15 @@ for k in $(sh "$S" config list | awk 'NR>1 && $1 !~ /^(file:|\(|$)/ {print $1}' 
     grep -q "\`$k" "$here/../docs/CONFIG.md"; ok $? 0 "docs/CONFIG.md documents $k"
 done
 
-# bundled slash commands must not collide with Claude Code built-ins (short-form
-# /name is shadowed by the built-in). /voice was — it's Claude Code's dictation toggle.
-BUILTINS="voice config help model plugin plugins clear compact cost doctor exit init login logout memory mcp permissions pr review resume status terminal-setup vim rename export reload-plugins hooks agents skills bug"
+# Slash commands: one file per subcommand, always documented in the namespaced form
+# /iriscale-voice:<name>. Never document a bare /<name> - Claude Code built-ins shadow
+# bare plugin names (/voice was its dictation toggle; /status and /help are built-ins too).
 for f in "$here"/../commands/*.md; do
     n=$(basename "$f" .md)
-    case " $BUILTINS " in *" $n "*) fail=$((fail+1)); echo "FAIL command '$n' collides with a Claude Code built-in /$n" ;; *) pass=$((pass+1)) ;; esac
+    if grep -En "(^|[^:a-z/-])/$n( |\`|$)" "$here"/../README.md "$here"/../docs/*.md >/dev/null 2>&1; then
+        fail=$((fail+1)); echo "FAIL docs mention bare /$n - use /iriscale-voice:$n"
+    else pass=$((pass+1)); fi
+    grep -q "^description:" "$f"; ok $? 0 "commands/$n.md has a description"
 done
 
 echo "passed: $pass  failed: $fail"
