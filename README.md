@@ -21,7 +21,7 @@ Inside Claude Code:
 /plugin install iriscale-voice@iriscale
 ```
 
-Then run `/iriscale-voice test` — you should hear it. That's it; the `standard` preset is on.
+Then run `/iriscale-voice:test` — you should hear it. (Type `/iriscale-voice:` and autocomplete lists every command.) That's it; the `standard` preset is on.
 
 > Windows: hooks run through Git Bash, which nearly every Claude Code install on
 > Windows already has. If `sh` isn't on your PATH, install
@@ -30,14 +30,14 @@ Then run `/iriscale-voice test` — you should hear it. That's it; the `standard
 ## Choose how chatty
 
 ```
-/iriscale-voice preset basic      # done + waiting for you. Nothing else.
-/iriscale-voice preset standard   # + errors + "wants to run …". Quiet on turns under 30 s.  (default)
-/iriscale-voice preset verbose    # + subagents, session end
-/iriscale-voice mute              # silence, stays installed      /iriscale-voice unmute
-/iriscale-voice quiet 22-8        # nothing between 10 pm and 8 am
-/iriscale-voice status            # what's configured
-/iriscale-voice config list       # every setting: current value, default, meaning
-/iriscale-voice help              # everything else
+/iriscale-voice:preset basic     # done + waiting for you. Nothing else.
+/iriscale-voice:preset standard  # + errors + "wants to run …". Quiet on turns under 30 s.  (default)
+/iriscale-voice:preset verbose   # + subagents, session end
+/iriscale-voice:mute             # silence, stays installed      /iriscale-voice:unmute
+/iriscale-voice:quiet 22-8       # nothing between 10 pm and 8 am
+/iriscale-voice:status           # what's configured
+/iriscale-voice:config list      # every setting: current value, default, meaning
+/iriscale-voice:help             # everything else
 ```
 
 Or edit `~/.claude/iriscale-voice.conf` by hand — it's just `key=value` lines. Every
@@ -92,5 +92,14 @@ claude plugin marketplace add /path/to/checkout && claude plugin install iriscal
 
 `claude plugin update` only re-copies on a version bump — while iterating locally,
 `claude plugin uninstall iriscale-voice@iriscale && claude plugin install iriscale-voice@iriscale`.
+
+## Upgrading
+
+```
+/plugin marketplace update iriscale
+```
+then **restart Claude Code**. A version change is not picked up by `/reload-plugins` — the
+running session keeps the plugin directory it started with, so new or renamed commands
+only appear after a restart (`/exit`, then `claude --continue` keeps your conversation).
 
 MIT © Iriscale

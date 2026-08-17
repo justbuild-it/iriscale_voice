@@ -5,6 +5,21 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.4] — 2026-08-17
+
+### Fixed
+- **Slash commands are now one per subcommand, under the plugin namespace:**
+  `/iriscale-voice:status`, `:test`, `:help`, `:preset <name>`, `:mute`, `:unmute`,
+  `:quiet <start-end|off>`, `:config <list|get|set|unset|path>`. Type `/iriscale-voice:` and
+  autocomplete lists them. 0.1.3 had a single command file named like the plugin, which
+  Claude Code exposed as `/iriscale-voice:iriscale-voice` — technically present, unusable.
+- README "Upgrading": after `/plugin marketplace update iriscale`, **restart Claude Code** —
+  `/reload-plugins` re-reads the plugin directory the session started with, so new or
+  renamed commands only appear after a restart.
+- Test guard replaced: docs may never mention a bare `/<command>`; always the namespaced
+  form. Suite calls `status` once per preset instead of once per event (still slow on
+  Windows — process-spawn cost in `cfg`; fix is next release). 88 checks.
+
 ## [0.1.3] — 2026-08-17
 
 ### Fixed
@@ -79,7 +94,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.0...v0.1.1

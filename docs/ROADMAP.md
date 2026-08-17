@@ -14,17 +14,19 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.0 | Plugin, presets, slash command, Win/mac/Linux speakers, tests | shipped 2026-08-15 |
 | 0.1.1 | Repeat guard, "sub agent" pronunciation | shipped 2026-08-16 |
 | 0.1.2 | Standard CLI (`--help`, `config list/get/set/unset/path`, `events`, `presets`, `--version`); command renamed `iriscale-voice`; patch-per-release policy; version-consistency test | shipped 2026-08-16 |
-| 0.1.3 | Fix: slash command renamed `/voice` → `/iriscale-voice` (`/voice` is a Claude Code built-in) | this PR |
-| 0.1.4 | Multi-agent alias layers (payload from argv, field + event aliases) + synthetic payload tests | next |
-| 0.1.5 | Codex CLI + Copilot CLI install snippets, `install <agent>` helper | |
-| 0.1.6 | Grok Build + Gemini CLI snippets | |
-| 0.1.7 | Speak a one-line summary of what was done (from `transcript_path`) | |
-| 0.1.8 | Escalate unanswered permission prompts (3 min, 10 min) | |
-| 0.1.9 | Junie, Cursor, Devin, OpenCode/Kilo adapters | |
-| 0.1.10 | Toast / Notification Center / notify-send alongside speech; earcons mode | |
-| 0.1.11 | Per-session voice signatures; log/stamp housekeeping | |
-| 0.1.12 | Windows-without-Git-Bash PowerShell fallback | |
-| 0.1.13 | Windsurf, Cline, Aider (done-only) | |
+| 0.1.3 | Fix: slash command renamed `/voice` → `/iriscale-voice` (`/voice` is a Claude Code built-in) | shipped 2026-08-17 |
+| 0.1.4 | Fix: one command file per subcommand → `/iriscale-voice:status` etc.; upgrade/restart note | this PR |
+| 0.1.5 | Perf: read config once, zero process spawns per lookup (Windows hook latency ~1 s → ~50 ms); suite fast again | next |
+| 0.1.6 | Multi-agent alias layers (payload from argv, field + event aliases) + synthetic payload tests | next |
+| 0.1.7 | Codex CLI + Copilot CLI install snippets, `install <agent>` helper | |
+| 0.1.8 | Grok Build + Gemini CLI snippets | |
+| 0.1.9 | Speak a one-line summary of what was done (from `transcript_path`) | |
+| 0.1.10 | Escalate unanswered permission prompts (3 min, 10 min) | |
+| 0.1.11 | Junie, Cursor, Devin, OpenCode/Kilo adapters | |
+| 0.1.12 | Toast / Notification Center / notify-send alongside speech; earcons mode | |
+| 0.1.13 | Per-session voice signatures; log/stamp housekeeping | |
+| 0.1.14 | Windows-without-Git-Bash PowerShell fallback | |
+| 0.1.15 | Windsurf, Cline, Aider (done-only) | |
 | later | Multi-session status board; macOS/Linux live verification as users report | |
 
 Numbers beyond the next release are intent, not promises — anything a user reports
