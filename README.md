@@ -3,11 +3,11 @@
 **Let your coding agents tell you when they are done and need attention.**
 
 Run several Claude Code sessions, walk away, and hear *"billing service done"* or
-*"iriscale voice wants to run git push"* from across the room — instead of tabbing
+*"iriscale voice is waiting for your answer to run git push"* from across the room — instead of tabbing
 through terminals to see who's stuck.
 
 - Speaks the **session name** (`/rename` it, or it uses the folder name)
-- **Done · stopped with an error · wants to run `<command>` · waiting for you**
+- **Done · stopped with an error · waiting for your answer to run `<command>`**
 - Presets from *"just tell me when it's done"* to *"tell me everything"*
 - Concurrent sessions **queue** instead of talking over each other
 - macOS, Windows, Linux — uses the voice your OS already has. **Zero dependencies.**
@@ -31,7 +31,7 @@ Then run `/iriscale-voice:test` — you should hear it. (Type `/iriscale-voice:`
 
 ```
 /iriscale-voice:preset basic     # done + waiting for you. Nothing else.
-/iriscale-voice:preset standard  # + errors + "wants to run …". Quiet on turns under 30 s.  (default)
+/iriscale-voice:preset standard  # + errors + "waiting for your answer …". Quiet on turns under 30 s.  (default)
 /iriscale-voice:preset verbose   # + subagents, session end
 /iriscale-voice:mute             # silence, stays installed      /iriscale-voice:unmute
 /iriscale-voice:quiet 22-8       # nothing between 10 pm and 8 am
@@ -53,7 +53,7 @@ your PATH — see [docs/CONFIG.md → Command line](docs/CONFIG.md#command-line)
 |---|---|
 | turn finishes | *"my service done"* — *"…done after 6 minutes"* for long ones |
 | turn dies (rate limit, billing, auth) | *"my service stopped: rate limit"* |
-| needs permission | *"my service wants to run git push origin main"* / *"…wants to use Edit"* |
+| needs permission | *"my service is waiting for your answer to run git push origin main"* / *"…to use Edit"* |
 | Claude has been waiting on you | *"my service is waiting for you"* |
 | subagent / session end *(verbose)* | *"…subagent done"*, *"…session ended"* |
 

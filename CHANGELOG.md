@@ -5,6 +5,17 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.7] — 2026-08-18
+
+### Fixed
+- Codex `PermissionRequest` and `UserPromptSubmit` hooks are now synchronous because
+  Codex 0.147 skips asynchronous hook definitions, leaving them at `Installed 0`.
+- Permission announcements now explicitly say the session is waiting for an answer.
+
+### Added
+- `iriscale-voice doctor codex` performs a read-only check for missing Codex notify or
+  hook configuration and the unsupported `async: true` form.
+
 ## [0.1.6] — 2026-08-18
 
 ### Added
@@ -128,7 +139,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.3...v0.1.4

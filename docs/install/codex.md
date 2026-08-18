@@ -35,22 +35,30 @@ Codex hooks use the same JSON-on-stdin shape as Claude Code. Create
       { "hooks": [ { "type": "command",
         "command": "sh \"/absolute/path/to/iriscale-voice\" stamp",
         "commandWindows": "\"C:\Program Files\Git\bin\sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" stamp",
-        "async": true, "timeout": 10 } ] }
+        "timeout": 10 } ] }
     ],
     "PermissionRequest": [
       { "hooks": [ { "type": "command",
         "command": "sh \"/absolute/path/to/iriscale-voice\" PermissionRequest",
         "commandWindows": "\"C:\Program Files\Git\bin\sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" PermissionRequest",
-        "async": true, "timeout": 30 } ] }
+        "timeout": 30 } ] }
     ]
   }
 }
 ```
 
-Then in Codex run **`/hooks`** and press **`t`** on each of the two — Codex requires a
-human to trust every hook definition once (it stores a hash in `config.toml`; editing
-`hooks.json` re-prompts). That gives *"<session> wants to run git status"* before you
-answer a yes/no, and *"done after N minutes"* on long turns.
+Keep these hooks synchronous: Codex 0.147 skips definitions containing `"async": true`,
+so they appear as `Installed 0` and cannot be trusted.
+
+Restart Codex, run **`/hooks`**, and confirm both events show **Installed 1**. Only then
+open each event and trust its hook; **Active** should become **1**. Codex stores a hash
+in `config.toml`, so editing `hooks.json` prompts for trust again. This gives
+*"<session> is waiting for your answer to run git status"* before you answer a yes/no,
+and *"done after N minutes"* on long turns.
+
+Run `iriscale-voice doctor codex` for a read-only check of `config.toml` and
+`hooks.json`. It identifies missing definitions and the unsupported asynchronous form;
+the final Installed/Active check remains visible in `/hooks`.
 
 Why not more hooks? Every extra hook is another trust prompt. `Stop` is already
 covered by `notify`; `SubagentStop`/`SessionEnd` are verbose-only. Two is the minimum
@@ -61,7 +69,7 @@ that adds real value.
 | moment | Codex signal | you hear |
 |---|---|---|
 | turn done | `notify` `agent-turn-complete` (or hook `Stop`) | "<session> done" |
-| needs approval | hook `PermissionRequest` (`tool_name`, `tool_input.command`) | "<session> wants to run …" |
+| needs approval | hook `PermissionRequest` (`tool_name`, `tool_input.command`) | "<session> is waiting for your answer to run …" |
 | turn failed | — (Codex has no failure event) | — |
 | idle, waiting for you | — (Codex has no idle notification) | — |
 
