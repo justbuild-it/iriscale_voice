@@ -5,7 +5,7 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
-## [0.1.6] — 2026-08-18 (in progress)
+## [0.1.6] — 2026-08-18
 
 ### Added
 - **Codex CLI support** (`docs/install/codex.md`), verified live on Codex 0.147.0:

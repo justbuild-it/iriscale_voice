@@ -81,6 +81,8 @@ out=$(printf '%s' '{"conversation_id":"cur-1","workspace_roots":["/x/cursor_app"
 case "$out" in *"cursor app done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Cursor completed: $out" ;; esac
 out=$(printf '%s' '{"conversation_id":"cur-2","workspace_roots":["/x/cursor_app"],"status":"error","error":"cancelled"}' | sh "$S" stop)
 case "$out" in *"cursor app stopped with an error"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Cursor error: $out" ;; esac
+out=$(printf '%s' '{"conversation_id":"cur-3","workspace_roots":["/x/cursor_app"],"status":"aborted"}' | sh "$S" stop)
+[ -z "$out" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL Cursor aborted should be silent: $out"; }
 out=$(printf '%s' '{"session_id":"gem-1","cwd":"/x/gemini_cli"}' | sh "$S" AfterAgent)
 case "$out" in *"gemini cli done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Gemini AfterAgent: $out" ;; esac
 

@@ -17,7 +17,7 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.3 | Fix: slash command renamed `/voice` → `/iriscale-voice` (`/voice` is a Claude Code built-in) | shipped 2026-08-17 |
 | 0.1.4 | Fix: one command file per subcommand → `/iriscale-voice:status` etc.; upgrade/restart note | shipped 2026-08-17 |
 | 0.1.5 | Perf: builtins-only hook path (Windows 1479 → 283 ms per event; suite 82 → 26 s); spawn-count guard | shipped 2026-08-17 |
-| 0.1.6 | Codex CLI (notify + optional hooks, /rename support) + alias layers | in progress (PR #7) |
+| 0.1.6 | Codex CLI (notify + optional hooks, /rename support) + alias layers | this PR |
 | 0.1.7 | Codex CLI + Copilot CLI install snippets, `install <agent>` helper | |
 | 0.1.8 | Grok Build + Gemini CLI snippets | |
 | 0.1.9 | Speak a one-line summary of what was done (from `transcript_path`) | |

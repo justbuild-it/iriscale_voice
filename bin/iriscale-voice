@@ -383,9 +383,9 @@ case $EVENT in
     agentStop|AfterAgent|TaskComplete|session.idle|post_cascade_response|agent-turn-complete) EVENT=Stop ;;
     errorOccurred|session.error|TaskCancel) EVENT=StopFailure ;;
     permissionRequest|permission.asked) EVENT=PermissionRequest ;;
-    stop)
+    stop)   # Cursor: one event, three outcomes
         _status=$(jget status "$payload")
-        case $_status in completed) EVENT=Stop ;; error) EVENT=StopFailure ;; esac ;;
+        case $_status in completed|"") EVENT=Stop ;; error) EVENT=StopFailure ;; aborted) exit 0 ;; esac ;;
 esac
 # session id aliases: Claude/Codex hooks | Codex notify | Copilot | Cursor
 sid=$(jget session_id "$payload")
