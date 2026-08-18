@@ -2,8 +2,9 @@
 
 Which coding agents iriscale_voice can announce for, how, and in what order we
 plan to add them. Researched 2026-08-16 from each vendor's docs; each row links its
-source. "Verified" means the config shape and event names were read from official
-docs — **not** that we have run it. Only Claude Code has been run end to end.
+source. "Docs verified" means the config shape and event names were read from official
+docs; "verified live" means the adapter has also been run end to end. Claude Code and
+Codex CLI have been verified live.
 
 ## The good news: most CLIs copied Claude Code's hook shape
 
@@ -19,7 +20,7 @@ is a field-alias layer, an event-alias layer, and per-agent install snippets.
 | # | Agent | Mechanism | done | needs input | error | session + cwd | Adapter effort | Status |
 |---|---|---|---|---|---|---|---|---|
 | — | **Claude Code** | plugin hooks | `Stop` | `PermissionRequest`, `Notification:idle_prompt` | `StopFailure` | yes | — | **shipped** |
-| 1 | **Codex CLI** (OpenAI) | `~/.codex/hooks.json` (same shape as Claude) **or** `notify = ["cmd"]` in `config.toml` (JSON as last argv arg, `agent-turn-complete` only) | `Stop` | `PermissionRequest` | — | yes (`session_id`, `cwd`) | tiny: accept payload from argv for `notify` | 0.1.4–0.1.6 |
+| 1 | **Codex CLI** (OpenAI) | [`notify` or optional hooks](install/codex.md) | `agent-turn-complete` / `Stop` | `PermissionRequest` | — | yes (`thread-id`/`session_id`, `cwd`, `/rename`) | done | **0.1.6 — verified live** |
 | 2 | **Copilot CLI** (GitHub) | `~/.copilot/hooks/*.json`, `.github/hooks/*.json` | `agentStop`, `notification:agent_idle` | `permissionRequest`, `notification:permission_prompt` | `errorOccurred` | yes (`sessionId`, `cwd` — camelCase) | small: camelCase aliases + event map. Best three-state coverage of any non-Claude agent | 0.1.4–0.1.6 |
 | 3 | **Grok Build** (xAI) | `~/.grok/hooks/*.json` (also reads `.claude/settings.json`) | `Stop` | `Notification` (subtypes unverified) | `StopFailure` | yes (`sessionId`, `cwd`) | tiny | 0.1.4–0.1.6 |
 | 4 | **Gemini CLI** (Google) | `hooks` in `~/.gemini/settings.json` | `AfterAgent` | `Notification` w/ `notification_type: ToolPermission` | — | yes (`session_id`, `cwd`) | small: event map | 0.1.4–0.1.6 |
@@ -52,15 +53,14 @@ Then `docs/install/<agent>.md` with the exact JSON to paste for each, and a
 absolute script path filled in. Writing into another tool's config file is left to the
 user for now — those files are theirs.
 
-Session naming outside Claude Code: no other agent has `/rename`, so the spoken name
-is the working-directory folder. That's already the fallback, so it works unchanged;
-name your project folders well.
+Session naming outside Claude Code: Codex has `/rename`; its name is resolved from
+`~/.codex/session_index.jsonl`. Other agents currently use the working-directory
+folder, so name project folders well.
 
 ## What we can and cannot verify from here
 
-Only Claude Code is installed on the maintainers' machine. Adapters will be written
-to the documented payloads and covered by synthetic-payload tests in `test/run.sh`;
-first real-world confirmation per agent will come from users. Each row above should
-flip to "verified live" with a log excerpt when someone runs it.
+Claude Code and Codex CLI are installed on the maintainer's machine and verified live.
+Other adapters are written to documented payloads and covered by synthetic-payload
+tests in `test/run.sh`; their first real-world confirmation will come from users.
 
 Sources: [Codex hooks](https://learn.chatgpt.com/docs/hooks) · [Codex config](https://learn.chatgpt.com/docs/config-file/config-reference) · [Copilot hooks](https://docs.github.com/en/copilot/reference/hooks-reference) · [Grok hooks](https://docs.x.ai/build/features/hooks) · [Gemini hooks](https://geminicli.com/docs/hooks/reference/) · [Junie hooks](https://junie.jetbrains.com/docs/junie-cli-hooks.html) · [Cursor hooks](https://cursor.com/docs/agent/hooks) · [Devin hooks](https://docs.devin.ai/cli/extensibility/hooks/overview) · [OpenCode plugins](https://opencode.ai/docs/plugins/) · [Kilo plugins](https://kilo.ai/docs/automate/extending/plugins) · [Cascade hooks](https://docs.devin.ai/desktop/cascade/hooks) · [Cline hooks](https://docs.cline.bot/features/hooks/hook-reference) · [Aider options](https://aider.chat/docs/config/options.html) · [Amp manual](https://ampcode.com/manual) · [Kiro hooks](https://kiro.dev/docs/hooks/) · [Zed agent settings](https://zed.dev/docs/ai/agent-settings) · [Warp notifications](https://docs.warp.dev/agents/capabilities/agent-notifications/) · [Roo issue #12025](https://github.com/RooCodeInc/Roo-Code/issues/12025)

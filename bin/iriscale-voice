@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.5"
+VERSION="0.1.6"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -35,6 +35,21 @@ jget() {
     r=${j#*"\"$1\""}
     while case $r in ' '*|"	"*|"$NL"*|"$CR"*) true ;; *) false ;; esac; do r=${r#?}; done
     case $r in ':'*) r=${r#:} ;; *) return 0 ;; esac
+    while case $r in ' '*|"	"*|"$NL"*|"$CR"*) true ;; *) false ;; esac; do r=${r#?}; done
+    case $r in '"'*) r=${r#\"} ;; *) return 0 ;; esac
+    printf '%s' "${r%%\"*}"
+}
+
+# Pull the first string from a JSON array field (for workspace_roots aliases).
+# Like jget, this deliberately handles only the small hook-payload shape we need.
+jfirst() {
+    j=$2
+    case $j in *"\"$1\""*) ;; *) return 0 ;; esac
+    r=${j#*"\"$1\""}
+    while case $r in ' '*|"	"*|"$NL"*|"$CR"*) true ;; *) false ;; esac; do r=${r#?}; done
+    case $r in ':'*) r=${r#:} ;; *) return 0 ;; esac
+    while case $r in ' '*|"	"*|"$NL"*|"$CR"*) true ;; *) false ;; esac; do r=${r#?}; done
+    case $r in '['*) r=${r#[} ;; *) return 0 ;; esac
     while case $r in ' '*|"	"*|"$NL"*|"$CR"*) true ;; *) false ;; esac; do r=${r#?}; done
     case $r in '"'*) r=${r#\"} ;; *) return 0 ;; esac
     printf '%s' "${r%%\"*}"
@@ -204,6 +219,7 @@ COMMANDS
   config unset <key>     remove a setting, back to preset/default
   config path            print the config file path
   config edit            open the config file in \$EDITOR
+  install codex          print Codex config snippets with absolute paths
   presets                the four presets and what each speaks
   events                 every event, when it fires, what it says
   help, -h, --help       this text          -V, --version   print version
@@ -259,10 +275,72 @@ cli_config() {
     esac
 }
 
+cli_install() {
+    agent=$1
+    [ "$agent" = codex ] || {
+        echo "usage: iriscale-voice install codex" >&2
+        return 2
+    }
+
+    case $0 in */*) invoked=$0 ;; *) invoked=$(command -v "$0") ;; esac
+    script_dir=$(CDPATH= cd -- "$(dirname -- "$invoked")" 2>/dev/null && pwd -P)
+    script_path="$script_dir/$(basename -- "$invoked")"
+    shell_path=$(command -v sh)
+
+    if [ "$(os)" = win ] && command -v cygpath >/dev/null 2>&1; then
+        script_path=$(cygpath -m "$script_path")
+        shell_path=$(cygpath -m "$shell_path")
+        cat <<EOF
+# Basic — add at the top of ~/.codex/config.toml
+notify = ["$shell_path", "$script_path", "notify"]
+
+# Full (optional) — save as ~/.codex/hooks.json, then trust both in /hooks
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"$script_path\" stamp",
+        "commandWindows": "\"$shell_path\" \"$script_path\" stamp",
+        "async": true, "timeout": 10 } ] }
+    ],
+    "PermissionRequest": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"$script_path\" PermissionRequest",
+        "commandWindows": "\"$shell_path\" \"$script_path\" PermissionRequest",
+        "async": true, "timeout": 30 } ] }
+    ]
+  }
+}
+EOF
+    else
+        cat <<EOF
+# Basic — add at the top of ~/.codex/config.toml
+notify = ["$script_path", "notify"]
+
+# Full (optional) — save as ~/.codex/hooks.json, then trust both in /hooks
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"$script_path\" stamp",
+        "async": true, "timeout": 10 } ] }
+    ],
+    "PermissionRequest": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"$script_path\" PermissionRequest",
+        "async": true, "timeout": 30 } ] }
+    ]
+  }
+}
+EOF
+    fi
+}
+
 case "$EVENT" in
     help|-h|--help)  usage; exit 0 ;;
     -V|--version|version) echo "$VERSION"; exit 0 ;;
     status)  cli_status; exit $? ;;
+    install) shift; cli_install "$@"; exit $? ;;
     config)  shift; cli_config "$@"; exit $? ;;
     set)     [ -n "$2" ] || { echo "usage: iriscale-voice set <key> <value>" >&2; exit 2; }
              cfg_set "$2" "$3"; echo "$2=$3"; exit 0 ;;
@@ -283,8 +361,37 @@ esac
 
 # ---------- hook path ---------------------------------------------------------
 NOW=$(date +%s)
-payload=""; while IFS= read -r _l || [ -n "$_l" ]; do payload="$payload$_l$NL"; done 2>/dev/null
+# Payload source: JSON on stdin (Claude Code, Codex hooks, Copilot, Gemini, ...) or as
+# an argument (Codex `notify = [...]` appends the JSON as the last argv; also accepts a
+# bare JSON first argument). Then normalize other agents' names onto ours.
+payload=""
+case $EVENT in
+    notify) for _a in "$@"; do payload=$_a; done ;;      # last argument
+    '{'*)   payload=$EVENT ;;
+    *)      while IFS= read -r _l || [ -n "$_l" ]; do payload="$payload$_l$NL"; done 2>/dev/null ;;
+esac
+case $EVENT in
+    notify|'{'*)
+        _t=$(jget type "$payload"); [ -n "$_t" ] || _t=$(jget hook_event_name "$payload")
+        case $_t in
+            agent-turn-complete|"") EVENT=Stop ;;
+            *) EVENT=$_t ;;
+        esac ;;
+esac
+# event aliases (other agents' names for the same moment)
+case $EVENT in
+    agentStop|AfterAgent|TaskComplete|session.idle|post_cascade_response|agent-turn-complete) EVENT=Stop ;;
+    errorOccurred|session.error|TaskCancel) EVENT=StopFailure ;;
+    permissionRequest|permission.asked) EVENT=PermissionRequest ;;
+    stop)   # Cursor: one event, three outcomes
+        _status=$(jget status "$payload")
+        case $_status in completed|"") EVENT=Stop ;; error) EVENT=StopFailure ;; aborted) exit 0 ;; esac ;;
+esac
+# session id aliases: Claude/Codex hooks | Codex notify | Copilot | Cursor
 sid=$(jget session_id "$payload")
+[ -n "$sid" ] || sid=$(jget thread-id "$payload")
+[ -n "$sid" ] || sid=$(jget sessionId "$payload")
+[ -n "$sid" ] || sid=$(jget conversation_id "$payload")
 
 if [ "$EVENT" = "stamp" ]; then
     [ -n "$sid" ] && printf '%s\n' "$NOW" > "$STATE/$sid.start"
@@ -292,7 +399,9 @@ if [ "$EVENT" = "stamp" ]; then
 fi
 
 # resolve a friendly session name: /rename'd name -> cwd folder -> "Claude".
-# Session files are one JSON line each; scan them with builtins (no grep).
+# Claude Code: ~/.claude/sessions/<pid>.json, one JSON object per file.
+# Codex CLI:   ~/.codex/session_index.jsonl, one {"id","thread_name"} per line.
+# Both scanned with builtins (no grep).
 name=""
 if [ -n "$sid" ] && [ -d "$CLAUDE_DIR/sessions" ]; then
     for f in "$CLAUDE_DIR"/sessions/*.json; do
@@ -301,8 +410,15 @@ if [ -n "$sid" ] && [ -d "$CLAUDE_DIR/sessions" ]; then
         case $sj in *"\"sessionId\":\"$sid\""*) name=$(jget name "$sj"); break ;; esac
     done
 fi
+CODEX_INDEX="${CODEX_HOME:-$HOME/.codex}/session_index.jsonl"
+if [ -z "$name" ] && [ -n "$sid" ] && [ -f "$CODEX_INDEX" ]; then
+    while IFS= read -r cj || [ -n "$cj" ]; do
+        case $cj in *"\"id\":\"$sid\""*) name=$(jget thread_name "$cj"); break ;; esac
+    done < "$CODEX_INDEX"
+fi
 if [ -z "$name" ]; then
     cwd=$(jget cwd "$payload")
+    [ -n "$cwd" ] || cwd=$(jfirst workspace_roots "$payload")
     # basename of a JSON-escaped Windows or POSIX path: C:\\Users\\x\\proj\\ -> proj
     while case $cwd in *\\) true ;; *) false ;; esac; do cwd=${cwd%\\}; done
     while case $cwd in */) true ;; *) false ;; esac; do cwd=${cwd%/}; done
