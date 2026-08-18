@@ -70,10 +70,11 @@ bell). No `jq`, `node`, or `python` needed.
 
 ## Other agents
 
-Claude Code today. Codex CLI, Copilot CLI, Grok Build and Gemini CLI use the same
-hook shape and are next; Cursor, Junie, Devin, OpenCode and more are mapped out in
-[docs/PLATFORMS.md](docs/PLATFORMS.md). If you use one of them and want it sooner,
-open an issue with a sample hook payload — that's the only thing we can't produce here.
+**Codex CLI is supported and verified live.** See the two-minute
+[Codex setup](docs/install/codex.md): completion announcements need one `config.toml`
+line, with optional hooks for permission prompts and elapsed time. Copilot CLI, Grok
+Build, Gemini CLI, Cursor, and the remaining agents are mapped out in
+[docs/PLATFORMS.md](docs/PLATFORMS.md).
 
 ## Roadmap
 
@@ -84,7 +85,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
 ## Develop
 
 ```sh
-sh test/run.sh                                  # 89 checks, every event × every preset, silent
+sh test/run.sh                                  # 101 checks, every event × every preset, silent
 IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json
 claude plugin validate .                        # manifests
 claude plugin marketplace add /path/to/checkout && claude plugin install iriscale-voice@iriscale

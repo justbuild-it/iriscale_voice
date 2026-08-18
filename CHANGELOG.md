@@ -15,17 +15,16 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
   - Codex `/rename` names read from `~/.codex/session_index.jsonl` (`thread-id` →
     `thread_name`), same as Claude's `/rename`.
   - Optional two-hook `hooks.json` for `PermissionRequest` + turn-start stamp.
+  - `iriscale-voice install codex` prints both configurations with absolute paths and
+    never edits Codex configuration.
 - **Alias layers** (first slice of multi-agent support): session id from `session_id` |
   `thread-id` | `sessionId` | `conversation_id`; events `agentStop`/`AfterAgent`/
   `TaskComplete`/`session.idle`/`post_cascade_response` → Stop, `errorOccurred`/
   `session.error`/`TaskCancel` → StopFailure, `permissionRequest`/`permission.asked` →
   PermissionRequest.
 - `docs/install/` — one page per agent.
-
-### To do before release
-- `iriscale-voice install codex` printing the snippets with paths filled in.
-- README + PLATFORMS.md: Codex → verified live; note that Codex has `/rename`.
-- Tests for the alias layer beyond Codex (Copilot camelCase, Cursor `stop{status}`).
+- Synthetic alias coverage for Copilot (`sessionId`, done/error), Gemini (`AfterAgent`),
+  and Cursor (`stop` status plus `workspace_roots`).
 
 ## [0.1.5] — 2026-08-17
 

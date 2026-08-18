@@ -71,6 +71,19 @@ case "$out" in *"payments api done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); e
 out=$(printf '%s' '{"session_id":"cdx-9","cwd":"/x/repo"}' | sh "$S" Stop)   # unknown id -> folder
 case "$out" in *"repo done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL codex fallback: $out" ;; esac
 
+# Other-agent aliases: event names, camelCase ids, and Cursor status/workspace roots.
+sh "$S" set preset verbose >/dev/null
+out=$(printf '%s' '{"sessionId":"cop-1","cwd":"/x/copilot_api"}' | sh "$S" agentStop)
+case "$out" in *"copilot api done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Copilot agentStop: $out" ;; esac
+out=$(printf '%s' '{"sessionId":"cop-2","cwd":"/x/copilot_api","error":"auth"}' | sh "$S" errorOccurred)
+case "$out" in *"copilot api stopped: auth"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Copilot errorOccurred: $out" ;; esac
+out=$(printf '%s' '{"conversation_id":"cur-1","workspace_roots":["/x/cursor_app"],"status":"completed"}' | sh "$S" stop)
+case "$out" in *"cursor app done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Cursor completed: $out" ;; esac
+out=$(printf '%s' '{"conversation_id":"cur-2","workspace_roots":["/x/cursor_app"],"status":"error","error":"cancelled"}' | sh "$S" stop)
+case "$out" in *"cursor app stopped with an error"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Cursor error: $out" ;; esac
+out=$(printf '%s' '{"session_id":"gem-1","cwd":"/x/gemini_cli"}' | sh "$S" AfterAgent)
+case "$out" in *"gemini cli done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Gemini AfterAgent: $out" ;; esac
+
 # repeat guard: same line twice inside the cooldown -> second is SKIP; a different line still SPEAKs
 sh "$S" set repeat_cooldown 60 >/dev/null; sh "$S" set preset verbose >/dev/null
 R='{"session_id":"loop-1","cwd":"/x/loopy"}'
@@ -95,6 +108,12 @@ ok "$(sh "$S" config path)" "$CLAUDE_CONFIG_DIR/iriscale-voice.conf" "config pat
 sh "$S" config list | grep '^repeat_cooldown' >/dev/null;  ok $? 0 "config list has repeat_cooldown"
 sh "$S" events | grep 'PermissionRequest' >/dev/null;      ok $? 0 "events lists PermissionRequest"
 sh "$S" presets | grep '^  verbose' >/dev/null;            ok $? 0 "presets lists verbose"
+install_out=$(sh "$S" install codex)
+printf '%s' "$install_out" | grep '^notify = ' >/dev/null;  ok $? 0 "install codex prints notify config"
+printf '%s' "$install_out" | grep 'UserPromptSubmit' >/dev/null; ok $? 0 "install codex prints full hooks"
+printf '%s' "$install_out" | grep "$here/../bin/iriscale-voice" >/dev/null; ok $? 1 "install codex normalizes script path"
+[ ! -e "$CODEX_HOME/config.toml" ] && [ ! -e "$CODEX_HOME/hooks.json" ]; ok $? 0 "install codex never writes Codex config"
+sh "$S" install unknown >/dev/null 2>&1;                    ok $? 2 "unknown install target exits 2"
 # version must agree in script, plugin.json, marketplace.json (release process guard)
 v_script=$(sh "$S" --version)
 v_plugin=$(grep -o '"version": *"[^"]*"' "$here/../.claude-plugin/plugin.json"      | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
