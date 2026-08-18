@@ -63,6 +63,14 @@ printf '%s' '{"pid":1,"sessionId":"renamed-1","cwd":"/x/y","name":"new_name","st
 out=$(printf '%s' '{"session_id":"renamed-1","cwd":"/x/y"}' | sh "$S" Stop)
 case "$out" in *"new name done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL renamed session: $out" ;; esac
 
+# Codex CLI: /rename lives in ~/.codex/session_index.jsonl as {"id","thread_name"}
+export CODEX_HOME="$CLAUDE_CONFIG_DIR/codex"; mkdir -p "$CODEX_HOME"
+printf '%s\n%s\n' '{"id":"cdx-1","thread_name":"payments_api","updated_at":"x"}' '{"id":"cdx-2","thread_name":"other","updated_at":"x"}' > "$CODEX_HOME/session_index.jsonl"
+out=$(printf '%s' '{"session_id":"cdx-1","cwd":"/x/repo","hook_event_name":"Stop","last_assistant_message":"ok"}' | sh "$S" Stop)
+case "$out" in *"payments api done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL codex rename: $out" ;; esac
+out=$(printf '%s' '{"session_id":"cdx-9","cwd":"/x/repo"}' | sh "$S" Stop)   # unknown id -> folder
+case "$out" in *"repo done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL codex fallback: $out" ;; esac
+
 # repeat guard: same line twice inside the cooldown -> second is SKIP; a different line still SPEAKs
 sh "$S" set repeat_cooldown 60 >/dev/null; sh "$S" set preset verbose >/dev/null
 R='{"session_id":"loop-1","cwd":"/x/loopy"}'

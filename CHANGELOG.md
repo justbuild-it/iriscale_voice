@@ -5,6 +5,28 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-08-18 (in progress)
+
+### Added
+- **Codex CLI support** (`docs/install/codex.md`), verified live on Codex 0.147.0:
+  - `notify` mode: `iriscale-voice notify` takes the turn JSON from the last argument
+    (also accepts bare JSON as `$1`); `agent-turn-complete` → done. One `config.toml`
+    line, no hook-trust prompts.
+  - Codex `/rename` names read from `~/.codex/session_index.jsonl` (`thread-id` →
+    `thread_name`), same as Claude's `/rename`.
+  - Optional two-hook `hooks.json` for `PermissionRequest` + turn-start stamp.
+- **Alias layers** (first slice of multi-agent support): session id from `session_id` |
+  `thread-id` | `sessionId` | `conversation_id`; events `agentStop`/`AfterAgent`/
+  `TaskComplete`/`session.idle`/`post_cascade_response` → Stop, `errorOccurred`/
+  `session.error`/`TaskCancel` → StopFailure, `permissionRequest`/`permission.asked` →
+  PermissionRequest.
+- `docs/install/` — one page per agent.
+
+### To do before release
+- `iriscale-voice install codex` printing the snippets with paths filled in.
+- README + PLATFORMS.md: Codex → verified live; note that Codex has `/rename`.
+- Tests for the alias layer beyond Codex (Copilot camelCase, Cursor `stop{status}`).
+
 ## [0.1.5] — 2026-08-17
 
 ### Changed
@@ -107,7 +129,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.2...v0.1.3
