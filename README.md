@@ -14,6 +14,27 @@ through terminals to see who's stuck.
 
 ## Install (30 seconds)
 
+### Codex on Windows
+
+Run once in PowerShell (Git for Windows is the only prerequisite):
+
+```powershell
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/main/install.ps1 | iex
+```
+
+Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show
+`Installed 1`. The installer adds `iriscale-voice` to your user `PATH`, enables
+PowerShell tab completion, safely merges Codex configuration, and creates backups.
+Type `$iriscale-voice` in Codex for the discoverable skill, or use the CLI anywhere:
+
+```powershell
+iriscale-voice status
+iriscale-voice doctor codex
+iriscale-voice <Tab>
+```
+
+### Claude Code
+
 Inside Claude Code:
 
 ```
@@ -44,8 +65,9 @@ Or edit `~/.claude/iriscale-voice.conf` by hand — it's just `key=value` lines.
 knob is in [docs/CONFIG.md](docs/CONFIG.md).
 
 The same thing exists as a normal command, **`iriscale-voice`**, for use outside Claude
-Code (`iriscale-voice --help`, `iriscale-voice config list`, …). One symlink puts it on
-your PATH — see [docs/CONFIG.md → Command line](docs/CONFIG.md#command-line).
+Code (`iriscale-voice --help`, `iriscale-voice config list`, …). The Windows Codex
+installer adds it to `PATH`; manual macOS/Linux setup is in
+[docs/CONFIG.md → Command line](docs/CONFIG.md#command-line).
 
 ## What it says
 
@@ -70,9 +92,9 @@ bell). No `jq`, `node`, or `python` needed.
 
 ## Other agents
 
-**Codex CLI is supported and verified live.** See the two-minute
-[Codex setup](docs/install/codex.md): completion announcements need one `config.toml`
-line, with optional hooks for permission prompts and elapsed time. Copilot CLI, Grok
+**Codex CLI is supported and verified live.** See the one-command
+[Codex setup](docs/install/codex.md), including installation, diagnostics, completion,
+updates, and removal. Copilot CLI, Grok
 Build, Gemini CLI, Cursor, and the remaining agents are mapped out in
 [docs/PLATFORMS.md](docs/PLATFORMS.md).
 
@@ -85,7 +107,7 @@ tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
 ## Develop
 
 ```sh
-sh test/run.sh                                  # 110 checks, every event × every preset, silent
+sh test/run.sh                                  # full event, CLI, installer, and performance suite
 IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json
 claude plugin validate .                        # manifests
 claude plugin marketplace add /path/to/checkout && claude plugin install iriscale-voice@iriscale

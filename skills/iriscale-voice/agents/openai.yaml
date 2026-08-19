@@ -1,0 +1,4 @@
+interface:
+  display_name: "Iriscale Voice"
+  short_description: "Manage coding-agent voice notifications"
+  default_prompt: "Use $iriscale-voice to check and manage voice notifications."

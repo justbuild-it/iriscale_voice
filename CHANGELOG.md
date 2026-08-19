@@ -5,6 +5,16 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.9] — 2026-08-18
+
+### Added
+- One-command Windows Codex installer with a stable launcher, user `PATH`, PowerShell
+  tab completion, idempotent configuration merging, backups, update, and uninstall.
+- Codex plugin manifest and `$iriscale-voice` skill for discoverable status,
+  diagnostics, testing, and configuration commands.
+- `iriscale-voice completions powershell|bash|zsh`, `?` help, `install codex --apply`,
+  `update`, and `uninstall codex` CLI surfaces.
+
 ## [0.1.8] — 2026-08-18
 
 ### Fixed
@@ -161,7 +171,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.5...v0.1.6

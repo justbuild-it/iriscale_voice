@@ -48,7 +48,7 @@ expect SKIP  Stop
 expect SPEAK StopFailure
 # overrides & gates
 sh "$S" set event.SubagentStop on >/dev/null;  expect SPEAK SubagentStop; sh "$S" set event.SubagentStop "" >/dev/null
-sh "$S" set quiet_hours 0-23 >/dev/null;       expect SKIP idle_prompt;   sh "$S" set quiet_hours "" >/dev/null
+sh "$S" set quiet_hours 0-24 >/dev/null;       expect SKIP idle_prompt;   sh "$S" set quiet_hours "" >/dev/null
 sh "$S" set mute_sessions my_service >/dev/null; expect SKIP idle_prompt; sh "$S" set mute_sessions "" >/dev/null
 sh "$S" set only_sessions other >/dev/null;    expect SKIP idle_prompt;   sh "$S" set only_sessions "" >/dev/null
 sh "$S" mute >/dev/null;                       expect SKIP idle_prompt;   sh "$S" unmute >/dev/null
@@ -102,6 +102,7 @@ ok() { if [ "$1" = "$2" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "F
 sh "$S" --help >/dev/null 2>&1;            ok $? 0 "--help exit"
 sh "$S" --help | grep '^USAGE' >/dev/null;         ok $? 0 "--help has USAGE"
 sh "$S" -h    | grep 'config list' >/dev/null;     ok $? 0 "-h lists config"
+sh "$S" '?'   | grep '^USAGE' >/dev/null;          ok $? 0 "? is a help alias"
 sh "$S" --bogus >/dev/null 2>&1;           ok $? 2 "unknown option exits 2"
 sh "$S" config nope >/dev/null 2>&1;       ok $? 2 "unknown config sub exits 2"
 sh "$S" config set rate 3 >/dev/null;      ok "$(sh "$S" config get rate)" 3 "config set/get"
@@ -129,12 +130,53 @@ cat > "$CODEX_HOME/hooks.json" <<EOF
 EOF
 sh "$S" doctor codex >/dev/null 2>&1;                       ok $? 1 "doctor codex rejects async hooks"
 sh "$S" doctor unknown >/dev/null 2>&1;                     ok $? 2 "unknown doctor target exits 2"
+sh "$S" completions powershell | grep 'Register-ArgumentCompleter' >/dev/null; ok $? 0 "PowerShell completion is available"
+sh "$S" completions bash | grep 'complete -F' >/dev/null;   ok $? 0 "Bash completion is available"
+sh "$S" completions zsh | grep '#compdef' >/dev/null;       ok $? 0 "Zsh completion is available"
+sh "$S" completions nope >/dev/null 2>&1;                   ok $? 2 "unknown completion shell exits 2"
 # version must agree in script, plugin.json, marketplace.json (release process guard)
 v_script=$(sh "$S" --version)
 v_plugin=$(grep -o '"version": *"[^"]*"' "$here/../.claude-plugin/plugin.json"      | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
 v_market=$(grep -o '"version": *"[^"]*"' "$here/../.claude-plugin/marketplace.json" | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
+v_codex=$(grep -o '"version": *"[^"]*"' "$here/../.codex-plugin/plugin.json"       | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
 ok "$v_plugin" "$v_script" "plugin.json version == script VERSION"
 ok "$v_market" "$v_script" "marketplace.json version == script VERSION"
+ok "$v_codex" "$v_script" "Codex plugin version == script VERSION"
+[ -f "$here/../.codex-plugin/plugin.json" ];                ok $? 0 "Codex plugin manifest exists"
+[ -f "$here/../skills/iriscale-voice/SKILL.md" ];           ok $? 0 "Codex skill exists"
+grep -q '\$iriscale-voice' "$here/../skills/iriscale-voice/agents/openai.yaml"; ok $? 0 "Codex skill has invocation metadata"
+
+# Windows one-command installer: isolate every write, include spaces in paths, and
+# prove repeat installation preserves unrelated Codex configuration.
+if command -v powershell.exe >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
+    PSROOT="$CLAUDE_CONFIG_DIR/installer space/iriscale-voice"
+    PSCODEX="$CLAUDE_CONFIG_DIR/codex space"
+    mkdir -p "$PSCODEX"
+    printf '%s\n' '[model]' 'name = "keep-me"' > "$PSCODEX/config.toml"
+    printf '%s\n' '{"hooks":{"OtherEvent":[{"hooks":[]}]}}' > "$PSCODEX/hooks.json"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$here/../install.ps1")" \
+        -InstallRoot "$(cygpath -w "$PSROOT")" -CodexHome "$(cygpath -w "$PSCODEX")" \
+        -SourcePath "$(cygpath -w "$here/..")" -SkipPath -SkipProfile >/dev/null
+    ok $? 0 "PowerShell installer succeeds in paths with spaces"
+    "$PSROOT/bin/iriscale-voice.cmd" --version | grep "^$v_script\$" >/dev/null
+    ok $? 0 "installed Windows launcher runs"
+    grep 'keep-me' "$PSCODEX/config.toml" >/dev/null && grep 'OtherEvent' "$PSCODEX/hooks.json" >/dev/null
+    ok $? 0 "installer preserves unrelated Codex configuration"
+    grep 'PermissionRequest' "$PSCODEX/hooks.json" >/dev/null && ! grep '"async"' "$PSCODEX/hooks.json" >/dev/null
+    ok $? 0 "installer writes synchronous permission hook"
+    grep 'name: iriscale-voice' "$PSCODEX/skills/iriscale-voice/SKILL.md" >/dev/null
+    ok $? 0 "installer makes the Codex skill discoverable"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$here/../install.ps1")" \
+        -InstallRoot "$(cygpath -w "$PSROOT")" -CodexHome "$(cygpath -w "$PSCODEX")" \
+        -SourcePath "$(cygpath -w "$here/..")" -SkipPath -SkipProfile >/dev/null
+    [ "$(grep -c '^notify = ' "$PSCODEX/config.toml")" -eq 1 ]; ok $? 0 "installer is idempotent"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$here/../install.ps1")" \
+        -InstallRoot "$(cygpath -w "$PSROOT")" -CodexHome "$(cygpath -w "$PSCODEX")" \
+        -Uninstall -SkipPath -SkipProfile >/dev/null
+    [ ! -e "$PSROOT" ] && [ ! -e "$PSCODEX/skills/iriscale-voice" ] && grep 'keep-me' "$PSCODEX/config.toml" >/dev/null && \
+        grep 'OtherEvent' "$PSCODEX/hooks.json" >/dev/null && ! grep 'PermissionRequest' "$PSCODEX/hooks.json" >/dev/null
+    ok $? 0 "uninstaller removes only owned files and configuration"
+fi
 # every settings key documented in CONFIG.md
 for k in $(sh "$S" config list | awk 'NR>1 && $1 !~ /^(file:|\(|$)/ {print $1}' | sed 's/\.<Event>//'); do
     grep -q "\`$k" "$here/../docs/CONFIG.md"; ok $? 0 "docs/CONFIG.md documents $k"
