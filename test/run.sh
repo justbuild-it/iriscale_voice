@@ -176,5 +176,23 @@ t1=$(date +%s)
 if [ $((t1 - t0)) -le 1 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook blocked $((t1 - t0))s on speech - must background the speaker"; fi
 sleep 4   # let the stubbed background speaker finish before the trap cleans the shim dir
 
+# Degraded-environment guards (Codex launched the raw MSYS sh.exe with no /usr/bin on
+# PATH: date/uname/tr were all missing and hooks errored or mis-suppressed).
+# 1. os() must answer from $OS without uname.
+out=$(OS=Windows_NT sh "$S" status | sed -n "s/.*os: //p")
+ok "${out%% *}" "win" "os() trusts \ without uname"
+# 2. A dead clock must skip quiet hours, not treat the time as midnight.
+printf '#!/bin/sh
+exit 1
+' > "$SHIM/date"; chmod +x "$SHIM/date"
+sh "$S" set quiet_hours 0-23 >/dev/null
+out=$(printf '%s' '{"session_id":"noclock","cwd":"/x/no_clock"}' | PATH="$SHIM:$PATH" sh "$S" Stop)
+case "$out" in SPEAK*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL dead clock must not suppress: $out" ;; esac
+sh "$S" set quiet_hours "" >/dev/null; rm -f "$SHIM/date"
+# 3. install codex must never print the raw usr/bin sh (no PATH when launched from Windows).
+if [ "$(sh "$S" status | sed -n "s/.*os: //p" | sed "s/ .*//")" = win ]; then
+    sh "$S" install codex | grep "usr/bin/sh.exe" >/dev/null && { fail=$((fail+1)); echo "FAIL install codex printed raw usr/bin/sh.exe"; } || pass=$((pass+1))
+fi
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
