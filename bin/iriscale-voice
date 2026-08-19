@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.7"
+VERSION="0.1.8"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -106,15 +106,29 @@ cfg_set() {   # cfg_set <key> <value>  (create/replace the line, keep everything
 }
 now() { printf "%s" "$NOW"; }   # NOW is set once, at the top of the hook path
 os() {
+    # $OS is set to Windows_NT by Windows itself - no spawn, and it works even when
+    # the launching process gave us a PATH without uname (raw MSYS sh.exe).
+    case "${OS:-}" in Windows_NT) echo win; return ;; esac
     case "$(uname -s 2>/dev/null)" in
         Darwin) echo mac ;;
         MINGW*|MSYS*|CYGWIN*|Windows_NT) echo win ;;
         *) echo linux ;;
     esac
 }
-# keep spoken text shell-safe for every backend: letters, digits, basic punctuation
-clean() { printf '%s' "$1" | tr -c 'A-Za-z0-9 .,:;!?()/&%+-' ' ' | tr -s ' '; }
-hour_now() { h=$(date +%H); h=${h#0}; printf '%s' "${h:-0}"; }
+# keep spoken text shell-safe for every backend: letters, digits, basic punctuation.
+# If tr is unreachable (PATH-less launch) fall back to a builtin scrub of the
+# characters that could break the quoted speech command - never go silent.
+clean() {
+    c=$(printf '%s' "$1" | tr -c 'A-Za-z0-9 .,:;!?()/&%+-' ' ' 2>/dev/null | tr -s ' ' 2>/dev/null)
+    if [ -z "$c" ] && [ -n "$1" ]; then
+        c=$1; _o=""
+        while [ -n "$c" ]; do _ch=${c%"${c#?}"}; c=${c#?}; case $_ch in \'|\"|\\|\`|\$) _ch=' ' ;; esac; _o="$_o$_ch"; done
+        c=$_o
+    fi
+    printf '%s' "$c"
+}
+# empty output = clock unavailable (caller then skips quiet hours). Midnight "00" -> "0".
+hour_now() { h=$(date +%H 2>/dev/null); case $h in ??) h=${h#0} ;; esac; printf '%s' "$h"; }
 
 # ---------- presets -----------------------------------------------------------
 # preset_events <preset>  -> space-separated list of events that speak
@@ -291,6 +305,16 @@ cli_install() {
     if [ "$(os)" = win ] && command -v cygpath >/dev/null 2>&1; then
         script_path=$(cygpath -m "$script_path")
         shell_path=$(cygpath -m "$shell_path")
+        # `command -v sh` resolves to Git's RAW MSYS shell (…/Git/usr/bin/sh.exe).
+        # Launched directly from a Windows process it does not put /usr/bin on PATH,
+        # so date/uname/mkdir/tr are all missing and hooks fail with
+        # "date: command not found". The …/Git/bin/sh.exe WRAPPER sets PATH up;
+        # always prefer it when it exists.
+        case $shell_path in
+            */usr/bin/sh.exe)
+                wrapper="${shell_path%/usr/bin/sh.exe}/bin/sh.exe"
+                [ -f "$wrapper" ] && shell_path=$wrapper ;;
+        esac
         cat <<EOF
 # Basic — add at the top of ~/.codex/config.toml
 notify = ["$shell_path", "$script_path", "notify"]
@@ -401,7 +425,9 @@ case "$EVENT" in
 esac
 
 # ---------- hook path ---------------------------------------------------------
-NOW=$(date +%s)
+# If date is unreachable (PATH-less launch), NOW=0 and every time-based gate
+# (min_turn, cooldown, quiet hours) is skipped rather than misfiring.
+NOW=$(date +%s 2>/dev/null); case $NOW in ''|*[!0-9]*) NOW=0 ;; esac
 # Payload source: JSON on stdin (Claude Code, Codex hooks, Copilot, Gemini, ...) or as
 # an argument (Codex `notify = [...]` appends the JSON as the last argv; also accepts a
 # bare JSON first argument). Then normalize other agents' names onto ours.
@@ -493,9 +519,12 @@ fi
 if [ -z "$reason" ]; then
     cfgv qh quiet_hours ""          # e.g. 22-8
     if [ -n "$qh" ]; then
-        qs=${qh%-*}; qe=${qh#*-}; h=$(hour_now)
-        if [ "$qs" -lt "$qe" ]; then [ "$h" -ge "$qs" ] && [ "$h" -lt "$qe" ] && reason="quiet hours ($qh)"
-        elif [ "$qs" -gt "$qe" ]; then { [ "$h" -ge "$qs" ] || [ "$h" -lt "$qe" ]; } && reason="quiet hours ($qh)"; fi
+        qs=${qh%-*}; qe=${qh#*-}; h=$(hour_now 2>/dev/null)
+        case $h in ''|*[!0-9]*) h="" ;; esac      # date unreachable -> skip quiet hours
+        if [ -n "$h" ]; then
+            if [ "$qs" -lt "$qe" ] 2>/dev/null; then [ "$h" -ge "$qs" ] && [ "$h" -lt "$qe" ] && reason="quiet hours ($qh)"
+            elif [ "$qs" -gt "$qe" ] 2>/dev/null; then { [ "$h" -ge "$qs" ] || [ "$h" -lt "$qe" ]; } && reason="quiet hours ($qh)"; fi
+        fi
     fi
 fi
 
@@ -506,8 +535,10 @@ if [ -z "$reason" ]; then
 fi
 
 elapsed=""
-if [ -n "$sid" ] && [ -f "$STATE/$sid.start" ]; then
-    IFS= read -r started < "$STATE/$sid.start" || started=0; elapsed=$(( NOW - ${started:-0} ))
+if [ "$NOW" -gt 0 ] && [ -n "$sid" ] && [ -f "$STATE/$sid.start" ]; then
+    IFS= read -r started < "$STATE/$sid.start" || started=0
+    case $started in ''|*[!0-9]*) started=0 ;; esac
+    [ "$started" -gt 0 ] && elapsed=$(( NOW - started ))
 fi
 if [ -z "$reason" ] && [ "$EVENT" = "Stop" ]; then
     cfgv min min_turn_seconds "$(preset_min_turn "$preset")"
@@ -542,7 +573,7 @@ line="$spoken_name $tail"
 # seconds is noise (a subagent looping, a hook double-firing) — say it once.
 cfgv cool repeat_cooldown 60
 lastf="$STATE/${sid:-nosid}.last"
-if [ -z "$reason" ] && [ "$cool" -gt 0 ] 2>/dev/null && [ -f "$lastf" ]; then
+if [ -z "$reason" ] && [ "$NOW" -gt 0 ] && [ "$cool" -gt 0 ] 2>/dev/null && [ -f "$lastf" ]; then
     { IFS= read -r last_t; IFS= read -r last_line; } < "$lastf"
     if [ "$last_line" = "$line" ] && [ $(( NOW - ${last_t:-0} )) -lt "$cool" ]; then
         reason="same announcement within ${cool}s (repeat_cooldown)"

@@ -5,6 +5,24 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.8] — 2026-08-18
+
+### Fixed
+- **Codex hooks failed with "date: command not found".** `install codex` printed the
+  shell that `command -v sh` resolves to - Git's RAW MSYS `usr/bin/sh.exe`, which
+  gets no `/usr/bin` on PATH when launched directly by a Windows process, so `date`,
+  `uname`, `mkdir` and `tr` were all missing. It now prefers the `bin/sh.exe` WRAPPER,
+  which sets PATH up. (The hand-tested notify line already used the wrapper - that is
+  why turn announcements worked while the regenerated hooks failed.)
+- **Degraded-environment hardening**, so a PATH-less launch can never error or
+  mis-fire again: `os()` answers from Windows' own `$OS` variable without spawning
+  `uname`; a dead clock skips quiet hours instead of reading as midnight (which
+  silently suppressed everything inside a wrapping window); min-turn and cooldown
+  gates disengage rather than misfire; `clean()` falls back to a builtin scrub
+  instead of speaking an empty string.
+- Tests: dead-clock, `$OS` detection, and "install codex must never print the raw
+  usr/bin sh" guards. 110 checks.
+
 ## [0.1.7] — 2026-08-18
 
 ### Fixed
@@ -143,7 +161,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.4...v0.1.5
