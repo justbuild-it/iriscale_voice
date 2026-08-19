@@ -234,7 +234,11 @@ COMMANDS
   config path            print the config file path
   config edit            open the config file in \$EDITOR
   install codex          print Codex config snippets with absolute paths
+  install codex --apply  install launcher, completion, notify, and hooks
   doctor codex           diagnose Codex notify and hook configuration
+  completions <shell>    print completion for powershell, bash, or zsh
+  update                 install the latest release (Windows)
+  uninstall codex        remove the Windows install and owned Codex config
   presets                the four presets and what each speaks
   events                 every event, when it fires, what it says
   help, -h, --help       this text          -V, --version   print version
@@ -296,6 +300,18 @@ cli_install() {
         echo "usage: iriscale-voice install codex" >&2
         return 2
     }
+
+    if [ "${2:-}" = "--apply" ]; then
+        case $0 in */*) invoked=$0 ;; *) invoked=$(command -v "$0") ;; esac
+        script_dir=$(CDPATH= cd -- "$(dirname -- "$invoked")" 2>/dev/null && pwd -P)
+        installer="$script_dir/../install.ps1"
+        [ -f "$installer" ] || installer="$script_dir/install.ps1"
+        [ -f "$installer" ] || { echo "install.ps1 not found next to iriscale-voice" >&2; return 1; }
+        command -v powershell.exe >/dev/null 2>&1 || { echo "PowerShell is required for --apply" >&2; return 1; }
+        source_root=$(CDPATH= cd -- "$script_dir/.." 2>/dev/null && pwd -P)
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -SourcePath "$source_root"
+        return $?
+    fi
 
     case $0 in */*) invoked=$0 ;; *) invoked=$(command -v "$0") ;; esac
     script_dir=$(CDPATH= cd -- "$(dirname -- "$invoked")" 2>/dev/null && pwd -P)
@@ -361,6 +377,71 @@ EOF
     fi
 }
 
+cli_completions() {
+    case ${1:-} in
+        powershell|pwsh)
+            cat <<'EOF'
+Register-ArgumentCompleter -Native -CommandName iriscale-voice -ScriptBlock {
+  param($wordToComplete, $commandAst, $cursorPosition)
+  $elements = @($commandAst.CommandElements | ForEach-Object { $_.Extent.Text })
+  $argument = $elements.Count - 1
+  if ($commandAst.Extent.Text -match '\s$') { $argument++ }
+  if ($argument -le 1) {
+    $choices = 'status','test','say','mute','unmute','config','install','doctor','presets','events','completions','update','uninstall','help'
+  } else {
+    $choices = switch ($elements[1]) {
+      'config' { 'list','get','set','unset','path','edit' }
+      { $_ -in 'install','doctor','uninstall' } { 'codex' }
+      'completions' { 'powershell','bash','zsh' }
+    }
+  }
+  $choices |
+    Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+      [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+    }
+}
+EOF
+            ;;
+        bash)
+            cat <<'EOF'
+_iriscale_voice() {
+  if [ "$COMP_CWORD" -eq 1 ]; then
+    choices='status test say mute unmute config install doctor presets events completions update uninstall help'
+  else
+    case ${COMP_WORDS[1]} in
+      config) choices='list get set unset path edit' ;;
+      install|doctor|uninstall) choices='codex' ;;
+      completions) choices='powershell bash zsh' ;;
+    esac
+  fi
+  COMPREPLY=( $(compgen -W "$choices" -- "${COMP_WORDS[COMP_CWORD]}") )
+}
+complete -F _iriscale_voice iriscale-voice
+EOF
+            ;;
+        zsh)
+            cat <<'EOF'
+#compdef iriscale-voice
+_arguments '1:command:(status test say mute unmute config install doctor presets events completions update uninstall help)'
+EOF
+            ;;
+        *) echo "usage: iriscale-voice completions <powershell|bash|zsh>" >&2; return 2 ;;
+    esac
+}
+
+cli_windows_lifecycle() {
+    action=$1
+    case $0 in */*) invoked=$0 ;; *) invoked=$(command -v "$0") ;; esac
+    script_dir=$(CDPATH= cd -- "$(dirname -- "$invoked")" 2>/dev/null && pwd -P)
+    installer="$script_dir/../install.ps1"; [ -f "$installer" ] || installer="$script_dir/install.ps1"
+    [ -f "$installer" ] || { echo "installed install.ps1 not found" >&2; return 1; }
+    command -v powershell.exe >/dev/null 2>&1 || { echo "PowerShell is required" >&2; return 1; }
+    case $action in
+        update) powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -Update ;;
+        uninstall) powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -Uninstall ;;
+    esac
+}
+
 cli_doctor() {
     agent=$1
     [ "$agent" = codex ] || {
@@ -401,11 +482,15 @@ cli_doctor() {
 }
 
 case "$EVENT" in
-    help|-h|--help)  usage; exit 0 ;;
+    help|-h|--help|"?")  usage; exit 0 ;;
     -V|--version|version) echo "$VERSION"; exit 0 ;;
     status)  cli_status; exit $? ;;
     install) shift; cli_install "$@"; exit $? ;;
     doctor)  shift; cli_doctor "$@"; exit $? ;;
+    completions) shift; cli_completions "$@"; exit $? ;;
+    update) cli_windows_lifecycle update; exit $? ;;
+    uninstall) [ "${2:-}" = codex ] || { echo "usage: iriscale-voice uninstall codex" >&2; exit 2; }
+               cli_windows_lifecycle uninstall; exit $? ;;
     config)  shift; cli_config "$@"; exit $? ;;
     set)     [ -n "$2" ] || { echo "usage: iriscale-voice set <key> <value>" >&2; exit 2; }
              cfg_set "$2" "$3"; echo "$2=$3"; exit 0 ;;

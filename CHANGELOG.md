@@ -7,6 +7,14 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [0.1.8] — 2026-08-18
 
+### Added
+- One-command Windows Codex installer with a stable launcher, user `PATH`, PowerShell
+  tab completion, idempotent configuration merging, backups, update, and uninstall.
+- Codex plugin manifest and `$iriscale-voice` skill for discoverable status,
+  diagnostics, testing, and configuration commands.
+- `iriscale-voice completions powershell|bash|zsh`, `?` help, `install codex --apply`,
+  `update`, and `uninstall codex` CLI surfaces.
+
 ### Fixed
 - **Codex hooks failed with "date: command not found".** `install codex` printed the
   shell that `command -v sh` resolves to - Git's RAW MSYS `usr/bin/sh.exe`, which

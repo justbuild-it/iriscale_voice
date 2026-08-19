@@ -1,0 +1,28 @@
+{
+  "name": "iriscale-voice",
+  "version": "0.1.8",
+  "description": "Install and manage voice notifications for Codex and other coding agents.",
+  "author": {
+    "name": "Iriscale",
+    "url": "https://github.com/justbuild-it"
+  },
+  "homepage": "https://github.com/justbuild-it/iriscale_voice",
+  "repository": "https://github.com/justbuild-it/iriscale_voice",
+  "license": "MIT",
+  "keywords": ["voice", "notifications", "hooks", "productivity"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Iriscale Voice",
+    "shortDescription": "Voice notifications for coding agents",
+    "longDescription": "Hear when Codex and other coding agents finish, fail, or need your answer.",
+    "developerName": "Iriscale",
+    "category": "Productivity",
+    "capabilities": ["Interactive"],
+    "websiteURL": "https://github.com/justbuild-it/iriscale_voice",
+    "defaultPrompt": [
+      "Check whether Iriscale Voice is working.",
+      "Diagnose my Codex voice hooks.",
+      "Show my Iriscale Voice configuration."
+    ]
+  }
+}

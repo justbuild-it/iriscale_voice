@@ -1,7 +1,44 @@
 # Codex CLI
 
-Verified against Codex CLI 0.147.0 on Windows (Git Bash). Two tiers — most people
-only need the first.
+Verified against Codex CLI 0.147.0 on Windows. Git for Windows is the only prerequisite.
+
+## Recommended: one-command Windows install
+
+Run in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/main/install.ps1 | iex
+```
+
+The installer downloads Iriscale Voice to `%LOCALAPPDATA%\Programs\iriscale-voice`,
+creates a stable launcher, adds it to your user `PATH`, registers PowerShell tab
+completion, installs the `$iriscale-voice` Codex skill, and merges `notify` plus two
+synchronous hooks into your Codex files. Existing files are backed up before changes
+and unrelated settings and hooks remain.
+
+Restart Codex and your terminal. In `/hooks`, confirm `UserPromptSubmit` and
+`PermissionRequest` each show `Installed 1`, open each event, and trust its hook so
+`Active` becomes `1`. Then verify:
+
+```powershell
+iriscale-voice status
+iriscale-voice doctor codex
+iriscale-voice test
+```
+
+Type `iriscale-voice ` and press Tab for shell commands. In Codex, invoke the bundled
+`$iriscale-voice` skill for status, diagnostics, and configuration help. Codex owns
+slash commands, so Claude Code's `/iriscale-voice:*` commands are not used here.
+
+Lifecycle commands:
+
+```powershell
+iriscale-voice update
+iriscale-voice uninstall codex
+```
+
+The rest of this page documents the generated configuration for manual or non-Windows
+setups.
 
 ## Basic: one line, no trust prompts
 
@@ -22,6 +59,7 @@ name you gave with Codex's `/rename` (read from `~/.codex/session_index.jsonl`),
 the folder name.
 
 `iriscale-voice install codex` prints this snippet with your paths filled in.
+`iriscale-voice install codex --apply` performs the Windows installation.
 
 ## Full (optional): permission prompts and elapsed time — two hooks
 

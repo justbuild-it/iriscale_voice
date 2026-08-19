@@ -20,8 +20,9 @@ No direct pushes to `main` — including maintainers, including one-line fixes.
 
 A release is its own small PR:
 
-1. Bump the version in **all three** places — `VERSION=` in `bin/iriscale-voice`,
-   `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (`test/run.sh`
+1. Bump the version in **all four** places — `VERSION=` in `bin/iriscale-voice`,
+   `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and
+   `.codex-plugin/plugin.json` (`test/run.sh`
    fails if they disagree). `claude plugin update` only re-copies on a version
    change, so a fix without a bump never reaches installed users.
    - **Versioning policy:** while we're pre-1.0, every release — fixes and features
