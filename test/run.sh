@@ -38,7 +38,7 @@ done
 sh "$S" set preset standard >/dev/null
 # permission phrasing
 out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"git push"}}' | sh "$S" PermissionRequest)
-case "$out" in *"api wants to run git push"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL perm phrasing: $out" ;; esac
+case "$out" in *"api is waiting for your answer to run git push"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL perm phrasing: $out" ;; esac
 # failure reason
 out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","reason":"rate_limit"}' | sh "$S" StopFailure)
 case "$out" in *"stopped: rate limit"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL reason: $out" ;; esac
@@ -113,9 +113,22 @@ sh "$S" presets | grep '^  verbose' >/dev/null;            ok $? 0 "presets list
 install_out=$(sh "$S" install codex)
 printf '%s' "$install_out" | grep '^notify = ' >/dev/null;  ok $? 0 "install codex prints notify config"
 printf '%s' "$install_out" | grep 'UserPromptSubmit' >/dev/null; ok $? 0 "install codex prints full hooks"
+printf '%s' "$install_out" | grep '"async"' >/dev/null; ok $? 1 "install codex prints synchronous hooks"
 printf '%s' "$install_out" | grep "$here/../bin/iriscale-voice" >/dev/null; ok $? 1 "install codex normalizes script path"
 [ ! -e "$CODEX_HOME/config.toml" ] && [ ! -e "$CODEX_HOME/hooks.json" ]; ok $? 0 "install codex never writes Codex config"
 sh "$S" install unknown >/dev/null 2>&1;                    ok $? 2 "unknown install target exits 2"
+cat > "$CODEX_HOME/config.toml" <<EOF
+notify = ["$S", "notify"]
+EOF
+cat > "$CODEX_HOME/hooks.json" <<EOF
+{"hooks":{"UserPromptSubmit":[],"PermissionRequest":[]}}
+EOF
+sh "$S" doctor codex | grep 'READY' >/dev/null;             ok $? 0 "doctor codex accepts synchronous hooks"
+cat > "$CODEX_HOME/hooks.json" <<EOF
+{"hooks":{"UserPromptSubmit":[],"PermissionRequest":[{"hooks":[{"async":true}]}]}}
+EOF
+sh "$S" doctor codex >/dev/null 2>&1;                       ok $? 1 "doctor codex rejects async hooks"
+sh "$S" doctor unknown >/dev/null 2>&1;                     ok $? 2 "unknown doctor target exits 2"
 # version must agree in script, plugin.json, marketplace.json (release process guard)
 v_script=$(sh "$S" --version)
 v_plugin=$(grep -o '"version": *"[^"]*"' "$here/../.claude-plugin/plugin.json"      | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
@@ -150,6 +163,18 @@ sh "$S" set preset standard >/dev/null; : > "$SHIM/.log"
 printf '%s' '{"session_id":"perf-1","cwd":"/x/perf_svc","tool_name":"Bash","tool_input":{"command":"ls"}}' | PATH="$SHIM:$PATH" sh "$S" PermissionRequest >/dev/null
 spawns=$(wc -l < "$SHIM/.log" | tr -d ' ')
 if [ "$spawns" -le 1 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook path spawned $spawns text-tool processes (limit 1): $(sort "$SHIM/.log" | uniq -c | tr '\n' ' ')"; fi
+
+# Non-blocking speech guard: hosts that run hooks synchronously (Codex) must get the
+# hook back in well under a second even though speaking takes seconds. Stub every
+# speech backend with a 3 s sleep; the script must return without waiting for it.
+for spk in powershell.exe say spd-say espeak-ng espeak notify-send; do
+    printf '#!/bin/sh\nsleep 3\n' > "$SHIM/$spk"; chmod +x "$SHIM/$spk"
+done
+t0=$(date +%s)
+printf '%s' '{"session_id":"sync-1","cwd":"/x/sync_host"}' | IRISCALE_VOICE_DEBUG= PATH="$SHIM:$PATH" sh "$S" Stop >/dev/null 2>&1
+t1=$(date +%s)
+if [ $((t1 - t0)) -le 1 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook blocked $((t1 - t0))s on speech - must background the speaker"; fi
+sleep 4   # let the stubbed background speaker finish before the trap cleans the shim dir
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
