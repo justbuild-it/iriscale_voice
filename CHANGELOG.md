@@ -15,6 +15,10 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 ### Added
 - `iriscale-voice doctor codex` performs a read-only check for missing Codex notify or
   hook configuration and the unsupported `async: true` form.
+- **Speech no longer blocks the calling host.** The speaker runs in a detached
+  background subshell; the hook returns in ~0.4 s instead of ~7 s. Required for Codex,
+  whose hooks are synchronous - it froze for the whole spoken phrase before showing a
+  permission prompt. Guard test: with 3 s speaker stubs the hook must return within 1 s.
 
 ## [0.1.6] — 2026-08-18
 

@@ -164,5 +164,17 @@ printf '%s' '{"session_id":"perf-1","cwd":"/x/perf_svc","tool_name":"Bash","tool
 spawns=$(wc -l < "$SHIM/.log" | tr -d ' ')
 if [ "$spawns" -le 1 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook path spawned $spawns text-tool processes (limit 1): $(sort "$SHIM/.log" | uniq -c | tr '\n' ' ')"; fi
 
+# Non-blocking speech guard: hosts that run hooks synchronously (Codex) must get the
+# hook back in well under a second even though speaking takes seconds. Stub every
+# speech backend with a 3 s sleep; the script must return without waiting for it.
+for spk in powershell.exe say spd-say espeak-ng espeak notify-send; do
+    printf '#!/bin/sh\nsleep 3\n' > "$SHIM/$spk"; chmod +x "$SHIM/$spk"
+done
+t0=$(date +%s)
+printf '%s' '{"session_id":"sync-1","cwd":"/x/sync_host"}' | IRISCALE_VOICE_DEBUG= PATH="$SHIM:$PATH" sh "$S" Stop >/dev/null 2>&1
+t1=$(date +%s)
+if [ $((t1 - t0)) -le 1 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook blocked $((t1 - t0))s on speech - must background the speaker"; fi
+sleep 4   # let the stubbed background speaker finish before the trap cleans the shim dir
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

@@ -561,6 +561,13 @@ fi
 cfgv log log "$CLAUDE_DIR/iriscale-voice.log"
 [ "$log" != "none" ] && printf '%s\t%s\t%s\n' "$(date '+%Y-%m-%dT%H:%M:%S')" "$EVENT" "$line" >> "$log" 2>/dev/null
 
+# Speak in a detached background subshell so the hook returns immediately.
+# Synchronous hosts (Codex runs hooks synchronously - async definitions are
+# skipped as of 0.147) would otherwise freeze for the whole spoken phrase:
+# measured ~7 s blocking on a permission announcement. The subshell inherits
+# CONF_DATA and the serialize lock still queues concurrent sessions.
 cfgv serialize serialize true
-if [ "$serialize" = "true" ]; then with_lock speak "$line"; else speak "$line"; fi
+(
+    if [ "$serialize" = "true" ]; then with_lock speak "$line"; else speak "$line"; fi
+) </dev/null >/dev/null 2>&1 &
 exit 0
