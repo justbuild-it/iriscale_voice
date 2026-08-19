@@ -127,7 +127,11 @@ if ($SourcePath) {
     Invoke-WebRequest "$repo/skills/iriscale-voice/agents/openai.yaml" -OutFile (Join-Path $skillAgents 'openai.yaml')
 }
 
-$launcher = "@echo off`r`n`"$gitBash`" --login `"$scriptPath`" %*`r`n"
+# No --login: Git's bin\bash.exe wrapper already sets up /usr/bin on PATH, and
+# --login costs ~550 ms per hook event AND sources the user's .bash_profile -
+# anything it echoes would corrupt captured output (measured: profile noise
+# became line 1 of the generated completion file, breaking the PS profile).
+$launcher = "@echo off`r`n`"$gitBash`" `"$scriptPath`" %*`r`n"
 Set-Content -LiteralPath $launcherPath -Value $launcher -Encoding ASCII -NoNewline
 
 $completion = @(& $launcherPath completions powershell) -join [Environment]::NewLine
