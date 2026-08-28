@@ -1,15 +1,29 @@
 # iriscale voice
 
-**Let your coding agents tell you when they are done and need attention.**
+**Run many coding-agent sessions in parallel. Each one tells you, by name, the moment
+it's ready for review or needs your attention.**
 
-Run several Claude Code sessions, walk away, and hear *"billing service done"* or
-*"iriscale voice is waiting for your answer to run git push"* from across the room — instead of tabbing
-through terminals to see who's stuck.
+Coding agents are at their best on long-running tasks — a refactor here, a test suite
+there, a migration in a third terminal. The bottleneck is you: you can't watch five
+terminals, so you either poll them (and lose your focus) or forget one (and it sits
+finished, or blocked on a yes/no, for twenty minutes).
+
+iriscale voice removes the polling. You keep working in whichever session has your
+attention; the others speak up when — and only when — they need you:
+
+- *"billing service done after 6 minutes"* → ready for review
+- *"payments api is waiting for your answer to run git push"* → blocked on you, right now
+- *"data migration stopped: rate limit"* → died, don't wait for it
+
+You hear **which** session and **why**, without looking, so you can finish the thought
+you're on and then switch. That's the whole product.
 
 - Speaks the **session name** (`/rename` it, or it uses the folder name)
 - **Done · stopped with an error · waiting for your answer to run `<command>`**
 - Presets from *"just tell me when it's done"* to *"tell me everything"*
-- Concurrent sessions **queue** instead of talking over each other
+- Concurrent sessions **queue** instead of talking over each other; the same line is never
+  repeated inside a minute
+- Works for **Claude Code** and **Codex CLI** today, one config for both; more agents mapped
 - macOS, Windows, Linux — uses the voice your OS already has. **Zero dependencies.**
 
 ## Install (30 seconds)
@@ -69,17 +83,30 @@ Code (`iriscale-voice --help`, `iriscale-voice config list`, …). The Windows C
 installer adds it to `PATH`; manual macOS/Linux setup is in
 [docs/CONFIG.md → Command line](docs/CONFIG.md#command-line).
 
-## What it says
+## What it says, and when
 
-| when | you hear |
-|---|---|
-| turn finishes | *"my service done"* — *"…done after 6 minutes"* for long ones |
-| turn dies (rate limit, billing, auth) | *"my service stopped: rate limit"* |
-| needs permission | *"my service is waiting for your answer to run git push origin main"* / *"…to use Edit"* |
-| Claude has been waiting on you | *"my service is waiting for you"* |
-| subagent / session end *(verbose)* | *"…subagent done"*, *"…session ended"* |
+| the session… | you hear | what to do |
+|---|---|---|
+| finished its turn | *"my service done"* — *"…done after 6 minutes"* for long ones | review it when you reach a stopping point |
+| is blocked on a permission prompt | *"my service is waiting for your answer to run git push origin main"* / *"…to use Edit"* | it can't continue until you answer — switch now |
+| died (rate limit, billing, auth) | *"my service stopped: rate limit"* | don't wait for it |
+| has sat idle waiting for input | *"my service is waiting for you"* | the agent's own reminder, relayed once |
+| subagent / session end *(verbose preset)* | *"…sub agent done"*, *"…session ended"* | usually noise; off by default |
 
-Underscores and hyphens are spoken as spaces, so name sessions like `payments-api`.
+Each of these is spoken **once**. Nothing repeats on its own, and the `standard` preset
+stays silent on turns under 30 seconds so it isn't chatty while you're actively working
+in that session. Underscores and hyphens are spoken as spaces, so name sessions like
+`payments-api`.
+
+## A typical hour
+
+1. Start three sessions: `/rename billing-service`, `/rename payments-api`, `/rename docs`.
+   Give each a task that'll take a while.
+2. Work in `docs`. Four minutes later: *"billing service done after 4 minutes."* Finish your
+   paragraph, then go review it.
+3. While reviewing: *"payments api is waiting for your answer to run pytest."* Tab over,
+   press yes, tab back. Ten seconds.
+4. Nothing else speaks until something actually changes.
 
 ## How it works
 
