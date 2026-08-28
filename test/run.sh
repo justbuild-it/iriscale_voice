@@ -86,6 +86,36 @@ out=$(printf '%s' '{"conversation_id":"cur-3","workspace_roots":["/x/cursor_app"
 out=$(printf '%s' '{"session_id":"gem-1","cwd":"/x/gemini_cli"}' | sh "$S" AfterAgent)
 case "$out" in *"gemini cli done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Gemini AfterAgent: $out" ;; esac
 
+# Session state layer (feeds `sessions` / `board`): one key=value file per session.
+SESSD="$CLAUDE_CONFIG_DIR/iriscale-voice-sessions"
+sh "$S" set preset standard >/dev/null
+B1='{"session_id":"brd-1","cwd":"/x/billing_service","hook_event_name":"UserPromptSubmit"}'
+printf '%s' "$B1" | sh "$S" stamp
+grep -q '^status=working' "$SESSD/brd-1";                 ok $? 0 "stamp -> state working"
+grep -q '^agent=claude' "$SESSD/brd-1";                   ok $? 0 "claude-shaped payload -> agent=claude"
+printf '%s' "$B1" | sh "$S" Stop >/dev/null
+grep -q '^status=ready' "$SESSD/brd-1";                   ok $? 0 "Stop -> state ready"
+sed -i 's/^since=.*/since=123/' "$SESSD/brd-1"
+printf '%s' "$B1" | sh "$S" Stop >/dev/null
+grep -q '^since=123' "$SESSD/brd-1";                      ok $? 0 "unchanged status keeps since"
+printf '%s' '{"thread-id":"brd-2","cwd":"/x/payments_api","tool_name":"Bash","tool_input":{"command":"git push"}}' | sh "$S" PermissionRequest >/dev/null
+grep -q '^status=blocked' "$SESSD/brd-2";                 ok $? 0 "PermissionRequest -> state blocked"
+grep -q '^agent=codex' "$SESSD/brd-2";                    ok $? 0 "thread-id payload -> agent=codex"
+grep -q '^said=payments api is waiting for your answer to run git push' "$SESSD/brd-2"; ok $? 0 "state records last said"
+printf '%s' '{"session_id":"brd-3","cwd":"/x/data_migration","reason":"rate_limit"}' | sh "$S" StopFailure >/dev/null
+grep -q '^status=error' "$SESSD/brd-3";                   ok $? 0 "StopFailure -> state error"
+out=$(sh "$S" sessions --plain)
+printf '%s' "$out" | grep -q 'payments_api.*NEEDS YOU';   ok $? 0 "sessions shows NEEDS YOU"
+printf '%s' "$out" | grep -q 'billing_service.*READY';    ok $? 0 "sessions shows READY"
+printf '%s' "$out" | grep -q 'data_migration.*ERROR';     ok $? 0 "sessions shows ERROR"
+first=$(printf '%s' "$out" | grep -E 'payments_api|billing_service|data_migration' | head -n1)
+case $first in *payments_api*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL blocked session must sort first: $first" ;; esac
+printf '%s' "$out" | grep -q 'needs your answer';         ok $? 0 "sessions prints the legend"
+case $out in *'[K'*) fail=$((fail+1)); echo "FAIL --plain output contains raw escape text" ;; *) pass=$((pass+1)) ;; esac
+printf '%s' "$B1" | sh "$S" SessionEnd >/dev/null
+[ ! -f "$SESSD/brd-1" ];                                  ok $? 0 "SessionEnd removes the state file"
+sh "$S" board --once --plain >/dev/null 2>&1;             ok $? 0 "board --once exits"
+
 # repeat guard: same line twice inside the cooldown -> second is SKIP; a different line still SPEAKs
 sh "$S" set repeat_cooldown 60 >/dev/null; sh "$S" set preset verbose >/dev/null
 R='{"session_id":"loop-1","cwd":"/x/loopy"}'

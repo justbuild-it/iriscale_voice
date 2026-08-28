@@ -83,6 +83,23 @@ Code (`iriscale-voice --help`, `iriscale-voice config list`, …). The Windows C
 installer adds it to `PATH`; manual macOS/Linux setup is in
 [docs/CONFIG.md → Command line](docs/CONFIG.md#command-line).
 
+## See them all at once: the session board
+
+```
+iriscale-voice board
+```
+
+A live list of every session — needs your answer / ready for review / working / idle —
+with how long it's been there and what was last said. It repaints only when something
+changes, so it's ~5 MB of idle shell. Give it a small Windows Terminal window off to the
+side (works for Claude Code and Codex sessions alike):
+
+```
+wt -w iriscale --size 64,18 --pos 1180,80 --title sessions iriscale-voice board
+```
+
+`iriscale-voice sessions` prints one frame for scripts. Details: [docs/CONFIG.md](docs/CONFIG.md#the-session-board).
+
 ## What it says, and when
 
 | the session… | you hear | what to do |
