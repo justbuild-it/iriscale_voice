@@ -120,7 +120,9 @@ in, refreshing in place. Three ways to give it a home, cheapest first:
    wt -w iriscale --size 46,14 --pos 1400,60 --title "sessions" iriscale-voice board
    ```
    Pin that to the taskbar or a startup shortcut and it's a 46×14 panel that lives
-   next to the IDE. macOS: an iTerm/Terminal profile with a fixed size; Linux: any
+   next to the IDE. Gotcha: `wt` treats `;` as its own tab separator, so never put a
+   shell loop on the `wt` line - `board` is a single command precisely so the launch
+   line stays trivial. macOS: an iTerm/Terminal profile with a fixed size; Linux: any
    terminal's `--geometry`. Still ~5 MB, still one `sh` file.
 3. **A tmux / Windows Terminal pane** inside a session layout, for people who script
    their workspace.
