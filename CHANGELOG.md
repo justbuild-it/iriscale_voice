@@ -5,6 +5,15 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.10] — 2026-08-19
+
+### Fixed
+- **0.1.9 installer wrote hooks Codex ignores.** `install.ps1` emitted only `commandWindows`;
+  Codex requires the portable `command` field to exist (the Windows override alone shows
+  as `Installed 0`). The installer now writes both. `doctor codex` flags hooks missing
+  `command`; tests cover installer output and the doctor check. Re-run the installer
+  (or `iriscale-voice update`) to repair an existing install.
+
 ## [0.1.9] — 2026-08-18
 
 ### Added
@@ -171,7 +180,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.6...v0.1.7

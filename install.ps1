@@ -176,7 +176,14 @@ if (-not $hooksDoc.hooks) { $hooksDoc | Add-Member -NotePropertyName hooks -Note
 foreach ($definition in @(@('UserPromptSubmit','stamp',10), @('PermissionRequest','PermissionRequest',30))) {
     $event, $argument, $timeout = $definition
     $commandWindows = '"' + $launcherPath + '" ' + $argument
-    $hook = @([pscustomobject]@{ hooks = @([pscustomobject]@{ type='command'; commandWindows=$commandWindows; timeout=$timeout }) })
+    # Codex requires the portable command field even when commandWindows is
+    # present. The Windows override alone is ignored and appears as Installed 0.
+    $hook = @([pscustomobject]@{ hooks = @([pscustomobject]@{
+        type='command'
+        command=$commandWindows
+        commandWindows=$commandWindows
+        timeout=$timeout
+    }) })
     $hooksDoc.hooks | Add-Member -NotePropertyName $event -NotePropertyValue $hook -Force
 }
 Write-Utf8NoBom $hooksPath (($hooksDoc | ConvertTo-Json -Depth 20) + [Environment]::NewLine)
