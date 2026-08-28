@@ -122,6 +122,15 @@ plain_esc=$(sh "$S" sessions --plain | od -An -c | grep -c '033')
 printf '%s' "$B1" | sh "$S" SessionEnd >/dev/null
 [ ! -f "$SESSD/brd-1" ];                                  ok $? 0 "SessionEnd removes the state file"
 sh "$S" board --once --plain >/dev/null 2>&1;             ok $? 0 "board --once exits"
+# click-to-focus: numbered rows, a rows map, and `focus` resolution
+kout=$(sh "$S" sessions --keys --plain)
+printf '%s' "$kout" | grep -q '^1 .*payments_api';        ok $? 0 "keys mode numbers the top row"
+printf '%s' "$kout" | grep -q 'click a row or press';     ok $? 0 "keys mode explains the keys"
+[ -f "${TMPDIR:-/tmp}/iriscale-voice/board.rows" ];       ok $? 0 "keys mode writes the rows map"
+sh "$S" focus no_such_session >/dev/null 2>&1;            ok $? 1 "focus unknown session exits 1"
+sh "$S" focus >/dev/null 2>&1;                            ok $? 2 "focus without target exits 2"
+sh "$S" focus payments_api >/dev/null 2>&1;               ok $? 1 "focus session without pid exits 1 (codex: no pid yet)"
+sh "$S" --help | grep 'focus <n|name|pid>' >/dev/null;    ok $? 0 "help lists focus"
 
 # repeat guard: same line twice inside the cooldown -> second is SKIP; a different line still SPEAKs
 sh "$S" set repeat_cooldown 60 >/dev/null; sh "$S" set preset verbose >/dev/null

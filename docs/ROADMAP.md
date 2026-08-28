@@ -22,8 +22,10 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.8 | Codex hooks: Git wrapper sh.exe; degraded-env hardening | shipped 2026-08-18 |
 | 0.1.9 | One-command Windows installer, stable launcher, PATH, completion, Codex skill, update/uninstall | shipped 2026-08-19 |
 | 0.1.10 | Installer writes required `command` field (hooks loaded as Installed 0 before) | shipped 2026-08-19 |
-| 0.1.11 | Session board: agent-independent state layer + `sessions` / `board` (redraw on change, colour legend) | this PR |
-| 0.1.12 | Board click-to-focus: mouse reporting, raise-by-pid, host window when tabbed | next |
+| 0.1.11 | Session board: agent-independent state layer + `sessions` / `board` (redraw on change, colour legend) | shipped 2026-08-28 |
+| 0.1.12 | Fix: board colours (ESC undefined); colour path tested | shipped 2026-08-28 |
+| 0.1.13 | Fix: `update`/`uninstall` via the launcher (self-overwrite); verified-tag release checklist | shipped 2026-08-28 |
+| 0.1.14 | Board click-to-focus: mouse reporting, raise-by-pid, host window when tabbed | this PR |
 | 0.1.13 | Copilot CLI + Grok Build + Gemini CLI install snippets | |
 | 0.1.14 | Speak a one-line summary of what was done (from `transcript_path`) | |
 | 0.1.15 | Escalate unanswered permission prompts (3 min, 10 min) | |

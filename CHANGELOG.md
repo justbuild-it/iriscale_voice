@@ -5,6 +5,20 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.14] — 2026-08-28
+
+### Added
+- **Click a session on the board to bring it to the front.** `board` now numbers its
+  rows, reports mouse clicks (SGR 1006), and on a click or a digit key raises that
+  session's window: it walks up from the session's pid to the first ancestor that owns a
+  window - the terminal or IDE hosting it. Exact for sessions in their own windows; for
+  tabs inside one host (Windows Terminal, Devin, VS Code) it raises the host and the
+  highlighted row tells you which tab. Windows implemented; Linux via `wmctrl` if present;
+  macOS says "not implemented yet" (agents there don't yet expose a usable pid chain).
+- `iriscale-voice focus <row|name|pid>` as a standalone command (what the board calls).
+- Board footer explains the keys; terminal state (raw mode, mouse reporting, cursor) is
+  restored on exit.
+
 ## [0.1.13] — 2026-08-28
 
 ### Fixed
@@ -224,7 +238,11 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.14...HEAD
+[0.1.14]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.13...v0.1.14
+[0.1.13]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.12...v0.1.13
+[0.1.12]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.11...v0.1.12
+[0.1.11]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.7...v0.1.8

@@ -90,7 +90,8 @@ iriscale-voice board
 ```
 
 A live list of every session — needs your answer / ready for review / working / idle —
-with how long it's been there and what was last said. It repaints only when something
+with how long it's been there and what was last said. **Click a row (or press its
+number) to bring that session's window to the front.** It repaints only when something
 changes, so it's ~5 MB of idle shell. Give it a small Windows Terminal window off to the
 side (works for Claude Code and Codex sessions alike):
 
