@@ -131,6 +131,8 @@ sh "$S" focus no_such_session >/dev/null 2>&1;            ok $? 1 "focus unknown
 sh "$S" focus >/dev/null 2>&1;                            ok $? 2 "focus without target exits 2"
 sh "$S" focus payments_api >/dev/null 2>&1;               ok $? 1 "focus session without pid exits 1 (codex: no pid yet)"
 sh "$S" --help | grep 'focus <n|name|pid>' >/dev/null;    ok $? 0 "help lists focus"
+sh "$S" sessions --plain | head -n1 | grep "v$(sh "$S" --version)" >/dev/null; ok $? 0 "board header shows the version"
+[ "$(sh "$S" sessions --keys --plain | grep 'bring it to the front' | awk '{print length}')" -le 80 ]; ok $? 0 "board footer fits 80 columns"
 
 # repeat guard: same line twice inside the cooldown -> second is SKIP; a different line still SPEAKs
 sh "$S" set repeat_cooldown 60 >/dev/null; sh "$S" set preset verbose >/dev/null
