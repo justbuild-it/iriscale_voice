@@ -5,6 +5,20 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.13] — 2026-08-28
+
+### Fixed
+- **`iriscale-voice update` (and `uninstall`) never worked through the Windows launcher.**
+  The launcher runs `bin\iriscale-voice` in bash, which keeps the file open; the
+  installer then tried to overwrite that same file and Windows refused ("being used by
+  another process"). Both commands now detach the installer so the launcher exits first
+  (progress in `$TMP/iriscale-voice/update.log`), and the installer stages the new
+  script as `.new` and swaps it with retries instead of failing outright. Workaround
+  for 0.1.9–0.1.12: re-run the one-liner (`irm … | iex`) directly.
+- Release checklist: verify `HEAD == origin/main` and the version string before
+  tagging — the v0.1.12 tag was cut from a stale local main after a failed pull, and
+  the tag ruleset (correctly) makes tags immovable. See CONTRIBUTING.
+
 ## [0.1.12] — 2026-08-28
 
 ### Fixed

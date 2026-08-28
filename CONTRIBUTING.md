@@ -31,7 +31,15 @@ A release is its own small PR:
      behavior-breaking change (e.g. renamed keys); 1.0.0 when the config format is
      frozen.
 2. Move `[Unreleased]` in `CHANGELOG.md` under the new version with today's date.
-3. Merge, then tag and publish notes from the changelog:
+3. Merge, then **pull and verify before tagging** — never tag in the same command chain
+   as the pull (a transient fetch failure once produced a v0.1.12 tag on 0.1.11 content,
+   and the tag ruleset rightly refuses to move tags):
+   ```sh
+   git checkout main && git pull --ff-only
+   [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] || { echo "not at origin/main"; exit 1; }
+   grep -q '^VERSION="X.Y.Z"' bin/iriscale-voice || { echo "version mismatch"; exit 1; }
+   ```
+   then tag and publish notes from the changelog:
    ```sh
    git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
    gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <(sed -n '/^## \[X.Y.Z\]/,/^## \[/p' CHANGELOG.md | sed '$d')
