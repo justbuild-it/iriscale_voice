@@ -25,7 +25,9 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.11 | Session board: agent-independent state layer + `sessions` / `board` (redraw on change, colour legend) | shipped 2026-08-28 |
 | 0.1.12 | Fix: board colours (ESC undefined); colour path tested | shipped 2026-08-28 |
 | 0.1.13 | Fix: `update`/`uninstall` via the launcher (self-overwrite); verified-tag release checklist | shipped 2026-08-28 |
-| 0.1.14 | Board click-to-focus: mouse reporting, raise-by-pid, host window when tabbed | this PR |
+| 0.1.14 | Board click-to-focus: mouse reporting, raise-by-pid, host window when tabbed | shipped 2026-08-28 |
+| 0.1.15 | Focus 3 s → 1.4 s; honest note for tabbed hosts; version in header | shipped 2026-08-28 |
+| 0.1.16 | Board clock labelled "updated"; tab selection declared out of scope | this PR |
 | 0.1.13 | Copilot CLI + Grok Build + Gemini CLI install snippets | |
 | 0.1.14 | Speak a one-line summary of what was done (from `transcript_path`) | |
 | 0.1.15 | Escalate unanswered permission prompts (3 min, 10 min) | |
@@ -35,6 +37,7 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.19 | Windows-without-Git-Bash PowerShell fallback | |
 | 0.1.20 | Windsurf, Cline, Aider (done-only) | |
 | later | macOS/Linux bar plugins; Windows tray (opt-in); macOS/Linux live verification as users report | |
+| out of scope | **Selecting the terminal tab inside an IDE.** Real setups run several IDE windows across screens, each with several terminal tabs; IDE tabs are not addressable from outside. The board raises the correct window and names the tab. Windows Terminal tabs via UI Automation remains a possible opt-in if sessions run there. | decided 2026-08-28 |
 
 Numbers beyond the next release are intent, not promises — anything a user reports
 as broken jumps the queue.
