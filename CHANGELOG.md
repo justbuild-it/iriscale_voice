@@ -5,6 +5,15 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.16] — 2026-08-28
+
+### Changed
+- Board header clock is labelled: `updated 15:32:38`. It is the time of the last repaint
+  (a state change or the `board_interval` heartbeat), not a live clock.
+- Decision recorded in the roadmap: selecting the terminal *tab* inside an IDE is out of
+  scope. Real setups run several IDE windows across screens, each with several tabs; the
+  board raises the right window and names the tab, and stops there.
+
 ## [0.1.15] — 2026-08-28
 
 ### Fixed
@@ -252,7 +261,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.15...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.16...HEAD
+[0.1.16]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.12...v0.1.13

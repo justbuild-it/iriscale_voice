@@ -1,6 +1,6 @@
 {
   "name": "iriscale-voice",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Install and manage voice notifications for Codex and other coding agents.",
   "author": {
     "name": "Iriscale",

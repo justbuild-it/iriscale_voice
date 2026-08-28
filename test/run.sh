@@ -132,6 +132,7 @@ sh "$S" focus >/dev/null 2>&1;                            ok $? 2 "focus without
 sh "$S" focus payments_api >/dev/null 2>&1;               ok $? 1 "focus session without pid exits 1 (codex: no pid yet)"
 sh "$S" --help | grep 'focus <n|name|pid>' >/dev/null;    ok $? 0 "help lists focus"
 sh "$S" sessions --plain | head -n1 | grep "v$(sh "$S" --version)" >/dev/null; ok $? 0 "board header shows the version"
+sh "$S" sessions --plain | head -n1 | grep 'updated [0-9][0-9]:[0-9][0-9]:[0-9][0-9]' >/dev/null; ok $? 0 "board header labels the clock as 'updated'"
 [ "$(sh "$S" sessions --keys --plain | grep 'bring it to the front' | awk '{print length}')" -le 80 ]; ok $? 0 "board footer fits 80 columns"
 
 # repeat guard: same line twice inside the cooldown -> second is SKIP; a different line still SPEAKs
