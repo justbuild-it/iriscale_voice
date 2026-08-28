@@ -28,6 +28,17 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
     [IO.File]::WriteAllText($Path, $Content, (New-Object Text.UTF8Encoding($false)))
 }
 
+# Replace a file that may still be open by a process that is about to exit (the
+# launcher that invoked `iriscale-voice update` is running this very script).
+# Stage to .new, then swap with retries for up to ~10 s instead of failing outright.
+function Replace-File([string]$Staged, [string]$Target) {
+    for ($i = 0; $i -lt 20; $i++) {
+        try { Move-Item -LiteralPath $Staged -Destination $Target -Force -ErrorAction Stop; return }
+        catch { Start-Sleep -Milliseconds 500 }
+    }
+    throw "Could not replace $Target - is iriscale-voice still running (e.g. the board)? Close it and re-run."
+}
+
 function Remove-InstallerConfiguration {
     $configPath = Join-Path $CodexHome 'config.toml'
     if (Test-Path -LiteralPath $configPath) {
@@ -101,10 +112,11 @@ if (-not $gitBash) { throw 'Git for Windows is required. Install it from https:/
 
 New-Item -ItemType Directory -Force -Path $binDir, $CodexHome | Out-Null
 if ($SourcePath) {
-    Copy-Item -LiteralPath (Join-Path $SourcePath 'bin\iriscale-voice') -Destination $scriptPath -Force
+    Copy-Item -LiteralPath (Join-Path $SourcePath 'bin\iriscale-voice') -Destination "$scriptPath.new" -Force
 } else {
-    Invoke-WebRequest "$repo/bin/iriscale-voice" -OutFile $scriptPath
+    Invoke-WebRequest "$repo/bin/iriscale-voice" -OutFile "$scriptPath.new"
 }
+Replace-File "$scriptPath.new" $scriptPath
 $installedInstaller = Join-Path $InstallRoot 'install.ps1'
 if ($PSCommandPath) {
     if ((Resolve-Path -LiteralPath $PSCommandPath).Path -ne $installedInstaller) {

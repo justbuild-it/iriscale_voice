@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.12"
+VERSION="0.1.13"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -447,8 +447,14 @@ cli_windows_lifecycle() {
     [ -f "$installer" ] || { echo "installed install.ps1 not found" >&2; return 1; }
     command -v powershell.exe >/dev/null 2>&1 || { echo "PowerShell is required" >&2; return 1; }
     case $action in
-        update) powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -Update ;;
-        uninstall) powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -Uninstall ;;
+        # Detached: this script is the file the installer must replace, and bash keeps
+        # it open while running - Windows refuses to overwrite an open file, so an
+        # inline update always failed with "being used by another process". Let the
+        # launcher exit first, then run the installer; it logs to $STATE.
+        update)    ( sleep 1; powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -Update > "$STATE/update.log" 2>&1 ) </dev/null >/dev/null 2>&1 &
+                   echo "updating in the background; in a few seconds run: iriscale-voice --version   (log: $STATE/update.log)" ;;
+        uninstall) ( sleep 1; powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -Uninstall > "$STATE/uninstall.log" 2>&1 ) </dev/null >/dev/null 2>&1 &
+                   echo "uninstalling in the background (log: $STATE/uninstall.log)" ;;
     esac
 }
 
