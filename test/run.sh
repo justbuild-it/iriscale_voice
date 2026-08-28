@@ -12,6 +12,7 @@ trap 'rm -rf "$CLAUDE_CONFIG_DIR" "${TMPDIR:-/tmp}/iriscale-voice/test-"*' EXIT
 fail=0; pass=0
 P='{"session_id":"test-sess","cwd":"/home/dev/my_service"}'
 
+ok() { if [ "$1" = "$2" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $3: got '$1' wanted '$2'"; fi; }
 expect() {   # expect <SPEAK|SKIP> <event> [payload]
     want=$1; ev=$2; pl=${3:-$P}
     out=$(printf '%s' "$pl" | sh "$S" "$ev")
@@ -98,6 +99,7 @@ grep -q '^status=ready' "$SESSD/brd-1";                   ok $? 0 "Stop -> state
 sed -i 's/^since=.*/since=123/' "$SESSD/brd-1"
 printf '%s' "$B1" | sh "$S" Stop >/dev/null
 grep -q '^since=123' "$SESSD/brd-1";                      ok $? 0 "unchanged status keeps since"
+printf '%s' "$B1" | sh "$S" stamp; printf '%s' "$B1" | sh "$S" Stop >/dev/null   # fresh READY for the render checks below
 printf '%s' '{"thread-id":"brd-2","cwd":"/x/payments_api","tool_name":"Bash","tool_input":{"command":"git push"}}' | sh "$S" PermissionRequest >/dev/null
 grep -q '^status=blocked' "$SESSD/brd-2";                 ok $? 0 "PermissionRequest -> state blocked"
 grep -q '^agent=codex' "$SESSD/brd-2";                    ok $? 0 "thread-id payload -> agent=codex"
@@ -112,6 +114,11 @@ first=$(printf '%s' "$out" | grep -E 'payments_api|billing_service|data_migratio
 case $first in *payments_api*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL blocked session must sort first: $first" ;; esac
 printf '%s' "$out" | grep -q 'needs your answer';         ok $? 0 "sessions prints the legend"
 case $out in *'[K'*) fail=$((fail+1)); echo "FAIL --plain output contains raw escape text" ;; *) pass=$((pass+1)) ;; esac
+# colour path must emit REAL escape bytes (0.1.11 shipped '[32m' as text: ESC undefined)
+esc_bytes=$(sh "$S" sessions --color | od -An -c | grep -c '033')
+[ "$esc_bytes" -gt 0 ];                                   ok $? 0 "sessions --color emits escape bytes"
+plain_esc=$(sh "$S" sessions --plain | od -An -c | grep -c '033')
+[ "$plain_esc" -eq 0 ];                                   ok $? 0 "sessions --plain emits no escape bytes"
 printf '%s' "$B1" | sh "$S" SessionEnd >/dev/null
 [ ! -f "$SESSD/brd-1" ];                                  ok $? 0 "SessionEnd removes the state file"
 sh "$S" board --once --plain >/dev/null 2>&1;             ok $? 0 "board --once exits"
@@ -128,7 +135,6 @@ out=$(printf '%s' '{"session_id":"p","cwd":"/x/y"}' | sh "$S" SubagentStop)
 case "$out" in *"sub agent done"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL pronunciation: $out" ;; esac
 
 # ---- CLI ----
-ok() { if [ "$1" = "$2" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL $3: got '$1' wanted '$2'"; fi; }
 sh "$S" --help >/dev/null 2>&1;            ok $? 0 "--help exit"
 sh "$S" --help | grep '^USAGE' >/dev/null;         ok $? 0 "--help has USAGE"
 sh "$S" -h    | grep 'config list' >/dev/null;     ok $? 0 "-h lists config"

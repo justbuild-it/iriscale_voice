@@ -5,6 +5,15 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.12] — 2026-08-28
+
+### Fixed
+- **Board colours printed as text** (`[32m*[0m`): the `ESC` variable that every colour
+  and cursor sequence is built from was never defined in 0.1.11, so each sequence lost
+  its first byte. Defined now. `sessions --color` forces colour when stdout is not a
+  terminal (tests use it); a test asserts the colour path emits real escape bytes and
+  `--plain` emits none - the gap that let 0.1.11 through.
+
 ## [0.1.11] — 2026-08-28
 
 ### Added
