@@ -5,6 +5,27 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.11] — 2026-08-28
+
+### Added
+- **Session board.** `iriscale-voice sessions` prints every live session with its state
+  (needs your answer / ready / working / waiting / error / idle), how long it has been
+  there, which agent, and what was last said. `iriscale-voice board` is the live version
+  for a terminal pane or a small Windows Terminal window off to the side: it **redraws
+  only when a session changes state** (plus a heartbeat so ages tick), overwrites in
+  place with no flicker, and shows a colour legend. `q` quits.
+- **Session state layer**, the piece that makes the board agent-independent: on every
+  hook event the script writes one key=value file per session to
+  `~/.claude/iriscale-voice-sessions/` (agent, name, status, since, pid, cwd, last
+  said). Builtins only; hook latency unchanged. Claude sessions that predate this
+  version are synthesized from `~/.claude/sessions` so nothing is missing on first run.
+- Settings: `board_ready_minutes`, `board_hide_hours`, `board_interval`.
+- Design note with the measured options: `docs/design/status-board.md` (#13).
+
+### Not yet
+- Click-to-focus (next release): mouse reporting in the pane, raise-by-pid for
+  sessions in their own windows, host window otherwise.
+
 ## [0.1.10] — 2026-08-19
 
 ### Fixed

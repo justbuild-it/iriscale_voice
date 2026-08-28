@@ -17,17 +17,22 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.3 | Fix: slash command renamed `/voice` → `/iriscale-voice` (`/voice` is a Claude Code built-in) | shipped 2026-08-17 |
 | 0.1.4 | Fix: one command file per subcommand → `/iriscale-voice:status` etc.; upgrade/restart note | shipped 2026-08-17 |
 | 0.1.5 | Perf: builtins-only hook path (Windows 1479 → 283 ms per event; suite 82 → 26 s); spawn-count guard | shipped 2026-08-17 |
-| 0.1.6 | Codex CLI (notify + optional hooks, /rename support) + alias layers | this PR |
-| 0.1.7 | Codex CLI + Copilot CLI install snippets, `install <agent>` helper | |
-| 0.1.8 | Grok Build + Gemini CLI snippets | |
-| 0.1.9 | Speak a one-line summary of what was done (from `transcript_path`) | |
-| 0.1.10 | Escalate unanswered permission prompts (3 min, 10 min) | |
-| 0.1.11 | Junie, Cursor, Devin, OpenCode/Kilo adapters | |
-| 0.1.12 | Toast / Notification Center / notify-send alongside speech; earcons mode | |
-| 0.1.13 | Per-session voice signatures; log/stamp housekeeping | |
-| 0.1.14 | Windows-without-Git-Bash PowerShell fallback | |
-| 0.1.15 | Windsurf, Cline, Aider (done-only) | |
-| later | Multi-session status board; macOS/Linux live verification as users report | |
+| 0.1.6 | Codex CLI (notify + optional hooks, /rename support) + alias layers | shipped 2026-08-18 |
+| 0.1.7 | Codex sync hooks; non-blocking speech; `doctor codex`; "waiting for your answer" phrasing | shipped 2026-08-18 |
+| 0.1.8 | Codex hooks: Git wrapper sh.exe; degraded-env hardening | shipped 2026-08-18 |
+| 0.1.9 | One-command Windows installer, stable launcher, PATH, completion, Codex skill, update/uninstall | shipped 2026-08-19 |
+| 0.1.10 | Installer writes required `command` field (hooks loaded as Installed 0 before) | shipped 2026-08-19 |
+| 0.1.11 | Session board: agent-independent state layer + `sessions` / `board` (redraw on change, colour legend) | this PR |
+| 0.1.12 | Board click-to-focus: mouse reporting, raise-by-pid, host window when tabbed | next |
+| 0.1.13 | Copilot CLI + Grok Build + Gemini CLI install snippets | |
+| 0.1.14 | Speak a one-line summary of what was done (from `transcript_path`) | |
+| 0.1.15 | Escalate unanswered permission prompts (3 min, 10 min) | |
+| 0.1.16 | Junie, Cursor, Devin, OpenCode/Kilo adapters | |
+| 0.1.17 | Toast / Notification Center / notify-send alongside speech; earcons mode | |
+| 0.1.18 | Per-session voice signatures; log/stamp housekeeping | |
+| 0.1.19 | Windows-without-Git-Bash PowerShell fallback | |
+| 0.1.20 | Windsurf, Cline, Aider (done-only) | |
+| later | macOS/Linux bar plugins; Windows tray (opt-in); macOS/Linux live verification as users report | |
 
 Numbers beyond the next release are intent, not promises — anything a user reports
 as broken jumps the queue.

@@ -44,6 +44,26 @@ Precedence, highest first:
 | `serialize` | `true` | queue announcements so concurrent sessions never talk over each other |
 | `repeat_cooldown` | `60` | seconds; the *same* announcement for the *same* session inside this window is said once. Guards against a looping subagent or a double-firing hook. `0` disables |
 | `log` | `~/.claude/iriscale-voice.log` | tab-separated `time  event  text`. `none` to disable |
+| `board_ready_minutes` | `15` | on the board, a finished session shows **READY** for this long, then **idle** |
+| `board_hide_hours` | `24` | the board hides sessions with no event for this long |
+| `board_interval` | `30` | seconds between board heartbeats (the *for* column ticks); a state change redraws immediately regardless |
+
+## The session board
+
+```sh
+iriscale-voice sessions            # one frame: every live session, state, how long, what was last said
+iriscale-voice board               # live; redraws only when a session changes state; q quits
+iriscale-voice board --interval 10 # heartbeat every 10 s instead of 30
+```
+
+State comes from one small file per session in `~/.claude/iriscale-voice-sessions/`,
+written by the same script on every hook event — so any agent that calls it feeds the
+board. States: **needs your answer** (permission prompt) · **ready** for review ·
+working · waiting · error · idle. A small window off to the side, on Windows Terminal:
+
+```
+wt -w iriscale --size 64,18 --pos 1180,80 --title sessions iriscale-voice board
+```
 
 ## Session names
 

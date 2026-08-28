@@ -9,12 +9,13 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.10"
+VERSION="0.1.11"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
 STATE="${TMPDIR:-/tmp}/iriscale-voice"
 [ -d "$STATE" ] || mkdir -p "$STATE" 2>/dev/null
+SESS="$CLAUDE_DIR/iriscale-voice-sessions"     # one state file per live session (any agent)
 
 # ---------- tiny helpers ------------------------------------------------------
 # PERFORMANCE NOTE. This script runs on every hook event, and on Windows/MSYS each
@@ -39,6 +40,9 @@ jget() {
     case $r in '"'*) r=${r#\"} ;; *) return 0 ;; esac
     printf '%s' "${r%%\"*}"
 }
+
+# Unquoted number field: "pid":12345  (zero spawns)
+jnum() { case $2 in *"\"$1\":"*) r=${2#*"\"$1\":"}; while case $r in ' '*) true ;; *) false ;; esac; do r=${r#?}; done; printf '%s' "${r%%[!0-9]*}" ;; esac; }
 
 # Pull the first string from a JSON array field (for workspace_roots aliases).
 # Like jget, this deliberately handles only the small hook-payload shape we need.
@@ -200,6 +204,9 @@ rate|0|speaking speed, -10 slow .. 10 fast
 volume|100|0-100 (Windows only; others use system volume)
 serialize|true|queue announcements so concurrent sessions never overlap
 log|$CLAUDE_DIR/iriscale-voice.log|tab-separated activity log; \`none\` disables
+board_ready_minutes|15|on the board, a finished session shows READY for this long, then idle
+board_hide_hours|24|the board hides sessions with no event for this long
+board_interval|30|seconds between board heartbeats (ages tick); state changes redraw immediately
 EOF
 }
 events_table() {
@@ -233,6 +240,8 @@ COMMANDS
   config unset <key>     remove a setting, back to preset/default
   config path            print the config file path
   config edit            open the config file in \$EDITOR
+  sessions               every live session: state, how long, what was last said
+  board [--interval N]   the same, live, in a terminal pane; redraws only on change; q quits
   install codex          print Codex config snippets with absolute paths
   install codex --apply  install launcher, completion, notify, and hooks
   doctor codex           diagnose Codex notify and hook configuration
@@ -387,7 +396,7 @@ Register-ArgumentCompleter -Native -CommandName iriscale-voice -ScriptBlock {
   $argument = $elements.Count - 1
   if ($commandAst.Extent.Text -match '\s$') { $argument++ }
   if ($argument -le 1) {
-    $choices = 'status','test','say','mute','unmute','config','install','doctor','presets','events','completions','update','uninstall','help'
+    $choices = 'status','sessions','board','test','say','mute','unmute','config','install','doctor','presets','events','completions','update','uninstall','help'
   } else {
     $choices = switch ($elements[1]) {
       'config' { 'list','get','set','unset','path','edit' }
@@ -406,7 +415,7 @@ EOF
             cat <<'EOF'
 _iriscale_voice() {
   if [ "$COMP_CWORD" -eq 1 ]; then
-    choices='status test say mute unmute config install doctor presets events completions update uninstall help'
+    choices='status sessions board test say mute unmute config install doctor presets events completions update uninstall help'
   else
     case ${COMP_WORDS[1]} in
       config) choices='list get set unset path edit' ;;
@@ -422,7 +431,7 @@ EOF
         zsh)
             cat <<'EOF'
 #compdef iriscale-voice
-_arguments '1:command:(status test say mute unmute config install doctor presets events completions update uninstall help)'
+_arguments '1:command:(status sessions board test say mute unmute config install doctor presets events completions update uninstall help)'
 EOF
             ;;
         *) echo "usage: iriscale-voice completions <powershell|bash|zsh>" >&2; return 2 ;;
@@ -440,6 +449,91 @@ cli_windows_lifecycle() {
         update) powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -Update ;;
         uninstall) powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -Uninstall ;;
     esac
+}
+
+# ---------- session board -----------------------------------------------------
+_ago() { s=$1; if [ "$s" -lt 60 ]; then printf '%ss' "$s"; elif [ "$s" -lt 3600 ]; then printf '%sm' "$((s/60))"; else printf '%sh' "$((s/3600))"; fi; }
+
+# Render one frame of the board to stdout. Rows come from $SESS state files; Claude
+# sessions that predate the state layer are synthesized from ~/.claude/sessions so
+# nothing is missing on first run. Sorted: needs you first, then ready, working, idle.
+cli_sessions() {
+    plain=0; [ "${1:-}" = "--plain" ] && plain=1
+    if [ "$plain" = 1 ] || [ ! -t 1 ]; then G=""; Y=""; R=""; M=""; D=""; B=""; N=""; EL=""
+    else G="${ESC}[32m"; Y="${ESC}[33m"; R="${ESC}[31m"; M="${ESC}[35m"; D="${ESC}[2m"; B="${ESC}[1m"; N="${ESC}[0m"; EL="${ESC}[K"; fi
+    now=$(date +%s 2>/dev/null); case $now in ''|*[!0-9]*) now=0 ;; esac
+    cfgv readym board_ready_minutes 15; cfgv hideh board_hide_hours 24
+    rows=""
+    seen=""
+    for sf in "$SESS"/*; do
+        [ -f "$sf" ] || continue
+        a=""; n=""; st=""; since=""; upd=""; said=""
+        while IFS= read -r l || [ -n "$l" ]; do
+            case $l in agent=*) a=${l#agent=} ;; name=*) n=${l#name=} ;; status=*) st=${l#status=} ;;
+                       since=*) since=${l#since=} ;; updated=*) upd=${l#updated=} ;; said=*) said=${l#said=} ;; esac
+        done < "$sf"
+        seen="$seen ${sf##*/} "
+        rows="$rows$(_row "$a" "$n" "$st" "${since:-0}" "${upd:-0}" "$said")$NL"
+    done
+    # Claude sessions with no state file yet (started before this version)
+    if [ -d "$CLAUDE_DIR/sessions" ]; then
+        for f in "$CLAUDE_DIR"/sessions/*.json; do
+            [ -f "$f" ] || continue
+            IFS= read -r sj < "$f" || :
+            csid=$(jget sessionId "$sj"); case $seen in *" $csid "*) continue ;; esac
+            n=$(jget name "$sj"); [ -n "$n" ] || { n=$(jget cwd "$sj"); n=${n##*\\}; n=${n##*/}; }
+            cst=$(jget status "$sj"); ts=$(jnum statusUpdatedAt "$sj"); ts=$(( ${ts:-0} / 1000 ))
+            case $cst in busy) st=working ;; *) st=ready ;; esac
+            rows="$rows$(_row claude "$n" "$st" "$ts" "$ts" "")$NL"
+        done
+    fi
+    printf "${B}iriscale voice - sessions${N}   %s\n\n" "$(date +%H:%M:%S 2>/dev/null)"
+    printf "     %-26s %-10s %-6s %-8s %s\n" "SESSION" "STATE" "FOR" "AGENT" "LAST SAID"
+    printf '%s' "$rows" | sort | while IFS='|' read -r _p a n st age said; do
+        [ -n "$n" ] || continue
+        case $st in
+            blocked) dot="${R}*${N}"; label="NEEDS YOU" ;;
+            error)   dot="${M}*${N}"; label="ERROR" ;;
+            ready)   dot="${G}*${N}"; label="READY" ;;
+            working) dot="${Y}*${N}"; label="working" ;;
+            waiting) dot="${D}*${N}"; label="waiting" ;;
+            *)       dot="${D}o${N}"; label="idle" ;;
+        esac
+        printf "  %s  %-26.26s %-10s %-6s %-8s ${D}%.44s${N}${EL}\n" "$dot" "$n" "$label" "$(_ago "$age")" "$a" "$said"
+    done
+    printf "\n  ${R}*${N} needs your answer   ${G}*${N} ready for review   ${Y}*${N} working   ${M}*${N} error   ${D}o${N} idle${EL}\n"
+}
+# _row agent name status since updated said  -> "prio|agent|name|status|age|said" (or nothing if hidden)
+_row() {
+    [ "$now" -gt 0 ] && age=$(( now - $4 )) || age=0
+    [ "$now" -gt 0 ] && quiet=$(( now - $5 )) || quiet=0
+    [ "$quiet" -gt $(( hideh * 3600 )) ] && return 0
+    st=$3
+    [ "$st" = ready ] && [ "$age" -gt $(( readym * 60 )) ] && st=idle
+    case $st in blocked) p=0 ;; error) p=1 ;; ready) p=2 ;; working) p=3 ;; waiting) p=4 ;; *) p=5 ;; esac
+    printf '%s|%s|%s|%s|%s|%s' "$p" "$1" "$2" "$st" "$age" "$6"
+}
+
+# Live board: repaint only when a state file changes (or on the heartbeat so the
+# "for" column ticks). Cursor-home + overwrite, never clear -> no flicker. q quits.
+cli_board() {
+    interval=""; while [ $# -gt 0 ]; do case $1 in --interval) interval=$2; shift ;; --once) cli_sessions; return 0 ;; esac; shift; done
+    [ -n "$interval" ] || cfgv interval board_interval 30
+    printf "[?25l"; trap "printf \"\033[?25h\"; exit 0" INT TERM EXIT
+    last_sig=""; last_paint=0
+    while :; do
+        sig=""
+        for sf in "$SESS"/* "$CLAUDE_DIR"/sessions/*.json; do [ -f "$sf" ] || continue; IFS= read -r l < "$sf" 2>/dev/null || :; sig="$sig$l"; done
+        # state files are multi-line; fold the whole file in
+        for sf in "$SESS"/*; do [ -f "$sf" ] || continue; while IFS= read -r l || [ -n "$l" ]; do sig="$sig$l"; done < "$sf"; done
+        t=$(date +%s 2>/dev/null); case $t in ''|*[!0-9]*) t=0 ;; esac
+        if [ "$sig" != "$last_sig" ] || [ $(( t - last_paint )) -ge "$interval" ]; then
+            printf "[H"; cli_sessions; printf "[J"
+            last_sig=$sig; last_paint=$t
+        fi
+        if read -t 1 key 2>/dev/null; then case $key in q|Q) break ;; esac; else sleep 1; fi
+    done
+    printf "[?25h"
 }
 
 cli_doctor() {
@@ -492,6 +586,8 @@ case "$EVENT" in
     help|-h|--help|"?")  usage; exit 0 ;;
     -V|--version|version) echo "$VERSION"; exit 0 ;;
     status)  cli_status; exit $? ;;
+    sessions) shift; cli_sessions "$@"; exit $? ;;
+    board)   shift; cli_board "$@"; exit $? ;;
     install) shift; cli_install "$@"; exit $? ;;
     doctor)  shift; cli_doctor "$@"; exit $? ;;
     completions) shift; cli_completions "$@"; exit $? ;;
@@ -552,38 +648,74 @@ sid=$(jget session_id "$payload")
 [ -n "$sid" ] || sid=$(jget sessionId "$payload")
 [ -n "$sid" ] || sid=$(jget conversation_id "$payload")
 
-if [ "$EVENT" = "stamp" ]; then
-    [ -n "$sid" ] && printf '%s\n' "$NOW" > "$STATE/$sid.start"
-    exit 0
-fi
+[ "$EVENT" = "stamp" ] && [ -n "$sid" ] && printf '%s\n' "$NOW" > "$STATE/$sid.start"
 
 # resolve a friendly session name: /rename'd name -> cwd folder -> "Claude".
 # Claude Code: ~/.claude/sessions/<pid>.json, one JSON object per file.
 # Codex CLI:   ~/.codex/session_index.jsonl, one {"id","thread_name"} per line.
-# Both scanned with builtins (no grep).
-name=""
+# Both scanned with builtins (no grep). Also records which agent this is and, for
+# Claude, its pid - both feed the session board.
+name=""; agent=""; pid=""
 if [ -n "$sid" ] && [ -d "$CLAUDE_DIR/sessions" ]; then
     for f in "$CLAUDE_DIR"/sessions/*.json; do
         [ -f "$f" ] || continue
         IFS= read -r sj < "$f" || :
-        case $sj in *"\"sessionId\":\"$sid\""*) name=$(jget name "$sj"); break ;; esac
+        case $sj in *"\"sessionId\":\"$sid\""*) name=$(jget name "$sj"); pid=$(jnum pid "$sj"); agent=claude; break ;; esac
     done
 fi
 CODEX_INDEX="${CODEX_HOME:-$HOME/.codex}/session_index.jsonl"
 if [ -z "$name" ] && [ -n "$sid" ] && [ -f "$CODEX_INDEX" ]; then
     while IFS= read -r cj || [ -n "$cj" ]; do
-        case $cj in *"\"id\":\"$sid\""*) name=$(jget thread_name "$cj"); break ;; esac
+        case $cj in *"\"id\":\"$sid\""*) name=$(jget thread_name "$cj"); agent=codex; break ;; esac
     done < "$CODEX_INDEX"
 fi
+if [ -z "$agent" ]; then
+    case $payload in
+        *'"thread-id"'*) agent=codex ;;
+        *'"conversation_id"'*) agent=cursor ;;
+        *'"sessionId"'*) agent=copilot ;;
+        *'"hook_event_name"'*) agent=claude ;;
+        *) agent=agent ;;
+    esac
+fi
+cwd=$(jget cwd "$payload")
+[ -n "$cwd" ] || cwd=$(jfirst workspace_roots "$payload")
 if [ -z "$name" ]; then
-    cwd=$(jget cwd "$payload")
-    [ -n "$cwd" ] || cwd=$(jfirst workspace_roots "$payload")
     # basename of a JSON-escaped Windows or POSIX path: C:\\Users\\x\\proj\\ -> proj
-    while case $cwd in *\\) true ;; *) false ;; esac; do cwd=${cwd%\\}; done
-    while case $cwd in */) true ;; *) false ;; esac; do cwd=${cwd%/}; done
-    name=${cwd##*\\}; name=${name##*/}
+    _c=$cwd
+    while case $_c in *\\) true ;; *) false ;; esac; do _c=${_c%\\}; done
+    while case $_c in */) true ;; *) false ;; esac; do _c=${_c%/}; done
+    name=${_c##*\\}; name=${name##*/}
 fi
 [ -z "$name" ] && name="Claude"
+
+# ---------- session state (feeds `sessions` / `board`) -----------------------
+# One small key=value file per session under $SESS. Written with builtins only.
+# status: working | ready | blocked | waiting | error. `since` only moves when the
+# status changes; `said` is the last line actually spoken for this session.
+state_write() {   # state_write <status> [said]
+    [ -n "$sid" ] || return 0
+    [ -d "$SESS" ] || mkdir -p "$SESS" 2>/dev/null
+    _sf="$SESS/$sid"; _os=""; _osince=""; _osaid=""
+    if [ -f "$_sf" ]; then
+        while IFS= read -r _l || [ -n "$_l" ]; do
+            case $_l in status=*) _os=${_l#status=} ;; since=*) _osince=${_l#since=} ;; said=*) _osaid=${_l#said=} ;; esac
+        done < "$_sf"
+    fi
+    _since=$NOW; [ "$_os" = "$1" ] && [ -n "$_osince" ] && _since=$_osince
+    _said=${2:-$_osaid}
+    printf 'agent=%s\nname=%s\nstatus=%s\nsince=%s\nupdated=%s\npid=%s\ncwd=%s\nsaid=%s\n' \
+        "$agent" "$name" "$1" "$_since" "$NOW" "$pid" "$cwd" "$_said" > "$_sf" 2>/dev/null
+}
+if [ "$EVENT" = "stamp" ]; then state_write working; exit 0; fi
+case $EVENT in
+    Stop)              st_new=ready ;;
+    PermissionRequest) st_new=blocked ;;
+    idle_prompt)       st_new=waiting ;;
+    StopFailure)       st_new=error ;;
+    SessionEnd)        st_new=""; [ -n "$sid" ] && rm -f "$SESS/$sid" 2>/dev/null ;;
+    *)                 st_new="" ;;
+esac
 # speak '_' and '-' as spaces, with builtins
 spoken_name=""; _n=$name
 while [ -n "$_n" ]; do _c=${_n%"${_n#?}"}; _n=${_n#?}; case $_c in _|-) _c=' ' ;; esac; spoken_name="$spoken_name$_c"; done
@@ -672,6 +804,11 @@ if [ -z "$reason" ] && [ "$NOW" -gt 0 ] && [ "$cool" -gt 0 ] 2>/dev/null && [ -f
     fi
 fi
 [ -z "$reason" ] && printf '%s\n%s\n' "$NOW" "$line" > "$lastf" 2>/dev/null
+
+# record the session's new state for the board, whether or not we speak
+if [ -n "$st_new" ]; then
+    if [ -z "$reason" ]; then state_write "$st_new" "$line"; else state_write "$st_new"; fi
+fi
 
 # ---------- act ---------------------------------------------------------------
 if [ -n "$IRISCALE_VOICE_DEBUG" ]; then
