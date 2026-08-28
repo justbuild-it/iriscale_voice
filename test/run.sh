@@ -122,11 +122,15 @@ cat > "$CODEX_HOME/config.toml" <<EOF
 notify = ["$S", "notify"]
 EOF
 cat > "$CODEX_HOME/hooks.json" <<EOF
-{"hooks":{"UserPromptSubmit":[],"PermissionRequest":[]}}
+{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"voice stamp"}]}],"PermissionRequest":[{"hooks":[{"type":"command","command":"voice PermissionRequest"}]}]}}
 EOF
 sh "$S" doctor codex | grep 'READY' >/dev/null;             ok $? 0 "doctor codex accepts synchronous hooks"
 cat > "$CODEX_HOME/hooks.json" <<EOF
-{"hooks":{"UserPromptSubmit":[],"PermissionRequest":[{"hooks":[{"async":true}]}]}}
+{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","commandWindows":"voice stamp"}]}],"PermissionRequest":[{"hooks":[{"type":"command","commandWindows":"voice PermissionRequest"}]}]}}
+EOF
+sh "$S" doctor codex >/dev/null 2>&1;                       ok $? 1 "doctor codex rejects commandWindows-only hooks"
+cat > "$CODEX_HOME/hooks.json" <<EOF
+{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"voice stamp"}]}],"PermissionRequest":[{"hooks":[{"type":"command","command":"voice PermissionRequest","async":true}]}]}}
 EOF
 sh "$S" doctor codex >/dev/null 2>&1;                       ok $? 1 "doctor codex rejects async hooks"
 sh "$S" doctor unknown >/dev/null 2>&1;                     ok $? 2 "unknown doctor target exits 2"
@@ -162,8 +166,9 @@ if command -v powershell.exe >/dev/null 2>&1 && command -v cygpath >/dev/null 2>
     ok $? 0 "installed Windows launcher runs"
     grep 'keep-me' "$PSCODEX/config.toml" >/dev/null && grep 'OtherEvent' "$PSCODEX/hooks.json" >/dev/null
     ok $? 0 "installer preserves unrelated Codex configuration"
-    grep 'PermissionRequest' "$PSCODEX/hooks.json" >/dev/null && ! grep '"async"' "$PSCODEX/hooks.json" >/dev/null
-    ok $? 0 "installer writes synchronous permission hook"
+    grep 'PermissionRequest' "$PSCODEX/hooks.json" >/dev/null && ! grep '"async"' "$PSCODEX/hooks.json" >/dev/null && \
+        [ "$(grep -o '"command"[[:space:]]*:' "$PSCODEX/hooks.json" | wc -l | tr -d '[:space:]')" -eq 2 ]
+    ok $? 0 "installer writes synchronous hooks with required command fields"
     grep 'name: iriscale-voice' "$PSCODEX/skills/iriscale-voice/SKILL.md" >/dev/null
     ok $? 0 "installer makes the Codex skill discoverable"
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$here/../install.ps1")" \
