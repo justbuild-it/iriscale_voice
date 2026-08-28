@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.14"
+VERSION="0.1.15"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -497,7 +497,7 @@ cli_sessions() {
             rows="$rows$(_row claude "$n" "$st" "$ts" "$ts" "" "$(jnum pid "$sj")")$NL"
         done
     fi
-    printf "${B}iriscale voice - sessions${N}   %s\n\n" "$(date +%H:%M:%S 2>/dev/null)"
+    printf "${B}iriscale voice${N} ${D}v$VERSION${N}   ${B}sessions${N}   %s\n\n" "$(date +%H:%M:%S 2>/dev/null)"
     if [ "$keys" = 1 ]; then printf "   %-26s %-10s %-6s %-8s %s\n" "SESSION" "STATE" "FOR" "AGENT" "LAST SAID"
     else printf "     %-26s %-10s %-6s %-8s %s\n" "SESSION" "STATE" "FOR" "AGENT" "LAST SAID"; fi
     [ "$keys" = 1 ] && : > "$STATE/board.rows"
@@ -522,7 +522,7 @@ cli_sessions() {
         fi
     done
     printf "\n  ${R}*${N} needs your answer   ${G}*${N} ready for review   ${Y}*${N} working   ${M}*${N} error   ${D}o${N} idle${EL}\n"
-    [ "$keys" = 1 ] && printf "  ${D}click a row or press its number to bring that session's window to the front - q quits${N}${EL}\n"
+    [ "$keys" = 1 ] && printf "  ${D}click a row or press its number to bring it to the front - q quits${N}${EL}\n"
 }
 # _row agent name status since updated said pid -> "prio|agent|name|status|age|said|pid" (or nothing if hidden)
 _row() {
@@ -563,21 +563,30 @@ cli_focus() {
     [ -n "$fpid" ] || { echo "no window known for $fname (its agent does not report a pid yet)" >&2; return 1; }
     case "$(os)" in
         win)
+            # One WMI query for the whole process table (not one per hop), then walk up
+            # in memory; activate with WScript.Shell.AppActivate (no Add-Type compile).
+            # Measured: ~3.0 s -> well under 1 s per focus.
             cat > "$STATE/focus.ps1" <<'EOF'
-param([int]$TargetPid)
-$p = Get-Process -Id $TargetPid -ErrorAction SilentlyContinue
-while ($p -and $p.MainWindowHandle -eq 0) {
-    $pp = (Get-CimInstance Win32_Process -Filter "ProcessId=$($p.Id)").ParentProcessId
-    if (-not $pp) { break }
-    $p = Get-Process -Id $pp -ErrorAction SilentlyContinue
+param([int]$TargetPid, [string]$SessionName)
+$parents = @{}; $names = @{}
+foreach ($w in Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name) { $parents[[int]$w.ProcessId] = [int]$w.ParentProcessId; $names[[int]$w.ProcessId] = $w.Name }
+$ws = New-Object -ComObject WScript.Shell
+$id = $TargetPid; $hops = 0
+while ($id -and $hops -lt 8) {
+    if ($ws.AppActivate($id)) {
+        $hostName = $names[$id] -replace '\.exe$',''
+        switch -Regex ($hostName) {
+            '^(Devin|Code|Code - Insiders|Windsurf|Cursor|WindowsTerminal)$' {
+                Write-Output ("$hostName is in front - it hosts several sessions, so pick the terminal tab named '" + $SessionName + "'"); break }
+            default { Write-Output ("brought to front: " + $hostName + " (" + $SessionName + ")") }
+        }
+        exit 0
+    }
+    $id = $parents[$id]; $hops++
 }
-if (-not $p -or $p.MainWindowHandle -eq 0) { Write-Output "no window found"; exit 1 }
-Add-Type -Namespace X -Name W -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);'
-if ([X.W]::IsIconic($p.MainWindowHandle)) { [X.W]::ShowWindow($p.MainWindowHandle, 9) | Out-Null }
-[X.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
-Write-Output ("brought to front: " + $p.ProcessName + " - " + $p.MainWindowTitle)
+Write-Output "no window found for $SessionName"; exit 1
 EOF
-            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$STATE/focus.ps1" -TargetPid "$fpid" 2>/dev/null ;;
+            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$STATE/focus.ps1" -TargetPid "$fpid" -SessionName "$fname" 2>/dev/null ;;
         mac)   echo "focus on macOS is not implemented yet (session $fname, pid $fpid)" >&2; return 1 ;;
         *)     if command -v wmctrl >/dev/null 2>&1; then wmctrl -ia "$(wmctrl -lp | awk -v p="$fpid" '$3==p{print $1; exit}')" 2>/dev/null
                else echo "focus on Linux needs wmctrl (session $fname, pid $fpid)" >&2; return 1; fi ;;
@@ -608,8 +617,13 @@ cli_board() {
         fi
         # one read per second: a key, a mouse sequence, or a timeout. bash/ksh/zsh have
         # -n/-t; a shell without them falls back to line input, then sleep.
-        seq=""
-        if IFS= read -r -s -n 24 -t 1 seq 2>/dev/null; then :; else rc=$?; [ "$rc" -gt 128 ] || { IFS= read -r -t 1 seq 2>/dev/null || sleep 1; }; fi
+        # First character arrives immediately (a digit acts at once); only an ESC needs
+        # the rest of the mouse sequence, read with a short timeout.
+        seq=""; c=""
+        if IFS= read -r -s -n 1 -t 1 c 2>/dev/null; then
+            seq=$c
+            case $c in "$ESC") IFS= read -r -s -n 23 -t 0.2 rest 2>/dev/null || IFS= read -r -s -n 23 -t 1 rest 2>/dev/null; seq="$c$rest" ;; esac
+        else rc=$?; [ "$rc" -gt 128 ] || { IFS= read -r -t 1 seq 2>/dev/null || sleep 1; }; fi
         case $seq in
             *[qQ]*) break ;;
             *'[<'*)   # SGR mouse press: ESC[<button;col;rowM  (rows start on screen line 4)

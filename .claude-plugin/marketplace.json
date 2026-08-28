@@ -7,7 +7,7 @@
       "name": "iriscale-voice",
       "source": "./",
       "description": "Let your coding agents tell you when they are done and need attention.",
-      "version": "0.1.14"
+      "version": "0.1.15"
     }
   ]
 }

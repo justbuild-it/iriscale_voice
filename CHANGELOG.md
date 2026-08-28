@@ -5,6 +5,20 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.15] — 2026-08-28
+
+### Fixed
+- **Focus is fast**: ~3 s → well under 1 s. One WMI query for the process table instead
+  of one per ancestor hop, and `WScript.Shell.AppActivate` instead of an `Add-Type`
+  compile on every click. Keys act immediately: the board reads one character at a time
+  instead of waiting a second for more.
+- **Focus says what happened.** When the session lives in a tab of a multi-session host
+  (Devin, VS Code, Windsurf, Cursor, Windows Terminal) the note now reads *"Devin is in
+  front - it hosts several sessions, so pick the terminal tab named 'geo.3'"* instead of
+  claiming success that changed nothing visible. That was the "pressing 3 found nothing"
+  report: all rows resolved to the same already-front IDE window.
+- Board header shows the version; footer fits 80 columns.
+
 ## [0.1.14] — 2026-08-28
 
 ### Added
@@ -238,7 +252,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.14...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.15...HEAD
+[0.1.15]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.11...v0.1.12
