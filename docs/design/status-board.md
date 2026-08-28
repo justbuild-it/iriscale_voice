@@ -106,10 +106,62 @@ Ship in this order, each its own patch release:
    hover = the list; click = the terminal board. Revisit a native build only if demand
    shows up.
 
-What the board deliberately won't do: **focus a session on click**. All sessions
-usually live as tabs in one host process (Windows Terminal, Devin, Windsurf), so the OS
-can only raise the host window, not the tab — the same limitation that killed
-focus-based suppression on day one. It can show you *which* session; you switch.
+## How the terminal pane is launched
+
+`iriscale-voice board` is just a command. It renders in whatever terminal you run it
+in, refreshing in place. Three ways to give it a home, cheapest first:
+
+1. **A spare tab or split in the IDE / terminal you already have.** Open one more
+   terminal, run `iriscale-voice board`, drag it narrow. Nothing to install, nothing
+   always-on-top; it's one more tab.
+2. **Its own small window off to the side** — the "little widget" shape. Windows
+   Terminal can size and place a window from the command line:
+   ```
+   wt -w iriscale --size 46,14 --pos 1400,60 --title "sessions" iriscale-voice board
+   ```
+   Pin that to the taskbar or a startup shortcut and it's a 46×14 panel that lives
+   next to the IDE. macOS: an iTerm/Terminal profile with a fixed size; Linux: any
+   terminal's `--geometry`. Still ~5 MB, still one `sh` file.
+3. **A tmux / Windows Terminal pane** inside a session layout, for people who script
+   their workspace.
+
+`iriscale-voice board` should also accept `--once` (print one frame and exit — for
+scripts and for the bar plugins) and `--interval N`.
+
+## Click-to-focus: what is and isn't possible, precisely
+
+The requirement: clicking a session's line brings that session's window (or tab) to
+the front. No action inside the session — visibility only.
+
+**Input side is fine.** A terminal pane can take mouse clicks: enable mouse reporting
+(`ESC[?1000h`), read the escape sequence, map the row to a session. Windows Terminal,
+iTerm, and every modern terminal support it. Keyboard fallback: press the row number.
+Both are doable in `sh` (raw mode via `stty`, a small parser).
+
+**Output side depends entirely on how your sessions are windowed** — verified from the
+process tree on the maintainer's machine, where every Claude session's ancestry is
+`claude → powershell → Devin (pid 13156) → Devin (pid 43040)`: all tabs inside one
+host process.
+
+| how the sessions run | what a click can do | mechanism |
+|---|---|---|
+| **each session in its own window** (separate Windows Terminal windows, separate console windows, separate iTerm windows) | **exact**: that session's window comes to the front | pid → top-level window → `SetForegroundWindow` (Windows) / `osascript` activate (macOS) / `wmctrl -ia` (Linux). Cheap, reliable |
+| **tabs in Windows Terminal** | **probably exact, best-effort**: the tab is selected | Windows Terminal exposes tabs to UI Automation; a PowerShell helper can find the tab whose title contains the session name and invoke it. Fragile across WT versions; needs Claude Code / Codex to keep the session name in the tab title (Claude Code does set the title; whether `/rename` propagates needs checking) |
+| **tabs inside an IDE** (Devin, VS Code, Windsurf, Cursor) — *your current setup* | **the IDE window comes to the front; the tab does not switch** | only the host window is addressable from outside; IDE terminal tabs aren't exposed for external selection |
+
+So: the board can *always* raise something, and the row it highlights tells you which
+tab to click when it can't do the last step for you. If exact focus matters, the one
+change that makes it work today is running sessions as **separate terminal windows**
+rather than IDE tabs — e.g. `wt -w new claude` per session on Windows. That's a
+workflow choice, not a code change, and the board should say so in its help text.
+
+Implementation order for focus: (1) raise-by-pid for own-window sessions and the host
+window otherwise — small, cross-platform; (2) Windows Terminal tab selection via UIA
+as a Windows-only enhancement once (1) is in and someone runs sessions in WT tabs.
+
+Session → pid: Claude Code's session file carries `pid`; Codex hooks don't, but the
+hook runs as a child of the Codex process, so the state layer can record `$PPID`'s
+parent at event time. Good enough to find the host window.
 
 ## Effort
 
