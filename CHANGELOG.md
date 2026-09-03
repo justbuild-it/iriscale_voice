@@ -11,11 +11,13 @@ Release-readiness pass: two independent reviews (security/robustness, docs/UX) p
 CI. Nothing here changes what the voice says for `done` / `waiting` / `error`.
 
 ### Security & privacy
-- **Permission prompts no longer speak or log the full command.** Default is the program
-  and its first word only ("git push", "npm test"). `speak_full_command=true` speaks up
-  to 60 characters with token-like words redacted (`Bearer …`, `sk-…`, `ghp_…`, `AKIA…`,
-  `password=`, …). Commands can carry secrets; the old behaviour put them on the speaker
-  and in a plaintext log.
+- **Permission prompts scrub credentials before speaking or logging.** The command is
+  still spoken (up to 60 characters - that is the point of the announcement), but words
+  that look like secrets are replaced with "redacted": `Bearer …`, `sk-…`, `ghp_…`,
+  `AKIA…`, `password=…`, `user:pass@host` in URLs, and the value after `--token`,
+  `--password`, `-p`, `--api-key`. New setting `command_detail`: `redacted` (default),
+  `program` (program + first word only, for shared spaces), `full` (verbatim). The old
+  behaviour put secrets on the speaker and in a plaintext log unconditionally.
 - Session ids are restricted to `[A-Za-z0-9._-]` before they become file names (they are
   written under the state dirs and `rm -f`'d on `SessionEnd`; a crafted id could escape).
 - State and scratch directories are created mode 700 (`/tmp` can be shared).

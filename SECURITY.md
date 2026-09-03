@@ -8,9 +8,13 @@
   (`~/.claude/iriscale-voice.log`, rolled at 1 MB), one small state file per session
   (`~/.claude/iriscale-voice-sessions/`), and scratch files under
   `$TMPDIR/iriscale-voice/` (created mode 700).
-- **Speaks and logs what the agent asked permission for.** By default only the program
-  and its first word ("git push", "npm test"). `speak_full_command=true` speaks up to
-  60 characters with token-like words redacted - but treat that as opt-in exposure.
+- **Speaks and logs what the agent asked permission for** - up to 60 characters of the
+  command, because that is what lets you decide from across the room. Words that look
+  like credentials (`Bearer …`, `sk-…`, `ghp_…`, `AKIA…`, `password=…`, `user:pass@host`)
+  are replaced with "redacted" before the text reaches the speaker or the log. The
+  scrubber is pattern-based and cannot catch every secret shape; in a shared office or
+  on calls set `command_detail=program` to speak only the program name, or
+  `command_detail=full` if you explicitly want the verbatim command.
 - **The Windows installer** (`install.ps1`) edits your user PATH, your PowerShell
   `$PROFILE`, and Codex's `~/.codex/config.toml` / `hooks.json`, taking a backup of
   each file before writing. `iriscale-voice uninstall codex` reverses exactly those

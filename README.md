@@ -28,8 +28,10 @@ you're on and then switch. That's the whole product.
   already has. Verified daily on Windows by the maintainers; macOS and Linux run the
   same script and pass CI, but their speech backends (`say`, `spd-say`) are tested by
   users, not by us — [reports welcome](https://github.com/justbuild-it/iriscale_voice/issues).
-- Never speaks a secret: permission prompts say the program and its first word
-  ("git push"), not the whole command. See [SECURITY.md](SECURITY.md).
+- Tells you what it's waiting on — *"…to run git push origin main --force"* — with
+  anything that looks like a credential scrubbed before it reaches the speaker or the
+  log. Shared office? `command_detail=program` speaks the program name only. See
+  [SECURITY.md](SECURITY.md).
 
 ## Install (30 seconds)
 
@@ -120,7 +122,7 @@ wt -w iriscale --size 64,18 --pos 1180,80 --title sessions iriscale-voice board
 | the session… | you hear | what to do |
 |---|---|---|
 | finished its turn | *"my service done"* — *"…done after 6 minutes"* for long ones | review it when you reach a stopping point |
-| is blocked on a permission prompt | *"my service is waiting for your answer to run git push"* / *"…to use Edit"* — the program and its first word only, never the full command | it can't continue until you answer — switch now |
+| is blocked on a permission prompt | *"my service is waiting for your answer to run git push origin main"* / *"…to use Edit"* — credential-looking words are spoken as "redacted" | it can't continue until you answer — switch now |
 | died (rate limit, billing, auth) | *"my service stopped: rate limit"* | don't wait for it |
 | has sat idle waiting for input | *"my service is waiting for you"* | the agent's own reminder, relayed once |
 | subagent / session end *(verbose preset)* | *"…sub agent done"*, *"…session ended"* | usually noise; off by default |

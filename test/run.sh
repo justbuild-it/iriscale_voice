@@ -40,18 +40,25 @@ sh "$S" set preset standard >/dev/null
 # permission phrasing
 out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"git push"}}' | sh "$S" PermissionRequest)
 case "$out" in *"api is waiting for your answer to run git push"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL perm phrasing: $out" ;; esac
-# PRIVACY: by default only program + first word is spoken; secrets never reach speech/log
+# PRIVACY: command_detail=redacted by default - the command is spoken, credentials are not
 SECRETCMD='{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"curl -H \"Authorization: Bearer sk-live-abc123\" https://x.example"}}'
 out=$(printf '%s' "$SECRETCMD" | sh "$S" PermissionRequest)
-case "$out" in *"to run curl"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL verb-only default: $out" ;; esac
-case "$out" in *sk-live*|*Bearer*) fail=$((fail+1)); echo "FAIL secret leaked by default: $out" ;; *) pass=$((pass+1)) ;; esac
-sh "$S" config set speak_full_command true >/dev/null
+case "$out" in *"to run curl -H Authorization: Bearer [redacted]"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL redacted default: $out" ;; esac
+case "$out" in *sk-live*) fail=$((fail+1)); echo "FAIL secret leaked by default: $out" ;; *) pass=$((pass+1)) ;; esac
+out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"psql postgres://admin:hunter2@db.internal/app"}}' | sh "$S" PermissionRequest)
+case "$out" in *hunter2*) fail=$((fail+1)); echo "FAIL url password leaked: $out" ;; *"[redacted]@db.internal"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL url redaction shape: $out" ;; esac
+out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"git push origin main --force"}}' | sh "$S" PermissionRequest)
+case "$out" in *"to run git push origin main --force"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL harmless command must be spoken whole: $out" ;; esac
+sh "$S" config set command_detail program >/dev/null
 out=$(printf '%s' "$SECRETCMD" | sh "$S" PermissionRequest)
-case "$out" in *"[redacted]"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL full mode must redact: $out" ;; esac
-case "$out" in *sk-live*) fail=$((fail+1)); echo "FAIL full mode leaked token: $out" ;; *) pass=$((pass+1)) ;; esac
-sh "$S" config set speak_full_command false >/dev/null
+case "$out" in *"to run curl"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL program mode: $out" ;; esac
+case "$out" in *Bearer*|*Authorization*) fail=$((fail+1)); echo "FAIL program mode spoke more than the program: $out" ;; *) pass=$((pass+1)) ;; esac
 out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"/usr/local/bin/npm run build --silent"}}' | sh "$S" PermissionRequest)
-case "$out" in *"to run npm run"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL basename+word: $out" ;; esac
+case "$out" in *"to run npm run"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL program mode basename+word: $out" ;; esac
+sh "$S" config set command_detail full >/dev/null
+out=$(printf '%s' "$SECRETCMD" | sh "$S" PermissionRequest)
+case "$out" in *sk-live-abc123*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL full mode must be verbatim: $out" ;; esac
+sh "$S" config unset command_detail >/dev/null
 # SECURITY: session ids become file names - traversal must be neutralised
 out=$(printf '%s' '{"session_id":"../../evil","cwd":"/x/api"}' | sh "$S" stamp; ls "${TMPDIR:-/tmp}/iriscale-voice/" | grep -c 'evil')
 [ "$out" -ge 1 ] && [ ! -e "${TMPDIR:-/tmp}/evil.start" ]; ok $? 0 "traversal in session_id is neutralised"

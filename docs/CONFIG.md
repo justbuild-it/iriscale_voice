@@ -38,7 +38,7 @@ The file is created the first time a setting is written (`config set`, a preset 
 | `quiet_hours` | *(none)* | `22-8` style, 24-hour, may wrap midnight. Nothing speaks inside the window |
 | `min_turn_seconds` | `30` (standard) / `0` | don't announce "done" for turns shorter than this. Errors and permission prompts ignore it — those always speak |
 | `say_elapsed` | `true` | append "after N minutes" to "done" when a turn ran 60 s or more |
-| `speak_full_command` | `false` | what a permission prompt says. `false`: the program and its first word only — *"…to run git push"*. `true`: up to 60 characters of the command, with token-like words redacted. Commands can carry secrets; the default keeps them off the speaker and out of the log |
+| `command_detail` | `redacted` | what a permission prompt says about the command. `redacted`: up to 60 characters with credential-looking words scrubbed — *"…to run git push origin main --force"*, *"…to run curl -H Authorization: Bearer [redacted]"*. `program`: the program and its first word only (*"…to run git push"*) — for shared offices and calls. `full`: verbatim, no scrubbing. The same text goes to the log |
 | `mute_sessions` | *(none)* | comma-separated session names to never announce |
 | `only_sessions` | *(none = all)* | comma-separated; if set, announce ONLY these |
 | `voice` | OS default | Windows: `Microsoft Zira Desktop`; macOS: any from `say -v ?`; Linux: ignored |

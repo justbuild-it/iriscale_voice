@@ -231,7 +231,7 @@ event.<Event>|(preset)|on/off — override one event regardless of preset (see \
 quiet_hours|(none)|22-8 style, 24h, may wrap midnight; nothing speaks inside the window
 min_turn_seconds|$(preset_min_turn "$p")|don't say "done" for turns shorter than this; errors and permission prompts still speak
 say_elapsed|true|append "after N minutes" to "done" for turns of 60s or more
-speak_full_command|false|permission prompts: false = program + first word only ("git push"); true = up to 60 chars with token-like words redacted (may still expose secrets)
+command_detail|redacted|what a permission prompt says about the command: redacted = up to 60 chars with credential-looking words scrubbed; program = program + first word only ("git push"); full = verbatim
 repeat_cooldown|60|seconds; identical line for the same session inside the window is said once; 0 disables
 mute_sessions|(none)|comma-separated session names to never announce
 only_sessions|(none = all)|comma-separated; if set, announce ONLY these
@@ -932,22 +932,27 @@ case "$EVENT" in
     PermissionRequest) tool=$(jget tool_name "$payload")
                        tail="is waiting for your answer"; [ -n "$tool" ] && tail="is waiting for your answer to use $tool"
                        if [ "$tool" = "Bash" ]; then
-                           # PRIVACY: the command may carry secrets (curl -H "Authorization: Bearer ...").
-                           # By default speak/log only the program and its first word ("git push",
-                           # "npm test"). speak_full_command=true speaks up to 60 chars, with
-                           # token-like words redacted. Builtins only - this is the hook path.
-                           cmd=$(jget command "$payload"); cfgv fullcmd speak_full_command false
+                           # PRIVACY: the command may carry secrets (curl -H "Authorization: Bearer ...")
+                           # and this text goes to the speaker and the log. command_detail:
+                           #   redacted (default) - up to 60 chars, credential-looking words scrubbed
+                           #   program            - program + first word only ("git push"), for shared spaces
+                           #   full               - verbatim 60 chars, no scrubbing
+                           # Builtins only - this is the hook path.
+                           cmd=$(jget command "$payload"); cfgv detail command_detail redacted
                            if [ -n "$cmd" ]; then
                                set -f; set -- $cmd; set +f
-                               if [ "$fullcmd" = true ]; then
+                               if [ "$detail" != program ]; then
                                    out=""; n=0; prev=""
                                    for w in "$@"; do
                                        n=$((n+1)); [ "$n" -gt 12 ] && break
-                                       case $w in
-                                           *[Ss]ecret*=*|*[Pp]assword*=*|*[Tt]oken*=*|*[Kk]ey=*|*[Kk]ey:*) w="${w%%=*}=[redacted]" ;;
-                                           sk-*|ghp_*|gho_*|github_pat_*|AKIA*|xox[abp]-*|glpat-*|AIza*|eyJ*) w="[redacted]" ;;
-                                       esac
-                                       case $prev in [Bb]earer|--token|--password|-p|--api-key|--key) w="[redacted]" ;; esac
+                                       if [ "$detail" != full ]; then
+                                           case $w in
+                                               *[Ss]ecret*=*|*[Pp]assword*=*|*[Pp]asswd*=*|*[Tt]oken*=*|*[Kk]ey=*|*[Kk]ey:*|*_KEY=*|*_SECRET=*) w="${w%%=*}=[redacted]" ;;
+                                               sk-*|sk_*|ghp_*|gho_*|ghs_*|github_pat_*|AKIA*|xox[abp]-*|glpat-*|AIza*|eyJ*|npm_*|pypi-*) w="[redacted]" ;;
+                                               *://*:*@*) w="${w%%://*}://[redacted]@${w#*@}" ;;   # user:pass@host in URLs
+                                           esac
+                                           case $prev in [Bb]earer|[Bb]asic|--token|--password|--passwd|-p|--api-key|--key|--secret|--auth) w="[redacted]" ;; esac
+                                       fi
                                        prev=$w; out="$out $w"
                                    done
                                    cmd=$(printf '%.60s' "${out# }")
