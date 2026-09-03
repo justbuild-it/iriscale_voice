@@ -120,7 +120,7 @@ grep -q '^status=working' "$SESSD/brd-1";                 ok $? 0 "stamp -> stat
 grep -q '^agent=claude' "$SESSD/brd-1";                   ok $? 0 "claude-shaped payload -> agent=claude"
 printf '%s' "$B1" | sh "$S" Stop >/dev/null
 grep -q '^status=ready' "$SESSD/brd-1";                   ok $? 0 "Stop -> state ready"
-sed -i 's/^since=.*/since=123/' "$SESSD/brd-1"
+sed 's/^since=.*/since=123/' "$SESSD/brd-1" > "$SESSD/brd-1.tmp" && mv "$SESSD/brd-1.tmp" "$SESSD/brd-1"   # no sed -i: BSD sed wants -i ''
 printf '%s' "$B1" | sh "$S" Stop >/dev/null
 grep -q '^since=123' "$SESSD/brd-1";                      ok $? 0 "unchanged status keeps since"
 printf '%s' "$B1" | sh "$S" stamp; printf '%s' "$B1" | sh "$S" Stop >/dev/null   # fresh READY for the render checks below
