@@ -560,6 +560,7 @@ cli_sessions() {
     done
     printf "\n  ${R}*${N} needs your answer   ${G}*${N} ready for review   ${Y}*${N} working   ${M}*${N} error   ${D}o${N} idle${EL}\n"
     [ "$keys" = 1 ] && printf "  ${D}click a row or press its number to bring it to the front - q quits${N}${EL}\n"
+    return 0   # (a trailing failed [ ] test made `sessions` exit 1 - caught by CI)
 }
 # _row agent name status since updated said pid -> "prio|agent|name|status|age|said|pid" (or nothing if hidden)
 _row() {

@@ -74,7 +74,10 @@ sh "$S" set quiet_hours 0-24 >/dev/null;       expect SKIP idle_prompt;   sh "$S
 sh "$S" set mute_sessions my_service >/dev/null; expect SKIP idle_prompt; sh "$S" set mute_sessions "" >/dev/null
 sh "$S" set only_sessions other >/dev/null;    expect SKIP idle_prompt;   sh "$S" set only_sessions "" >/dev/null
 sh "$S" mute >/dev/null;                       expect SKIP idle_prompt;   sh "$S" unmute >/dev/null
-IRISCALE_VOICE_OFF=1 expect SKIP idle_prompt
+# (not `VAR=1 expect ...`: in POSIX mode - dash, macOS sh - an assignment before a
+# function call persists, which muted the rest of the suite on CI)
+out=$(printf '%s' "$P" | env IRISCALE_VOICE_OFF=1 sh "$S" idle_prompt)
+case "$out" in SKIP*IRISCALE_VOICE_OFF*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL env kill switch: $out" ;; esac
 # name fallbacks
 out=$(printf '%s' '{}' | sh "$S" idle_prompt); case "$out" in *"Claude is waiting"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL fallback: $out" ;; esac
 out=$(printf '%s' '{"cwd":"C:\\w\\Some_App\\"}' | sh "$S" idle_prompt); case "$out" in *"Some App is waiting"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL win path: $out" ;; esac
@@ -152,8 +155,8 @@ sh "$S" focus no_such_session >/dev/null 2>&1;            ok $? 1 "focus unknown
 sh "$S" focus >/dev/null 2>&1;                            ok $? 2 "focus without target exits 2"
 sh "$S" focus payments_api >/dev/null 2>&1;               ok $? 1 "focus session without pid exits 1 (codex: no pid yet)"
 sh "$S" --help | grep 'focus <n|name|pid>' >/dev/null;    ok $? 0 "help lists focus"
-sh "$S" sessions --plain | head -n1 | grep "v$(sh "$S" --version)" >/dev/null; ok $? 0 "board header shows the version"
-sh "$S" sessions --plain | head -n1 | grep 'updated [0-9][0-9]:[0-9][0-9]:[0-9][0-9]' >/dev/null; ok $? 0 "board header labels the clock as 'updated'"
+sh "$S" sessions --plain | sed -n 1p | grep "v$(sh "$S" --version)" >/dev/null; ok $? 0 "board header shows the version"
+sh "$S" sessions --plain | sed -n 1p | grep 'updated [0-9][0-9]:[0-9][0-9]:[0-9][0-9]' >/dev/null; ok $? 0 "board header labels the clock as 'updated'"
 [ "$(sh "$S" sessions --keys --plain | grep 'bring it to the front' | awk '{print length}')" -le 80 ]; ok $? 0 "board footer fits 80 columns"
 
 # repeat guard: same line twice inside the cooldown -> second is SKIP; a different line still SPEAKs
