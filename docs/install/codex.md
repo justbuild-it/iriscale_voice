@@ -51,7 +51,7 @@ JSON as the last argument. Add this **at the top** of `~/.codex/config.toml`
 notify = ["/absolute/path/to/iriscale-voice", "notify"]
 
 # Windows (Git Bash's sh.exe; adjust the checkout path)
-notify = ["C:\Program Files\Git\bin\sh.exe", "C:/path/to/iriscale_voice/bin/iriscale-voice", "notify"]
+notify = ["C:/Program Files/Git/bin/sh.exe", "C:/path/to/iriscale_voice/bin/iriscale-voice", "notify"]
 ```
 
 Restart Codex. You'll hear *"<session> done"* after every turn — `<session>` is the
@@ -72,13 +72,13 @@ Codex hooks use the same JSON-on-stdin shape as Claude Code. Create
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command",
         "command": "sh \"/absolute/path/to/iriscale-voice\" stamp",
-        "commandWindows": "\"C:\Program Files\Git\bin\sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" stamp",
+        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" stamp",
         "timeout": 10 } ] }
     ],
     "PermissionRequest": [
       { "hooks": [ { "type": "command",
         "command": "sh \"/absolute/path/to/iriscale-voice\" PermissionRequest",
-        "commandWindows": "\"C:\Program Files\Git\bin\sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" PermissionRequest",
+        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" PermissionRequest",
         "timeout": 30 } ] }
     ]
   }

@@ -24,30 +24,18 @@ you're on and then switch. That's the whole product.
 - Concurrent sessions **queue** instead of talking over each other; the same line is never
   repeated inside a minute
 - Works for **Claude Code** and **Codex CLI** today, one config for both; more agents mapped
-- macOS, Windows, Linux — uses the voice your OS already has. **Zero dependencies.**
+- One POSIX shell script, **zero dependencies**, speaking through the voice your OS
+  already has. Verified daily on Windows by the maintainers; macOS and Linux run the
+  same script and pass CI, but their speech backends (`say`, `spd-say`) are tested by
+  users, not by us — [reports welcome](https://github.com/justbuild-it/iriscale_voice/issues).
+- Tells you what it's waiting on — *"…to run git push origin main --force"* — with
+  anything that looks like a credential scrubbed before it reaches the speaker or the
+  log. Shared office? `command_detail=program` speaks the program name only. See
+  [SECURITY.md](SECURITY.md).
 
 ## Install (30 seconds)
 
-### Codex on Windows
-
-Run once in PowerShell (Git for Windows is the only prerequisite):
-
-```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/main/install.ps1 | iex
-```
-
-Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show
-`Installed 1`. The installer adds `iriscale-voice` to your user `PATH`, enables
-PowerShell tab completion, safely merges Codex configuration, and creates backups.
-Type `$iriscale-voice` in Codex for the discoverable skill, or use the CLI anywhere:
-
-```powershell
-iriscale-voice status
-iriscale-voice doctor codex
-iriscale-voice <Tab>
-```
-
-### Claude Code
+### Claude Code (any OS)
 
 Inside Claude Code:
 
@@ -61,6 +49,32 @@ Then run `/iriscale-voice:test` — you should hear it. (Type `/iriscale-voice:`
 > Windows: hooks run through Git Bash, which nearly every Claude Code install on
 > Windows already has. If `sh` isn't on your PATH, install
 > [Git for Windows](https://git-scm.com/download/win).
+
+### Codex CLI on Windows
+
+Run once in PowerShell (Git for Windows is the only prerequisite):
+
+```powershell
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.17/install.ps1 | iex
+```
+
+Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show
+`Installed 1`. The installer adds `iriscale-voice` to your user `PATH`, enables
+PowerShell tab completion, merges Codex configuration (taking a backup of each file
+it touches), and is reversed exactly by `iriscale-voice uninstall codex`. Prefer to read
+it first? [SECURITY.md](SECURITY.md) shows how. Then type `$iriscale-voice` in Codex for
+the skill, or use the CLI anywhere:
+
+```powershell
+iriscale-voice status
+iriscale-voice doctor codex
+iriscale-voice <Tab>
+```
+
+### Codex CLI on macOS / Linux
+
+No installer yet: put the script on your PATH ([docs/CONFIG.md → Command line](docs/CONFIG.md#command-line))
+and add the one `notify` line from [docs/install/codex.md](docs/install/codex.md).
 
 ## Choose how chatty
 
@@ -91,9 +105,11 @@ iriscale-voice board
 
 A live list of every session — needs your answer / ready for review / working / idle —
 with how long it's been there and what was last said. **Click a row (or press its
-number) to bring that session's window to the front.** It repaints only when something
-changes, so it's ~5 MB of idle shell. Give it a small Windows Terminal window off to the
-side (works for Claude Code and Codex sessions alike):
+number) to bring that session's window to the front** (Windows; Linux with `wmctrl`;
+not yet on macOS). When sessions are tabs inside one IDE window it raises that window
+and names the tab. It repaints only when something changes, so it's ~5 MB of idle shell.
+Give it a small Windows Terminal window off to the side (works for Claude Code and Codex
+sessions alike):
 
 ```
 wt -w iriscale --size 64,18 --pos 1180,80 --title sessions iriscale-voice board
@@ -106,7 +122,7 @@ wt -w iriscale --size 64,18 --pos 1180,80 --title sessions iriscale-voice board
 | the session… | you hear | what to do |
 |---|---|---|
 | finished its turn | *"my service done"* — *"…done after 6 minutes"* for long ones | review it when you reach a stopping point |
-| is blocked on a permission prompt | *"my service is waiting for your answer to run git push origin main"* / *"…to use Edit"* | it can't continue until you answer — switch now |
+| is blocked on a permission prompt | *"my service is waiting for your answer to run git push origin main"* / *"…to use Edit"* — credential-looking words are spoken as "redacted" | it can't continue until you answer — switch now |
 | died (rate limit, billing, auth) | *"my service stopped: rate limit"* | don't wait for it |
 | has sat idle waiting for input | *"my service is waiting for you"* | the agent's own reminder, relayed once |
 | subagent / session end *(verbose preset)* | *"…sub agent done"*, *"…session ended"* | usually noise; off by default |
@@ -146,8 +162,8 @@ Build, Gemini CLI, Cursor, and the remaining agents are mapped out in
 ## Roadmap
 
 Spoken one-line summaries of *what* was done, escalation when a permission prompt sits
-unanswered, earcons, a multi-session status board, and the other-agent adapters above —
-tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
+unanswered, earcons, menu-bar/tray versions of the board, and the other-agent adapters
+above — tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
 
 ## Develop
 
@@ -163,11 +179,15 @@ claude plugin marketplace add /path/to/checkout && claude plugin install iriscal
 
 ## Upgrading
 
+Claude Code plugin:
 ```
 /plugin marketplace update iriscale
 ```
 then **restart Claude Code**. A version change is not picked up by `/reload-plugins` — the
 running session keeps the plugin directory it started with, so new or renamed commands
 only appear after a restart (`/exit`, then `claude --continue` keeps your conversation).
+
+Windows install (Codex): `iriscale-voice update`, then restart Codex. macOS/Linux
+checkout: `git pull`.
 
 MIT © Iriscale

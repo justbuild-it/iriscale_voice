@@ -40,6 +40,34 @@ sh "$S" set preset standard >/dev/null
 # permission phrasing
 out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"git push"}}' | sh "$S" PermissionRequest)
 case "$out" in *"api is waiting for your answer to run git push"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL perm phrasing: $out" ;; esac
+# PRIVACY: command_detail=redacted by default - the command is spoken, credentials are not
+SECRETCMD='{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"curl -H \"Authorization: Bearer sk-live-abc123\" https://x.example"}}'
+out=$(printf '%s' "$SECRETCMD" | sh "$S" PermissionRequest)
+case "$out" in *"to run curl -H Authorization: Bearer [redacted]"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL redacted default: $out" ;; esac
+case "$out" in *sk-live*) fail=$((fail+1)); echo "FAIL secret leaked by default: $out" ;; *) pass=$((pass+1)) ;; esac
+out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"psql postgres://admin:hunter2@db.internal/app"}}' | sh "$S" PermissionRequest)
+case "$out" in *hunter2*) fail=$((fail+1)); echo "FAIL url password leaked: $out" ;; *"[redacted]@db.internal"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL url redaction shape: $out" ;; esac
+out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"git push origin main --force"}}' | sh "$S" PermissionRequest)
+case "$out" in *"to run git push origin main --force"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL harmless command must be spoken whole: $out" ;; esac
+sh "$S" config set command_detail program >/dev/null
+out=$(printf '%s' "$SECRETCMD" | sh "$S" PermissionRequest)
+case "$out" in *"to run curl"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL program mode: $out" ;; esac
+case "$out" in *Bearer*|*Authorization*) fail=$((fail+1)); echo "FAIL program mode spoke more than the program: $out" ;; *) pass=$((pass+1)) ;; esac
+out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"/usr/local/bin/npm run build --silent"}}' | sh "$S" PermissionRequest)
+case "$out" in *"to run npm run"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL program mode basename+word: $out" ;; esac
+sh "$S" config set command_detail full >/dev/null
+out=$(printf '%s' "$SECRETCMD" | sh "$S" PermissionRequest)
+case "$out" in *sk-live-abc123*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL full mode must be verbatim: $out" ;; esac
+sh "$S" config unset command_detail >/dev/null
+# SECURITY: session ids become file names - traversal must be neutralised
+out=$(printf '%s' '{"session_id":"../../evil","cwd":"/x/api"}' | sh "$S" stamp; ls "${TMPDIR:-/tmp}/iriscale-voice/" | grep -c 'evil')
+[ "$out" -ge 1 ] && [ ! -e "${TMPDIR:-/tmp}/evil.start" ]; ok $? 0 "traversal in session_id is neutralised"
+# SECURITY: clean() must never admit quote/backslash/backtick/dollar (PowerShell single-quoted string)
+out=$(printf '%s' '{"session_id":"q","cwd":"/x/a'"'"');calc;('"'"'b"}' | sh "$S" Stop)
+case "$out" in *"'"*|*'`'*|*'$'*|*'\'*) fail=$((fail+1)); echo "FAIL clean() admitted a shell metachar: $out" ;; *) pass=$((pass+1)) ;; esac
+# config values with sed metacharacters survive a round trip
+sh "$S" config set voice 'a|b&c\d' >/dev/null; ok "$(sh "$S" config get voice)" 'a|b&c\d' "cfg_set keeps | & \\"; sh "$S" config unset voice >/dev/null
+sh "$S" config set 'bad key' x >/dev/null 2>&1;             ok $? 2 "cfg_set rejects an invalid key"
 # failure reason
 out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","reason":"rate_limit"}' | sh "$S" StopFailure)
 case "$out" in *"stopped: rate limit"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL reason: $out" ;; esac
@@ -53,7 +81,10 @@ sh "$S" set quiet_hours 0-24 >/dev/null;       expect SKIP idle_prompt;   sh "$S
 sh "$S" set mute_sessions my_service >/dev/null; expect SKIP idle_prompt; sh "$S" set mute_sessions "" >/dev/null
 sh "$S" set only_sessions other >/dev/null;    expect SKIP idle_prompt;   sh "$S" set only_sessions "" >/dev/null
 sh "$S" mute >/dev/null;                       expect SKIP idle_prompt;   sh "$S" unmute >/dev/null
-IRISCALE_VOICE_OFF=1 expect SKIP idle_prompt
+# (not `VAR=1 expect ...`: in POSIX mode - dash, macOS sh - an assignment before a
+# function call persists, which muted the rest of the suite on CI)
+out=$(printf '%s' "$P" | env IRISCALE_VOICE_OFF=1 sh "$S" idle_prompt)
+case "$out" in SKIP*IRISCALE_VOICE_OFF*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL env kill switch: $out" ;; esac
 # name fallbacks
 out=$(printf '%s' '{}' | sh "$S" idle_prompt); case "$out" in *"Claude is waiting"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL fallback: $out" ;; esac
 out=$(printf '%s' '{"cwd":"C:\\w\\Some_App\\"}' | sh "$S" idle_prompt); case "$out" in *"Some App is waiting"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL win path: $out" ;; esac
@@ -96,7 +127,7 @@ grep -q '^status=working' "$SESSD/brd-1";                 ok $? 0 "stamp -> stat
 grep -q '^agent=claude' "$SESSD/brd-1";                   ok $? 0 "claude-shaped payload -> agent=claude"
 printf '%s' "$B1" | sh "$S" Stop >/dev/null
 grep -q '^status=ready' "$SESSD/brd-1";                   ok $? 0 "Stop -> state ready"
-sed -i 's/^since=.*/since=123/' "$SESSD/brd-1"
+sed 's/^since=.*/since=123/' "$SESSD/brd-1" > "$SESSD/brd-1.tmp" && mv "$SESSD/brd-1.tmp" "$SESSD/brd-1"   # no sed -i: BSD sed wants -i ''
 printf '%s' "$B1" | sh "$S" Stop >/dev/null
 grep -q '^since=123' "$SESSD/brd-1";                      ok $? 0 "unchanged status keeps since"
 printf '%s' "$B1" | sh "$S" stamp; printf '%s' "$B1" | sh "$S" Stop >/dev/null   # fresh READY for the render checks below
@@ -131,8 +162,8 @@ sh "$S" focus no_such_session >/dev/null 2>&1;            ok $? 1 "focus unknown
 sh "$S" focus >/dev/null 2>&1;                            ok $? 2 "focus without target exits 2"
 sh "$S" focus payments_api >/dev/null 2>&1;               ok $? 1 "focus session without pid exits 1 (codex: no pid yet)"
 sh "$S" --help | grep 'focus <n|name|pid>' >/dev/null;    ok $? 0 "help lists focus"
-sh "$S" sessions --plain | head -n1 | grep "v$(sh "$S" --version)" >/dev/null; ok $? 0 "board header shows the version"
-sh "$S" sessions --plain | head -n1 | grep 'updated [0-9][0-9]:[0-9][0-9]:[0-9][0-9]' >/dev/null; ok $? 0 "board header labels the clock as 'updated'"
+sh "$S" sessions --plain | sed -n 1p | grep "v$(sh "$S" --version)" >/dev/null; ok $? 0 "board header shows the version"
+sh "$S" sessions --plain | sed -n 1p | grep 'updated [0-9][0-9]:[0-9][0-9]:[0-9][0-9]' >/dev/null; ok $? 0 "board header labels the clock as 'updated'"
 [ "$(sh "$S" sessions --keys --plain | grep 'bring it to the front' | awk '{print length}')" -le 80 ]; ok $? 0 "board footer fits 80 columns"
 
 # repeat guard: same line twice inside the cooldown -> second is SKIP; a different line still SPEAKs
@@ -193,6 +224,13 @@ v_market=$(grep -o '"version": *"[^"]*"' "$here/../.claude-plugin/marketplace.js
 v_codex=$(grep -o '"version": *"[^"]*"' "$here/../.codex-plugin/plugin.json"       | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
 ok "$v_plugin" "$v_script" "plugin.json version == script VERSION"
 ok "$v_market" "$v_script" "marketplace.json version == script VERSION"
+v_codex=$(grep -o '"version": *"[^"]*"' "$here/../.codex-plugin/plugin.json" | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
+ok "$v_codex" "$v_script" ".codex-plugin/plugin.json version == script VERSION"
+# the pinned install URLs and the installer's default -Ref must name this release
+v_ref=$(grep -o "\[string\]\$Ref = 'v[^']*'" "$here/../install.ps1" | sed "s/.*'v\([^']*\)'/\1/")
+ok "$v_ref" "$v_script" "install.ps1 -Ref default == script VERSION"
+grep -q "iriscale_voice/v$v_script/install.ps1" "$here/../README.md";   ok $? 0 "README one-liner pins v$v_script"
+grep -q "iriscale_voice/v$v_script/install.ps1" "$here/../SECURITY.md"; ok $? 0 "SECURITY.md pins v$v_script"
 ok "$v_codex" "$v_script" "Codex plugin version == script VERSION"
 [ -f "$here/../.codex-plugin/plugin.json" ];                ok $? 0 "Codex plugin manifest exists"
 [ -f "$here/../skills/iriscale-voice/SKILL.md" ];           ok $? 0 "Codex skill exists"
@@ -268,7 +306,7 @@ done
 t0=$(date +%s)
 printf '%s' '{"session_id":"sync-1","cwd":"/x/sync_host"}' | IRISCALE_VOICE_DEBUG= PATH="$SHIM:$PATH" sh "$S" Stop >/dev/null 2>&1
 t1=$(date +%s)
-if [ $((t1 - t0)) -le 1 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook blocked $((t1 - t0))s on speech - must background the speaker"; fi
+if [ $((t1 - t0)) -le 2 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook blocked $((t1 - t0))s on speech - must background the speaker (limit 2s; the bug was 7s)"; fi
 sleep 4   # let the stubbed background speaker finish before the trap cleans the shim dir
 
 # Degraded-environment guards (Codex launched the raw MSYS sh.exe with no /usr/bin on

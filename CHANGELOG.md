@@ -5,6 +5,65 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.17] — 2026-09-03
+
+Release-readiness pass: two independent reviews (security/robustness, docs/UX) plus
+CI. Nothing here changes what the voice says for `done` / `waiting` / `error`.
+
+### Security & privacy
+- **Permission prompts scrub credentials before speaking or logging.** The command is
+  still spoken (up to 60 characters - that is the point of the announcement), but words
+  that look like secrets are replaced with "redacted": `Bearer …`, `sk-…`, `ghp_…`,
+  `AKIA…`, `password=…`, `user:pass@host` in URLs, and the value after `--token`,
+  `--password`, `-p`, `--api-key`. New setting `command_detail`: `redacted` (default),
+  `program` (program + first word only, for shared spaces), `full` (verbatim). The old
+  behaviour put secrets on the speaker and in a plaintext log unconditionally.
+- Session ids are restricted to `[A-Za-z0-9._-]` before they become file names (they are
+  written under the state dirs and `rm -f`'d on `SessionEnd`; a crafted id could escape).
+- State and scratch directories are created mode 700 (`/tmp` can be shared).
+- `clean()`'s allowlist is now a documented, tested invariant: it can never admit
+  `' " \ ` $`, which is what keeps the PowerShell speech command safe.
+- Config values used in the speech command are validated (`volume`/`rate` numeric,
+  `voice` restricted); `config set` rewrites with builtins so `| & \` in values can no
+  longer corrupt the file; keys must be `[A-Za-z0-9._]`.
+- The activity log rolls at 1 MB.
+- `install.ps1` validates `hooks.json` before touching anything, reports which steps
+  completed if it fails midway, and installs from the **release tag matching the
+  installer** (`-Ref`, default `v0.1.17`) instead of the moving `main`. `SECURITY.md`
+  explains what the tool touches and how to install with inspection.
+
+### Fixed
+- **`/iriscale-voice:config …` was broken since 0.1.4** — the command file ran a garbled
+  shell line. `/iriscale-voice:config list` etc. work again.
+- `docs/install/codex.md` showed Windows paths with backslashes, which are invalid TOML/
+  JSON escapes; copy-pasting corrupted `config.toml`/`hooks.json`. Forward slashes now.
+- The bundled skill is host-aware: in Claude Code it points at the slash commands and the
+  plugin's own CLI path; it no longer tells macOS users to run a Windows installer.
+- `board` on a strict POSIX `sh` (dash) had dead keys; it now re-executes itself under
+  bash/zsh when available and says so otherwise.
+- `jget` honours JSON escapes, so a command containing quotes is read whole instead of
+  being cut at the first `\"`.
+- `notify-send` title is "iriscale voice", not "Claude Code".
+- Timing guard for non-blocking speech relaxed to 2 s (the bug it guards was 7 s); it
+  flaked on a slow run.
+
+### Added
+- **CI**: `.github/workflows/test.yml` runs the suite on Ubuntu (dash + bash), macOS
+  (`sh`) and Windows (Git Bash), checks the four version manifests agree, and parses the
+  JSON. First time macOS/Linux run the suite at all.
+- `.gitignore`, `SECURITY.md`.
+
+### Docs
+- Honest platform claims: verified on Windows; macOS/Linux run the same POSIX script and
+  pass CI but the speech backends there are untested by the maintainers. Click-to-focus
+  is Windows (+ Linux with `wmctrl`), not macOS.
+- README reordered for Claude Code first; upgrading covers both install paths; the
+  board is no longer listed as future work.
+- `docs/PLATFORMS.md` status column says "planned" instead of fictitious versions;
+  `docs/ROADMAP.md` release table de-duplicated and renumbered; CONTRIBUTING describes
+  the guard tests that actually exist and adds "update the README's pinned install URL"
+  to the release steps.
+
 ## [0.1.16] — 2026-08-28
 
 ### Changed
@@ -261,7 +320,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.16...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.17...HEAD
+[0.1.17]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.13...v0.1.14

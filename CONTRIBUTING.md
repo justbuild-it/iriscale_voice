@@ -31,6 +31,8 @@ A release is its own small PR:
      behavior-breaking change (e.g. renamed keys); 1.0.0 when the config format is
      frozen.
 2. Move `[Unreleased]` in `CHANGELOG.md` under the new version with today's date.
+   Update the pinned tag in the README's install one-liner, `SECURITY.md`, and the
+   `-Ref` default at the top of `install.ps1` to the new version (a test checks they agree).
 3. Merge, then **pull and verify before tagging** — never tag in the same command chain
    as the pull (a transient fetch failure once produced a v0.1.12 tag on 0.1.11 content,
    and the tag ruleset rightly refuses to move tags):
@@ -69,9 +71,19 @@ the one thing maintainers can't produce for agents they don't run.
 
 Slash commands, the CLI, config keys: name them after the product or the thing itself,
 never after the mechanism. And check for collisions first — Claude Code's built-in
-`/voice` (dictation mode) silently shadowed ours for a whole release. `test/run.sh`
-now fails if a bundled command shares a name with a known built-in; extend that list
-when Claude Code adds commands.
+`/voice` (dictation mode) silently shadowed ours for a whole release. Plugin commands
+are always documented in their namespaced form (`/iriscale-voice:status`); `test/run.sh`
+fails if any doc mentions a bare `/<command>`, because built-ins shadow bare names.
+
+## Guard tests worth knowing about
+
+`test/run.sh` is the gate, and several checks exist to stop specific past bugs from
+returning: the version must agree across all four manifests; every `config list` key
+must be documented in `docs/CONFIG.md`; the hook path may spawn at most one text tool;
+a stubbed 3 s speaker must not block the hook for more than 2 s; `sessions --color` must
+emit real escape bytes and `--plain` none; a permission prompt must never speak a token;
+a traversal `session_id` must stay inside the state dir; `clean()` must never pass a
+quote, backslash, backtick or `$`. Add one whenever you fix a bug.
 
 ## Keep the hook path cheap
 
