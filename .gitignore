@@ -1,0 +1,10 @@
+# local state that must never be committed
+*.iriscale-backup-*
+*.log
+*.tmp
+*.new
+.DS_Store
+Thumbs.db
+# editor / OS
+.vscode/
+.idea/

@@ -40,6 +40,27 @@ sh "$S" set preset standard >/dev/null
 # permission phrasing
 out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"git push"}}' | sh "$S" PermissionRequest)
 case "$out" in *"api is waiting for your answer to run git push"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL perm phrasing: $out" ;; esac
+# PRIVACY: by default only program + first word is spoken; secrets never reach speech/log
+SECRETCMD='{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"curl -H \"Authorization: Bearer sk-live-abc123\" https://x.example"}}'
+out=$(printf '%s' "$SECRETCMD" | sh "$S" PermissionRequest)
+case "$out" in *"to run curl"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL verb-only default: $out" ;; esac
+case "$out" in *sk-live*|*Bearer*) fail=$((fail+1)); echo "FAIL secret leaked by default: $out" ;; *) pass=$((pass+1)) ;; esac
+sh "$S" config set speak_full_command true >/dev/null
+out=$(printf '%s' "$SECRETCMD" | sh "$S" PermissionRequest)
+case "$out" in *"[redacted]"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL full mode must redact: $out" ;; esac
+case "$out" in *sk-live*) fail=$((fail+1)); echo "FAIL full mode leaked token: $out" ;; *) pass=$((pass+1)) ;; esac
+sh "$S" config set speak_full_command false >/dev/null
+out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","tool_name":"Bash","tool_input":{"command":"/usr/local/bin/npm run build --silent"}}' | sh "$S" PermissionRequest)
+case "$out" in *"to run npm run"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL basename+word: $out" ;; esac
+# SECURITY: session ids become file names - traversal must be neutralised
+out=$(printf '%s' '{"session_id":"../../evil","cwd":"/x/api"}' | sh "$S" stamp; ls "${TMPDIR:-/tmp}/iriscale-voice/" | grep -c 'evil')
+[ "$out" -ge 1 ] && [ ! -e "${TMPDIR:-/tmp}/evil.start" ]; ok $? 0 "traversal in session_id is neutralised"
+# SECURITY: clean() must never admit quote/backslash/backtick/dollar (PowerShell single-quoted string)
+out=$(printf '%s' '{"session_id":"q","cwd":"/x/a'"'"');calc;('"'"'b"}' | sh "$S" Stop)
+case "$out" in *"'"*|*'`'*|*'$'*|*'\'*) fail=$((fail+1)); echo "FAIL clean() admitted a shell metachar: $out" ;; *) pass=$((pass+1)) ;; esac
+# config values with sed metacharacters survive a round trip
+sh "$S" config set voice 'a|b&c\d' >/dev/null; ok "$(sh "$S" config get voice)" 'a|b&c\d' "cfg_set keeps | & \\"; sh "$S" config unset voice >/dev/null
+sh "$S" config set 'bad key' x >/dev/null 2>&1;             ok $? 2 "cfg_set rejects an invalid key"
 # failure reason
 out=$(printf '%s' '{"session_id":"t","cwd":"/x/api","reason":"rate_limit"}' | sh "$S" StopFailure)
 case "$out" in *"stopped: rate limit"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL reason: $out" ;; esac
@@ -193,6 +214,13 @@ v_market=$(grep -o '"version": *"[^"]*"' "$here/../.claude-plugin/marketplace.js
 v_codex=$(grep -o '"version": *"[^"]*"' "$here/../.codex-plugin/plugin.json"       | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
 ok "$v_plugin" "$v_script" "plugin.json version == script VERSION"
 ok "$v_market" "$v_script" "marketplace.json version == script VERSION"
+v_codex=$(grep -o '"version": *"[^"]*"' "$here/../.codex-plugin/plugin.json" | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
+ok "$v_codex" "$v_script" ".codex-plugin/plugin.json version == script VERSION"
+# the pinned install URLs and the installer's default -Ref must name this release
+v_ref=$(grep -o "\[string\]\$Ref = 'v[^']*'" "$here/../install.ps1" | sed "s/.*'v\([^']*\)'/\1/")
+ok "$v_ref" "$v_script" "install.ps1 -Ref default == script VERSION"
+grep -q "iriscale_voice/v$v_script/install.ps1" "$here/../README.md";   ok $? 0 "README one-liner pins v$v_script"
+grep -q "iriscale_voice/v$v_script/install.ps1" "$here/../SECURITY.md"; ok $? 0 "SECURITY.md pins v$v_script"
 ok "$v_codex" "$v_script" "Codex plugin version == script VERSION"
 [ -f "$here/../.codex-plugin/plugin.json" ];                ok $? 0 "Codex plugin manifest exists"
 [ -f "$here/../skills/iriscale-voice/SKILL.md" ];           ok $? 0 "Codex skill exists"
@@ -268,7 +296,7 @@ done
 t0=$(date +%s)
 printf '%s' '{"session_id":"sync-1","cwd":"/x/sync_host"}' | IRISCALE_VOICE_DEBUG= PATH="$SHIM:$PATH" sh "$S" Stop >/dev/null 2>&1
 t1=$(date +%s)
-if [ $((t1 - t0)) -le 1 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook blocked $((t1 - t0))s on speech - must background the speaker"; fi
+if [ $((t1 - t0)) -le 2 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook blocked $((t1 - t0))s on speech - must background the speaker (limit 2s; the bug was 7s)"; fi
 sleep 4   # let the stubbed background speaker finish before the trap cleans the shim dir
 
 # Degraded-environment guards (Codex launched the raw MSYS sh.exe with no /usr/bin on

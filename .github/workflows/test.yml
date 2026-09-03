@@ -1,0 +1,49 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  suite:
+    name: ${{ matrix.os }} / ${{ matrix.shell }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  shell: sh }     # dash: strict POSIX
+          - { os: ubuntu-latest,  shell: bash }
+          - { os: macos-latest,   shell: sh }     # bash 3.2 in POSIX mode
+          - { os: windows-latest, shell: bash }   # Git Bash, as Claude Code uses
+    steps:
+      - uses: actions/checkout@v4
+      - name: syntax
+        shell: bash
+        run: sh -n bin/iriscale-voice && bash --posix -n bin/iriscale-voice
+      - name: suite
+        shell: bash
+        env:
+          IRISCALE_VOICE_DEBUG: "1"
+        run: ${{ matrix.shell }} test/run.sh
+      - name: help and status run
+        shell: bash
+        run: |
+          ${{ matrix.shell }} bin/iriscale-voice --help >/dev/null
+          ${{ matrix.shell }} bin/iriscale-voice status
+          ${{ matrix.shell }} bin/iriscale-voice sessions --plain
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: versions agree
+        run: |
+          v=$(grep -o '^VERSION="[^"]*"' bin/iriscale-voice | cut -d'"' -f2)
+          for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json; do
+            grep -q "\"version\": *\"$v\"" "$f" || { echo "$f is not at $v"; exit 1; }
+          done
+          echo "all at $v"
+      - name: JSON parses
+        run: for f in .claude-plugin/*.json .codex-plugin/*.json hooks/hooks.json; do python3 -m json.tool "$f" >/dev/null || exit 1; done

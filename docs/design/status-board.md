@@ -1,6 +1,8 @@
 # Design note: a lightweight visual session board
 
-Status: **proposal** (2026-08-28). Feasibility: **high**. Not started.
+Status: **shipped** in 0.1.11-0.1.16 (state layer, `sessions`, `board`, click-to-focus).
+Kept as the design record; see CHANGELOG for what landed and the roadmap for what was
+declared out of scope (IDE tab selection).
 
 ## The ask
 

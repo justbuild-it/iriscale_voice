@@ -1,7 +1,7 @@
 {
   "name": "iriscale-voice",
   "displayName": "iriscale voice",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "Let your coding agents tell you when they are done and need attention. Speaks the session name when a turn finishes, fails, or needs permission — so you can walk away.",
   "author": { "name": "Iriscale", "url": "https://github.com/justbuild-it" },
   "homepage": "https://github.com/justbuild-it/iriscale_voice",

@@ -6,11 +6,14 @@ param(
     [switch]$Update,
     [switch]$Uninstall,
     [switch]$SkipPath,
-    [switch]$SkipProfile
+    [switch]$SkipProfile,
+    # Git ref to install from. Defaults to the release tag matching this installer, so a
+    # pinned install.ps1 installs exactly that release. Pass -Ref main for the tip.
+    [string]$Ref = 'v0.1.17'
 )
 
 $ErrorActionPreference = 'Stop'
-$repo = 'https://raw.githubusercontent.com/justbuild-it/iriscale_voice/main'
+$repo = "https://raw.githubusercontent.com/justbuild-it/iriscale_voice/$Ref"
 $binDir = Join-Path $InstallRoot 'bin'
 $scriptPath = Join-Path $binDir 'iriscale-voice'
 $launcherPath = Join-Path $binDir 'iriscale-voice.cmd'
@@ -105,6 +108,22 @@ if ($Uninstall) {
     exit 0
 }
 
+# Validate what we will edit BEFORE changing anything, so a bad hooks.json cannot leave
+# PATH/profile/config half-modified. Any later failure prints what was already changed.
+$hooksPathPre = Join-Path $CodexHome 'hooks.json'
+if (Test-Path -LiteralPath $hooksPathPre) {
+    try { $null = Get-Content -Raw -LiteralPath $hooksPathPre | ConvertFrom-Json }
+    catch { throw "$hooksPathPre is not valid JSON; fix or move it aside, then re-run. Nothing was changed." }
+}
+$script:done = New-Object System.Collections.ArrayList
+trap {
+    if ($script:done.Count -gt 0) {
+        Write-Host "Install failed after these steps completed: $($script:done -join ', ')." -ForegroundColor Yellow
+        Write-Host 'Backups of edited files sit next to them as *.iriscale-backup-*. Re-run to finish, or run with -Uninstall to revert.' -ForegroundColor Yellow
+    }
+    break
+}
+
 $gitCandidates = @((Join-Path $env:ProgramFiles 'Git\bin\bash.exe'))
 if (${env:ProgramFiles(x86)}) { $gitCandidates += (Join-Path ${env:ProgramFiles(x86)} 'Git\bin\bash.exe') }
 $gitBash = $gitCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
@@ -155,6 +174,7 @@ if (-not $SkipPath) {
     if (@($userPath -split ';') -notcontains $binDir) {
         [Environment]::SetEnvironmentVariable('Path', (($userPath.TrimEnd(';') + ';' + $binDir).TrimStart(';')), 'User')
     }
+    [void]$script:done.Add('PATH')
     if (@($env:Path -split ';') -notcontains $binDir) { $env:Path += ";$binDir" }
 }
 if (-not $SkipProfile) {
@@ -165,6 +185,7 @@ if (-not $SkipProfile) {
         $profileContent = $(if (Test-Path -LiteralPath $PROFILE) { Get-Content -Raw -LiteralPath $PROFILE } else { '' })
         Write-Utf8NoBom $PROFILE ($profileContent.TrimEnd() + "`n`n$profileMarker`n. '$completionPath'`n")
     }
+    [void]$script:done.Add('PowerShell profile')
 }
 
 $configPath = Join-Path $CodexHome 'config.toml'
@@ -178,6 +199,7 @@ if (Test-Path -LiteralPath $configPath) {
     } else { $lines = @($notify, '') + $lines }
     Write-Utf8NoBom $configPath (($lines -join [Environment]::NewLine) + [Environment]::NewLine)
 } else { Write-Utf8NoBom $configPath ($notify + [Environment]::NewLine) }
+[void]$script:done.Add('config.toml')
 
 $hooksPath = Join-Path $CodexHome 'hooks.json'
 if (Test-Path -LiteralPath $hooksPath) {
@@ -199,6 +221,7 @@ foreach ($definition in @(@('UserPromptSubmit','stamp',10), @('PermissionRequest
     $hooksDoc.hooks | Add-Member -NotePropertyName $event -NotePropertyValue $hook -Force
 }
 Write-Utf8NoBom $hooksPath (($hooksDoc | ConvertTo-Json -Depth 20) + [Environment]::NewLine)
+[void]$script:done.Add('hooks.json')
 
 Write-Host $(if ($Update) { 'Iriscale Voice updated.' } else { 'Iriscale Voice installed.' })
 Write-Host "  executable: $launcherPath"

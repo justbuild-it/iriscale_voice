@@ -27,15 +27,16 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.13 | Fix: `update`/`uninstall` via the launcher (self-overwrite); verified-tag release checklist | shipped 2026-08-28 |
 | 0.1.14 | Board click-to-focus: mouse reporting, raise-by-pid, host window when tabbed | shipped 2026-08-28 |
 | 0.1.15 | Focus 3 s → 1.4 s; honest note for tabbed hosts; version in header | shipped 2026-08-28 |
-| 0.1.16 | Board clock labelled "updated"; tab selection declared out of scope | this PR |
-| 0.1.13 | Copilot CLI + Grok Build + Gemini CLI install snippets | |
-| 0.1.14 | Speak a one-line summary of what was done (from `transcript_path`) | |
-| 0.1.15 | Escalate unanswered permission prompts (3 min, 10 min) | |
-| 0.1.16 | Junie, Cursor, Devin, OpenCode/Kilo adapters | |
-| 0.1.17 | Toast / Notification Center / notify-send alongside speech; earcons mode | |
-| 0.1.18 | Per-session voice signatures; log/stamp housekeeping | |
-| 0.1.19 | Windows-without-Git-Bash PowerShell fallback | |
-| 0.1.20 | Windsurf, Cline, Aider (done-only) | |
+| 0.1.16 | Board clock labelled "updated"; tab selection declared out of scope | shipped 2026-08-28 |
+| 0.1.17 | Release-readiness: privacy default for permission prompts, id sanitising, mode-700 state dirs, log rotation, pinned installer, CI on Ubuntu/macOS/Windows, SECURITY.md, docs reconciled | this PR |
+| 0.1.18 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
+| 0.1.19 | Speak a one-line summary of what was done (from `transcript_path`) | planned |
+| 0.1.20 | Escalate unanswered permission prompts (3 min, 10 min) | planned |
+| 0.1.21 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
+| 0.1.22 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
+| 0.1.23 | Per-session voice signatures; stamp housekeeping | planned |
+| 0.1.24 | Windows-without-Git-Bash PowerShell fallback | planned |
+| 0.1.25 | Windsurf, Cline, Aider (done-only) | planned |
 | later | macOS/Linux bar plugins; Windows tray (opt-in); macOS/Linux live verification as users report | |
 | out of scope | **Selecting the terminal tab inside an IDE.** Real setups run several IDE windows across screens, each with several terminal tabs; IDE tabs are not addressable from outside. The board raises the correct window and names the tab. Windows Terminal tabs via UI Automation remains a possible opt-in if sessions run there. | decided 2026-08-28 |
 
@@ -48,12 +49,12 @@ Started 2026-08-14 as a single Windows PowerShell hook (`speak-notify.ps1`) that
 "<session> done" / "<session> needs input". Rebuilt the same day with presets, then
 re-scoped as a cross-platform Claude Code plugin for open-source release.
 
-## Tier 0 — Release blockers (0.1.0)
+## Tier 0 — Release blockers (shipped 0.1.0–0.1.10)
 
 - [x] **Package as a Claude Code plugin** so users install with two commands
       instead of hand-editing `settings.json`. Repo doubles as its own marketplace
       (`.claude-plugin/plugin.json` + `marketplace.json`, `hooks/hooks.json`).
-      _Scaffolded 2026-08-15; NOT yet verified end-to-end via `/plugin install`._
+      _Verified end-to-end via `claude plugin install` the same day._
 - [x] **Cross-platform speaker** in `bin/iriscale-voice`: Windows (`powershell.exe` +
       System.Speech), macOS (`say`), Linux (`spd-say` → `espeak-ng` → `espeak` →
       `notify-send` → bell). Zero external dependencies — no `jq`, `node`, or
@@ -67,7 +68,7 @@ re-scoped as a cross-platform Claude Code plugin for open-source release.
       bare `/iriscale-voice` when no conflict: `status`, `test`, `preset`, `mute`, `unmute`,
       `quiet`, `set`, `say`. Drives the script's CLI subcommands.
 - [x] **README** with the two-command install and presets. _GIF/asciinema still to do._
-- [x] **Test script** `test/run.sh` — 40 checks, every event × every preset, silent.
+- [x] **Test script** `test/run.sh` — every event × every preset, CLI, installer, security guards; run in CI on Ubuntu (dash + bash), macOS and Windows.
 - [~] **Verify a real install.** Done 2026-08-15 via the `claude plugin` CLI:
       `validate` passes, `marketplace add <local path>` + `install iriscale-voice@iriscale`
       succeed, `"source": "./"` works, all 7 hook events and the `voice` skill resolve,
@@ -93,13 +94,13 @@ re-scoped as a cross-platform Claude Code plugin for open-source release.
       we don't want. The script still honors `CLAUDE_PLUGIN_OPTION_PRESET` if set.
       Contributor note: `claude plugin update` is version-gated — for local iteration
       either bump `version` in both manifests or `uninstall` + `install`.
-- [ ] **Windows without Git Bash (0.1.12)**: hooks fall back to PowerShell there, and `sh`
+- [ ] **Windows without Git Bash**: hooks fall back to PowerShell there, and `sh`
       won't exist. Either ship a `bin/notify.ps1` twin selected by a `shell:
       powershell` hook set (must not double-fire where both shells exist) or document
       Git Bash as a requirement. Documented for now.
 - [x] Publish: pushed, tagged `v0.1.0`; releases published for every version since.
 
-## Tier 1 — Signal quality (0.1.7–0.1.8)
+## Tier 1 — Signal quality
 
 - [x] **Say WHAT it needs permission for.** `PermissionRequest` hook (carries
       `tool_name` + `tool_input`) wired instead of the bare `permission_prompt`
@@ -114,7 +115,7 @@ re-scoped as a cross-platform Claude Code plugin for open-source release.
       `say_elapsed=false` to turn off.
 - [x] **Failure reason** spoken on `StopFailure` ("stopped: rate limit").
 
-## Tier 2 — Attention management (0.1.10–0.1.11)
+## Tier 2 — Attention management
 
 - [ ] **Escalate if unattended**: re-announce a pending permission prompt after
       3 min, then 10. That's the one that actually blocks a session while you're
@@ -128,9 +129,9 @@ re-scoped as a cross-platform Claude Code plugin for open-source release.
       Shipped in the PowerShell prototype (2 voices × 3 rates); macOS has many
       voices, so this gets better there.
 
-## Tier 3 — Multi-session (later)
+## Tier 3 — Multi-session
 
-- [ ] **Status board**: a local page/tray showing every live session, its name,
+- [x] **Status board** (shipped 0.1.11–0.1.16 as `sessions` / `board`; tray/menu-bar versions still open): a local page/tray showing every live session, its name,
       `busy|idle`, and time since last event. `~/.claude/sessions/*.json` already
       carries `pid`, `name`, `cwd`, `status`, `updatedAt`. Replaces polling five
       terminals.
@@ -143,23 +144,23 @@ Researched 2026-08-16. Six CLIs copied Claude Code's hook shape (JSON on stdin,
 `session_id`/`cwd`/`Stop`/`PermissionRequest`), so one script + alias layers covers
 them. Order below is by adapter effort × user base.
 
-- [ ] **0.1.4 — alias layers in `iriscale-voice`**: payload from stdin *or* argv (Codex
+- [x] **alias layers in `iriscale-voice`** (0.1.6): payload from stdin *or* argv (Codex
       `notify`); field aliases (`sessionId`, `conversation_id`, `thread-id`,
       `workspace_roots[0]`…); event aliases (`agentStop`/`AfterAgent`/`TaskComplete`
       → Stop, `errorOccurred`/`stop{status=error}` → StopFailure,
       `permissionRequest`/`Notification{ToolPermission}` → PermissionRequest,
       `notification{agent_idle}` → idle_prompt). Synthetic-payload tests per agent.
-- [ ] **0.1.5–0.1.6 — Codex CLI, Copilot CLI, Grok Build, Gemini CLI** install snippets
+- [~] **Codex CLI (shipped 0.1.6–0.1.10); Copilot CLI, Grok Build, Gemini CLI** install snippets
       (`docs/install/<agent>.md`) + `iriscale-voice install <agent>` that prints the
       snippet with the absolute path filled in. Copilot has the best three-state
       coverage (`agentStop` / `permissionRequest` / `errorOccurred`).
-- [ ] **0.1.9 — Junie CLI, Cursor, Devin CLI, OpenCode/Kilo CLI** (OpenCode needs a
+- [ ] **Junie CLI, Cursor, Devin CLI, OpenCode/Kilo CLI** (OpenCode needs a
       ~20-line TS plugin that shells out to the script).
-- [ ] **0.1.13 — Windsurf/Cascade, Cline, Aider** (done-only signals).
+- [ ] **Windsurf/Cascade, Cline, Aider** (done-only signals).
 - [ ] Backlog: Amp (TS plugin), Kiro (payload undocumented).
 - [-] Zed, Warp, Roo Code, Kilo extension — no shell hook exists; only built-in
       sound settings. Re-check when Zed's hooks proposal (#57890) lands.
-- Constraint: only Claude Code is installed on the maintainers' machine, so every
+- Constraint: Claude Code and Codex are installed on the maintainers' machine; every other
   other adapter is written to spec and verified by users' logs, not by us.
 
 ## Cut

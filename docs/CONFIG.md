@@ -14,8 +14,10 @@ Precedence, highest first:
 
 1. `IRISCALE_VOICE_OFF=1` in the environment — instant mute, no file edits
 2. `~/.claude/iriscale-voice.conf`
-3. The plugin's own setting UI (`preset`), if you set it there
-4. Built-in defaults (= the `standard` preset)
+3. Built-in defaults (= the `standard` preset)
+
+The file is created the first time a setting is written (`config set`, a preset change,
+`mute`/`unmute`); until then everything runs on defaults.
 
 ## Presets
 
@@ -36,6 +38,7 @@ Precedence, highest first:
 | `quiet_hours` | *(none)* | `22-8` style, 24-hour, may wrap midnight. Nothing speaks inside the window |
 | `min_turn_seconds` | `30` (standard) / `0` | don't announce "done" for turns shorter than this. Errors and permission prompts ignore it — those always speak |
 | `say_elapsed` | `true` | append "after N minutes" to "done" when a turn ran 60 s or more |
+| `speak_full_command` | `false` | what a permission prompt says. `false`: the program and its first word only — *"…to run git push"*. `true`: up to 60 characters of the command, with token-like words redacted. Commands can carry secrets; the default keeps them off the speaker and out of the log |
 | `mute_sessions` | *(none)* | comma-separated session names to never announce |
 | `only_sessions` | *(none = all)* | comma-separated; if set, announce ONLY these |
 | `voice` | OS default | Windows: `Microsoft Zira Desktop`; macOS: any from `say -v ?`; Linux: ignored |
@@ -81,14 +84,23 @@ hooks call. `--help` is the source of truth; the table above is kept in sync wit
 ```sh
 iriscale-voice --help              # all commands
 iriscale-voice status              # what's configured, what will speak
+iriscale-voice sessions [--plain]  # every live session, one frame
+iriscale-voice board               # live board; click/number a row to raise it; q quits
+iriscale-voice focus <n|name|pid>  # raise a session's window (Windows; Linux with wmctrl)
 iriscale-voice config list         # every key: current value, default, meaning
 iriscale-voice config get preset
 iriscale-voice config set preset basic
 iriscale-voice config unset quiet_hours
 iriscale-voice config path         # where the file is
+iriscale-voice mute | unmute
 iriscale-voice events              # every event, when it fires, what it says
 iriscale-voice presets
 iriscale-voice test                # speak a test phrase
+iriscale-voice say "any text"
+iriscale-voice doctor codex        # check a Codex setup
+iriscale-voice install codex       # print Codex snippets; --apply installs them (Windows)
+iriscale-voice update | uninstall codex     # Windows installs
+iriscale-voice completions powershell|bash|zsh
 iriscale-voice --version
 ```
 
@@ -101,14 +113,14 @@ once. The plugin installs it at
 git checkout it's `bin/iriscale-voice`.
 
 ```sh
-# macOS / Linux
-ln -s "$(pwd)/bin/iriscale-voice" ~/.local/bin/iriscale-voice
-# Windows (Git Bash)
-ln -s "$(pwd)/bin/iriscale-voice" /usr/bin/iriscale-voice      # or any dir on PATH
+# macOS / Linux: from a git checkout (the plugin-cache path changes with each version)
+git clone https://github.com/justbuild-it/iriscale_voice ~/.iriscale-voice
+ln -s ~/.iriscale-voice/bin/iriscale-voice ~/.local/bin/iriscale-voice
 ```
 
-Then `iriscale-voice --help` works anywhere. Until you do that, `sh bin/iriscale-voice …`
-from the checkout works too.
+Then `iriscale-voice --help` works anywhere, and `git -C ~/.iriscale-voice pull` upgrades.
+On Windows use the installer in the README instead — it puts a stable launcher on PATH
+and handles updates.
 
 ## Debugging
 
