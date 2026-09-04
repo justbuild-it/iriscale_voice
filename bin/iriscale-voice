@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.17"
+VERSION="0.1.18"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -243,6 +243,9 @@ log|$CLAUDE_DIR/iriscale-voice.log|tab-separated activity log; \`none\` disables
 board_ready_minutes|15|on the board, a finished session shows READY for this long, then idle
 board_hide_hours|24|the board hides sessions with no event for this long
 board_interval|30|seconds between board heartbeats (ages tick); state changes redraw immediately
+board_autostart|false|true = whenever a session event arrives and no board window is open, open one (own terminal window, off to the side)
+board_window|84,20|board window size as columns,rows (Windows Terminal)
+board_window_pos|1100,80|board window position as x,y pixels (Windows Terminal)
 EOF
 }
 events_table() {
@@ -279,7 +282,7 @@ COMMANDS
   sessions [--plain]     every live session: state, how long, what was last said
   board [--interval N]   the same, live; redraws only on change; click a row or press
                          its number to bring that session's window to the front; q quits
-                         (--once prints one frame and exits)
+                         (--once prints one frame; --open starts it in its own window)
   focus <n|name|pid>     bring a session's window (or its host IDE/terminal) to the front
                          (Windows; Linux with wmctrl; not yet on macOS)
   install codex          print Codex config snippets with absolute paths
@@ -633,8 +636,45 @@ EOF
 
 # Live board: repaint only when a state file changes (or on the heartbeat so the
 # "for" column ticks). Cursor-home + overwrite, never clear -> no flicker. q quits.
+# Is a board already running? Its pid file is written by cli_board and removed on exit.
+board_alive() {
+    [ -f "$STATE/board.pid" ] || return 1
+    IFS= read -r _bp < "$STATE/board.pid" 2>/dev/null || return 1
+    case $_bp in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$_bp" 2>/dev/null
+}
+
+# Open the board in its own terminal window, detached, and return at once. Used by
+# `board --open`, the /iriscale-voice:board command, and board_autostart on hook events.
+cli_board_open() {
+    if board_alive; then echo "board is already running"; return 0; fi
+    case $0 in */*) _me=$0 ;; *) _me=$(command -v "$0") ;; esac
+    case "$(os)" in
+        win)
+            command -v cygpath >/dev/null 2>&1 || { echo "board --open needs Git Bash (cygpath)" >&2; return 1; }
+            _mew=$(cygpath -m "$_me"); _bash="$(cygpath -m /)/bin/bash.exe"
+            cfgv geom board_window "84,20"; cfgv pos board_window_pos "1100,80"
+            # NB: wt treats ';' as its own separator - keep the command line free of them
+            ( wt.exe -w iriscale-board --size "$geom" --pos "$pos" --title sessions "$_bash" "$_mew" board ) </dev/null >/dev/null 2>&1 &
+            echo "opened the board in a new Windows Terminal window" ;;
+        mac)
+            ( osascript -e "tell application \"Terminal\" to do script \"'$_me' board\"" ) </dev/null >/dev/null 2>&1 &
+            echo "opened the board in a new Terminal window" ;;
+        *)
+            for _t in x-terminal-emulator gnome-terminal konsole xterm; do
+                if command -v "$_t" >/dev/null 2>&1; then
+                    case $_t in gnome-terminal) ( "$_t" -- "$_me" board ) </dev/null >/dev/null 2>&1 & ;;
+                                *)              ( "$_t" -e "$_me board" ) </dev/null >/dev/null 2>&1 & ;; esac
+                    echo "opened the board in a new $_t window"; return 0
+                fi
+            done
+            echo "no terminal emulator found to open the board in; run: iriscale-voice board" >&2; return 1 ;;
+    esac
+}
+
 cli_board() {
-    interval=""; while [ $# -gt 0 ]; do case $1 in --interval) interval=$2; shift ;; --once) cli_sessions --keys; return 0 ;; esac; shift; done
+    interval=""; while [ $# -gt 0 ]; do case $1 in --interval) interval=$2; shift ;; --once) cli_sessions --keys; return 0 ;; --open) cli_board_open; return $? ;; esac; shift; done
+    printf '%s\n' "$$" > "$STATE/board.pid" 2>/dev/null
     [ -n "$interval" ] || cfgv interval board_interval 30
     # keys and clicks need `read -n/-t`; plain POSIX sh (dash) lacks them, so re-run the
     # board under bash or zsh when we are not already in one.
@@ -647,7 +687,7 @@ cli_board() {
     # raw keys + mouse reporting (SGR 1006 gives unambiguous row numbers). Restored on exit.
     old_stty=$(stty -g 2>/dev/null)
     stty -echo -icanon 2>/dev/null
-    board_exit() { printf '\033[?1006l\033[?1000l\033[?25h'; [ -n "$old_stty" ] && stty "$old_stty" 2>/dev/null; }
+    board_exit() { printf '\033[?1006l\033[?1000l\033[?25h'; [ -n "$old_stty" ] && stty "$old_stty" 2>/dev/null; rm -f "$STATE/board.pid" 2>/dev/null; }
     trap 'board_exit; exit 0' INT TERM EXIT
     printf '\033[?25l\033[?1000h\033[?1006h'
     last_sig=""; last_paint=0; note=""
@@ -991,6 +1031,14 @@ if [ -z "$reason" ] && [ "$NOW" -gt 0 ] && [ "$cool" -gt 0 ] 2>/dev/null && [ -f
     fi
 fi
 [ -z "$reason" ] && printf '%s\n%s\n' "$NOW" "$line" > "$lastf" 2>/dev/null
+
+# keep the board window open if asked to: on any event, if board_autostart is on and no
+# board is alive, open one (detached; ~two spawns, and only when it is actually missing)
+cfgv autostart board_autostart false
+if [ "$autostart" = true ] && ! board_alive; then
+    if [ -n "$IRISCALE_VOICE_DEBUG" ]; then echo "(board_autostart: would open the board)"
+    else cli_board_open >/dev/null 2>&1; fi
+fi
 
 # record the session's new state for the board, whether or not we speak
 if [ -n "$st_new" ]; then

@@ -5,6 +5,19 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.18] — 2026-09-04
+
+### Added
+- **The board can keep itself open.** `board_autostart=true`: on any session event, if
+  no board window is alive (pid file + `kill -0`), one is opened in its own terminal
+  window — Windows Terminal on Windows (`board_window`, `board_window_pos` for size and
+  place), Terminal.app on macOS, the first of `x-terminal-emulator`/`gnome-terminal`/
+  `konsole`/`xterm` on Linux. So it comes back after an update, a reboot, or an
+  accidental close, with nothing for the user to restart.
+- `iriscale-voice board --open` and the `/iriscale-voice:board` slash command: start the
+  board in its own window and return.
+- The board writes `$TMP/iriscale-voice/board.pid` while running and removes it on exit.
+
 ## [0.1.17] — 2026-09-03
 
 Release-readiness pass: two independent reviews (security/robustness, docs/UX) plus
@@ -320,7 +333,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.17...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.18...HEAD
+[0.1.18]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.14...v0.1.15

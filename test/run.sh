@@ -153,6 +153,15 @@ plain_esc=$(sh "$S" sessions --plain | od -An -c | grep -c '033')
 printf '%s' "$B1" | sh "$S" SessionEnd >/dev/null
 [ ! -f "$SESSD/brd-1" ];                                  ok $? 0 "SessionEnd removes the state file"
 sh "$S" board --once --plain >/dev/null 2>&1;             ok $? 0 "board --once exits"
+# board autostart: off by default -> no attempt; on + board alive (pid file = this shell) -> no attempt; on + no board -> attempt
+out=$(printf '%s' "$B1" | sh "$S" Stop); case "$out" in *board_autostart*) fail=$((fail+1)); echo "FAIL autostart fired while off: $out" ;; *) pass=$((pass+1)) ;; esac
+sh "$S" config set board_autostart true >/dev/null
+printf '%s\n' "$$" > "${TMPDIR:-/tmp}/iriscale-voice/board.pid"
+out=$(printf '%s' "$B1" | sh "$S" Stop); case "$out" in *board_autostart*) fail=$((fail+1)); echo "FAIL autostart fired while a board is alive: $out" ;; *) pass=$((pass+1)) ;; esac
+rm -f "${TMPDIR:-/tmp}/iriscale-voice/board.pid"
+out=$(printf '%s' "$B1" | sh "$S" Stop); case "$out" in *"would open the board"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL autostart did not fire with no board: $out" ;; esac
+sh "$S" config unset board_autostart >/dev/null
+sh "$S" --help | grep -- '--open' >/dev/null;              ok $? 0 "help mentions board --open"
 # click-to-focus: numbered rows, a rows map, and `focus` resolution
 kout=$(sh "$S" sessions --keys --plain)
 printf '%s' "$kout" | grep -q '^1 .*payments_api';        ok $? 0 "keys mode numbers the top row"

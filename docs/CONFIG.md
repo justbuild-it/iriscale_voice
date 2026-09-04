@@ -50,6 +50,9 @@ The file is created the first time a setting is written (`config set`, a preset 
 | `board_ready_minutes` | `15` | on the board, a finished session shows **READY** for this long, then **idle** |
 | `board_hide_hours` | `24` | the board hides sessions with no event for this long |
 | `board_interval` | `30` | seconds between board heartbeats (the *for* column ticks); a state change redraws immediately regardless |
+| `board_autostart` | `false` | `true` = whenever a session event arrives and no board window is open, open one in its own terminal window. The board comes back by itself after an update, a reboot, or an accidental close |
+| `board_window` | `84,20` | board window size, columns,rows (Windows Terminal) |
+| `board_window_pos` | `1100,80` | board window position, x,y pixels (Windows Terminal) |
 
 ## The session board
 
@@ -57,6 +60,13 @@ The file is created the first time a setting is written (`config set`, a preset 
 iriscale-voice sessions            # one frame: every live session, state, how long, what was last said
 iriscale-voice board               # live; redraws only when a session changes state; q quits
 iriscale-voice board --interval 10 # heartbeat every 10 s instead of 30
+```
+
+`iriscale-voice board --open` (or `/iriscale-voice:board` in Claude Code) starts it in its
+own window and returns. To have it open itself whenever it's missing:
+
+```sh
+iriscale-voice config set board_autostart true
 ```
 
 State comes from one small file per session in `~/.claude/iriscale-voice-sessions/`,
