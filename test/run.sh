@@ -238,6 +238,7 @@ ok "$v_codex" "$v_script" ".codex-plugin/plugin.json version == script VERSION"
 # the pinned install URLs and the installer's default -Ref must name this release
 v_ref=$(grep -o "\[string\]\$Ref = 'v[^']*'" "$here/../install.ps1" | sed "s/.*'v\([^']*\)'/\1/")
 ok "$v_ref" "$v_script" "install.ps1 -Ref default == script VERSION"
+grep -q "releases/latest" "$here/../install.ps1";           ok $? 0 "install.ps1 -Update resolves the latest release (not the pinned ref)"
 grep -q "iriscale_voice/v$v_script/install.ps1" "$here/../README.md";   ok $? 0 "README one-liner pins v$v_script"
 grep -q "iriscale_voice/v$v_script/install.ps1" "$here/../SECURITY.md"; ok $? 0 "SECURITY.md pins v$v_script"
 ok "$v_codex" "$v_script" "Codex plugin version == script VERSION"

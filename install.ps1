@@ -9,10 +9,19 @@ param(
     [switch]$SkipProfile,
     # Git ref to install from. Defaults to the release tag matching this installer, so a
     # pinned install.ps1 installs exactly that release. Pass -Ref main for the tip.
-    [string]$Ref = 'v0.1.18'
+    [string]$Ref = 'v0.1.19'
 )
 
 $ErrorActionPreference = 'Stop'
+# The installed copy of this file is pinned to the release it installed, so a bare
+# -Update re-installed the same version forever (0.1.17 -> 0.1.17). Now -Update with no
+# explicit -Ref asks GitHub for the latest release tag and installs that.
+if ($Update -and -not $SourcePath -and -not $PSBoundParameters.ContainsKey('Ref')) {
+    try {
+        $latest = (Invoke-RestMethod 'https://api.github.com/repos/justbuild-it/iriscale_voice/releases/latest' -Headers @{ 'User-Agent' = 'iriscale-voice' }).tag_name
+        if ($latest -match '^v\d+\.\d+\.\d+$') { $Ref = $latest }
+    } catch { Write-Host "could not look up the latest release; staying on $Ref" }
+}
 $repo = "https://raw.githubusercontent.com/justbuild-it/iriscale_voice/$Ref"
 $binDir = Join-Path $InstallRoot 'bin'
 $scriptPath = Join-Path $binDir 'iriscale-voice'
@@ -225,6 +234,7 @@ Write-Utf8NoBom $hooksPath (($hooksDoc | ConvertTo-Json -Depth 20) + [Environmen
 
 Write-Host $(if ($Update) { 'Iriscale Voice updated.' } else { 'Iriscale Voice installed.' })
 Write-Host "  executable: $launcherPath"
+Write-Host "  release:    $Ref"
 Write-Host "  Codex config: $configPath"
 Write-Host "  Codex hooks:  $hooksPath"
 Write-Host "  Codex skill:  $skillDir"

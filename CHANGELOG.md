@@ -5,6 +5,15 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.19] — 2026-09-04
+
+### Fixed
+- **`iriscale-voice update` now actually updates.** The installed `install.ps1` is pinned
+  to the release it installed (a supply-chain measure from 0.1.17), and `update` re-ran
+  it as-is - so it re-installed the same version forever. `-Update` with no explicit
+  `-Ref` now asks GitHub for the latest release tag and installs that; if the lookup
+  fails it says so and stays put. The installer also prints which release it installed.
+
 ## [0.1.18] — 2026-09-04
 
 ### Added
@@ -342,7 +351,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.18...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.19...HEAD
+[0.1.19]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.15...v0.1.16
