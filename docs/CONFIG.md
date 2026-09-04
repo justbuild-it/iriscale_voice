@@ -48,7 +48,7 @@ The file is created the first time a setting is written (`config set`, a preset 
 | `repeat_cooldown` | `60` | seconds; the *same* announcement for the *same* session inside this window is said once. Guards against a looping subagent or a double-firing hook. `0` disables |
 | `log` | `~/.claude/iriscale-voice.log` | tab-separated `time  event  text`. `none` to disable |
 | `board_ready_minutes` | `15` | on the board, a finished session shows **READY** for this long, then **idle** |
-| `board_hide_hours` | `24` | the board hides sessions with no event for this long |
+| `board_hide_hours` | `24` | a session with no process and no event for this long is forgotten (Codex records no pid) |
 | `board_interval` | `30` | seconds between board heartbeats (the *for* column ticks); a state change redraws immediately regardless |
 | `board_autostart` | `false` | `true` = whenever a session event arrives and no board window is open, open one in its own terminal window. The board comes back by itself after an update, a reboot, or an accidental close |
 | `board_window` | `84,20` | board window size, columns,rows (Windows Terminal) |
@@ -68,6 +68,12 @@ own window and returns. To have it open itself whenever it's missing:
 ```sh
 iriscale-voice config set board_autostart true
 ```
+
+The board forgets a session when its process is gone (checked by `sessions`, and by the
+board once a minute). A session that records no pid - Codex, or an event you fed by hand
+while developing - is forgotten after `board_hide_hours` (24) without an event. To drop
+rows now: `iriscale-voice forget <name>` or `forget --all`; a session comes back on its
+next event.
 
 State comes from one small file per session in `~/.claude/iriscale-voice-sessions/`,
 written by the same script on every hook event — so any agent that calls it feeds the
@@ -97,6 +103,7 @@ iriscale-voice status              # what's configured, what will speak
 iriscale-voice sessions [--plain]  # every live session, one frame
 iriscale-voice board               # live board; click/number a row to raise it; q quits
 iriscale-voice focus <n|name|pid>  # raise a session's window (Windows; Linux with wmctrl)
+iriscale-voice forget <name|--all> # drop a row from the board now
 iriscale-voice config list         # every key: current value, default, meaning
 iriscale-voice config get preset
 iriscale-voice config set preset basic
@@ -139,4 +146,6 @@ IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json   # prints the 
 tail ~/.claude/iriscale-voice.log                             # what actually fired
 ```
 
-`test/run.sh` fires every event through every preset in debug mode.
+`test/run.sh` fires every event through every preset in debug mode. Events you feed by
+hand land on the board like real ones; point `CLAUDE_CONFIG_DIR` at a scratch directory
+(the suite does) or `iriscale-voice forget --all` afterwards.

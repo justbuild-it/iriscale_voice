@@ -17,6 +17,15 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 - `iriscale-voice board --open` and the `/iriscale-voice:board` slash command: start the
   board in its own window and return.
 - The board writes `$TMP/iriscale-voice/board.pid` while running and removes it on exit.
+- `iriscale-voice forget <name|--all>`: drop rows from the board now.
+
+### Fixed
+- **The board no longer fills up with sessions that are gone.** A session whose process
+  has exited is forgotten (Claude records its pid; on Windows one `ps -W` per sweep, since
+  MSYS `kill -0` cannot see Windows pids); a session with no pid - Codex, or an event fed
+  by hand while developing - is forgotten after `board_hide_hours` without an event,
+  instead of being merely hidden. Swept by `sessions` and by the board once a minute;
+  never on the hook path.
 
 ## [0.1.17] — 2026-09-03
 

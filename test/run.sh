@@ -336,5 +336,58 @@ if [ "$(sh "$S" status | sed -n "s/.*os: //p" | sed "s/ .*//")" = win ]; then
     sh "$S" install codex | grep "usr/bin/sh.exe" >/dev/null && { fail=$((fail+1)); echo "FAIL install codex printed raw usr/bin/sh.exe"; } || pass=$((pass+1))
 fi
 
+# Board hygiene: `sessions` forgets a session whose process is gone; a pid-less row (Codex,
+# a hand-fed event) stays while fresh and is forgotten after board_hide_hours; `forget`
+# drops rows by name or all at once.
+sh -c "exit 0" & deadpid=$!; wait "$deadpid" 2>/dev/null || :
+printf "agent=claude
+name=gone_session
+status=ready
+since=1
+updated=%s
+pid=%s
+cwd=/x
+said=
+" "$(date +%s)" "$deadpid" > "$SESSD/prune-1"
+printf "agent=codex
+name=fresh_codex
+status=waiting
+since=1
+updated=%s
+pid=
+cwd=/x
+said=
+" "$(date +%s)" > "$SESSD/prune-2"
+printf "agent=agent
+name=ancient_row
+status=ready
+since=1
+updated=1
+pid=
+cwd=/x
+said=
+" > "$SESSD/prune-3"
+printf "agent=claude
+name=live_session
+status=working
+since=1
+updated=%s
+pid=%s
+cwd=/x
+said=
+" "$(date +%s)" "$$" > "$SESSD/prune-4"
+out=$(sh "$S" sessions --plain)
+[ ! -f "$SESSD/prune-1" ];                               ok $? 0 "sessions forgets a session whose process is gone"
+[ -f "$SESSD/prune-2" ];                                 ok $? 0 "sessions keeps a fresh session with no pid (Codex)"
+[ ! -f "$SESSD/prune-3" ];                               ok $? 0 "sessions forgets a pid-less session older than board_hide_hours"
+[ -f "$SESSD/prune-4" ];                                 ok $? 0 "sessions keeps a session whose process is alive"
+printf "%s" "$out" | grep -q live_session;                 ok $? 0 "the live session is listed"
+printf "%s" "$out" | grep -q gone_session;                 ok $? 1 "the gone session is not listed"
+sh "$S" forget fresh_codex | grep -q "forgot 1";           ok $? 0 "forget <name> drops that row"
+[ ! -f "$SESSD/prune-2" ];                               ok $? 0 "forget removed the state file"
+sh "$S" forget --all >/dev/null; [ -z "$(ls "$SESSD" 2>/dev/null)" ]; ok $? 0 "forget --all empties the board"
+sh "$S" forget >/dev/null 2>&1;                            ok $? 2 "forget with no argument is usage (exit 2)"
+sh "$S" --help | grep -q "forget <name";                   ok $? 0 "help lists forget"
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

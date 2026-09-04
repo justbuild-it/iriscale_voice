@@ -176,7 +176,7 @@ above — tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
 
 ```sh
 sh test/run.sh                                  # full event, CLI, installer, and performance suite
-IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json
+IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json   # shows on the board too: forget --all after
 claude plugin validate .                        # manifests
 claude plugin marketplace add /path/to/checkout && claude plugin install iriscale-voice@iriscale
 ```

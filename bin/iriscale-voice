@@ -241,7 +241,7 @@ volume|100|0-100 (Windows only; others use system volume)
 serialize|true|queue announcements so concurrent sessions never overlap
 log|$CLAUDE_DIR/iriscale-voice.log|tab-separated activity log; \`none\` disables
 board_ready_minutes|15|on the board, a finished session shows READY for this long, then idle
-board_hide_hours|24|the board hides sessions with no event for this long
+board_hide_hours|24|a session with no process and no event for this long is forgotten (Codex records no pid)
 board_interval|30|seconds between board heartbeats (ages tick); state changes redraw immediately
 board_autostart|false|true = whenever a session event arrives and no board window is open, open one (own terminal window, off to the side)
 board_window|84,20|board window size as columns,rows (Windows Terminal)
@@ -284,6 +284,7 @@ COMMANDS
                          its number to bring that session's window to the front; q quits
                          (--once prints one frame; --open starts it in its own window)
   focus <n|name|pid>     bring a session's window (or its host IDE/terminal) to the front
+  forget <name|--all>    drop a session from the board now (it returns on its next event)
                          (Windows; Linux with wmctrl; not yet on macOS)
   install codex          print Codex config snippets with absolute paths
   install codex --apply  install launcher, completion, notify, and hooks (Windows)
@@ -503,6 +504,52 @@ cli_windows_lifecycle() {
 # ---------- session board -----------------------------------------------------
 _ago() { s=$1; if [ "$s" -lt 60 ]; then printf '%ss' "$s"; elif [ "$s" -lt 3600 ]; then printf '%sm' "$((s/60))"; else printf '%sh' "$((s/3600))"; fi; }
 
+# Is process $1 alive? Under MSYS `kill -0` cannot see Windows pids, so on Windows
+# prune_dead lists them once with `ps -W` (about a second on a busy machine) into
+# WINPS, the WINPID column with a space either side. If that listing failed, assume
+# alive: a stale row is better than dropping every session.
+WINPS=""; PRUNED=""
+pid_alive() {
+    case $1 in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$1" 2>/dev/null && return 0
+    case "${OS:-}" in Windows_NT)
+        [ -n "$WINPS" ] || return 0
+        case "$WINPS" in *" $1 "*) return 0 ;; *) return 1 ;; esac ;;
+    esac
+    return 1
+}
+# Forget sessions whose process is gone. A session that recorded no pid (Codex, a
+# hand-fed event) is forgotten after board_hide_hours without an event. Costs a
+# process or two, so: `sessions`, the board once a minute, never the hook path.
+prune_dead() {
+    case "${OS:-}" in Windows_NT) WINPS=$(ps -W 2>/dev/null | awk 'NR>1{printf " %s ", $4}') ;; esac
+    PRUNED=1
+    cfgv hideh board_hide_hours 24
+    _pn=$(date +%s 2>/dev/null); case $_pn in ''|*[!0-9]*) return 0 ;; esac
+    for _pf in "$SESS"/*; do
+        [ -f "$_pf" ] || continue; _pp=""; _pu=""
+        while IFS= read -r _pl || [ -n "$_pl" ]; do case $_pl in pid=*) _pp=${_pl#pid=} ;; updated=*) _pu=${_pl#updated=} ;; esac; done < "$_pf"
+        if [ -n "$_pp" ]; then pid_alive "$_pp" || rm -f "$_pf" 2>/dev/null
+        else case $_pu in ''|*[!0-9]*) _pu=0 ;; esac; [ $(( _pn - _pu )) -gt $(( hideh * 3600 )) ] && rm -f "$_pf" 2>/dev/null; fi
+    done
+    return 0
+}
+# forget <name|--all>: drop sessions from the board now; each comes back on its next event.
+cli_forget() {
+    [ -n "$1" ] || { echo "usage: iriscale-voice forget <session-name|--all>" >&2; return 2; }
+    _fc=0
+    for _ff in "$SESS"/*; do
+        [ -f "$_ff" ] || continue
+        if [ "$1" != --all ]; then
+            _fn=""; while IFS= read -r _fl || [ -n "$_fl" ]; do case $_fl in name=*) _fn=${_fl#name=} ;; esac; done < "$_ff"
+            [ "$_fn" = "$1" ] || continue
+        fi
+        rm -f "$_ff" 2>/dev/null && _fc=$((_fc+1))
+    done
+    echo "forgot $_fc session(s)"
+    return 0
+}
+
 # Render one frame of the board to stdout. Rows come from $SESS state files; Claude
 # sessions that predate the state layer are synthesized from ~/.claude/sessions so
 # nothing is missing on first run. Sorted: needs you first, then ready, working, idle.
@@ -531,10 +578,11 @@ cli_sessions() {
             [ -f "$f" ] || continue
             IFS= read -r sj < "$f" || :
             csid=$(jget sessionId "$sj"); case $seen in *" $csid "*) continue ;; esac
+            fp=$(jnum pid "$sj"); if [ -n "$PRUNED" ] && ! pid_alive "$fp"; then continue; fi
             n=$(jget name "$sj"); [ -n "$n" ] || { n=$(jget cwd "$sj"); n=${n##*\\}; n=${n##*/}; }
             cst=$(jget status "$sj"); ts=$(jnum statusUpdatedAt "$sj"); ts=$(( ${ts:-0} / 1000 ))
             case $cst in busy) st=working ;; *) st=ready ;; esac
-            rows="$rows$(_row claude "$n" "$st" "$ts" "$ts" "" "$(jnum pid "$sj")")$NL"
+            rows="$rows$(_row claude "$n" "$st" "$ts" "$ts" "" "$fp")$NL"
         done
     fi
     printf "${B}iriscale voice${N} ${D}v$VERSION${N}   ${B}sessions${N}   ${D}updated %s${N}\n\n" "$(date +%H:%M:%S 2>/dev/null)"
@@ -690,13 +738,14 @@ cli_board() {
     board_exit() { printf '\033[?1006l\033[?1000l\033[?25h'; [ -n "$old_stty" ] && stty "$old_stty" 2>/dev/null; rm -f "$STATE/board.pid" 2>/dev/null; }
     trap 'board_exit; exit 0' INT TERM EXIT
     printf '\033[?25l\033[?1000h\033[?1006h'
-    last_sig=""; last_paint=0; note=""
+    last_sig=""; last_paint=0; last_prune=0; note=""
     while :; do
+        t=$(date +%s 2>/dev/null); case $t in ""|*[!0-9]*) t=0 ;; esac
+        if [ $(( t - last_prune )) -ge 60 ]; then prune_dead; last_prune=$t; fi
         sig=""
         for sf in "$SESS"/* "$CLAUDE_DIR"/sessions/*.json; do [ -f "$sf" ] || continue; IFS= read -r l < "$sf" 2>/dev/null || :; sig="$sig$l"; done
         # state files are multi-line; fold the whole file in
         for sf in "$SESS"/*; do [ -f "$sf" ] || continue; while IFS= read -r l || [ -n "$l" ]; do sig="$sig$l"; done < "$sf"; done
-        t=$(date +%s 2>/dev/null); case $t in ''|*[!0-9]*) t=0 ;; esac
         if [ "$sig" != "$last_sig" ] || [ $(( t - last_paint )) -ge "$interval" ] || [ -n "$note" ]; then
             printf '\033[H'; cli_sessions --keys; [ -n "$note" ] && printf '  %s\033[K\n' "$note"; printf '\033[J'
             last_sig=$sig; last_paint=$t; note=""
@@ -772,9 +821,10 @@ case "$EVENT" in
     help|-h|--help|"?")  usage; exit 0 ;;
     -V|--version|version) echo "$VERSION"; exit 0 ;;
     status)  cli_status; exit $? ;;
-    sessions) shift; cli_sessions "$@"; exit $? ;;
+    sessions) shift; prune_dead; cli_sessions "$@"; exit $? ;;
     board)   shift; cli_board "$@"; exit $? ;;
     focus)   shift; cli_focus "$@"; exit $? ;;
+    forget)  shift; cli_forget "$@"; exit $? ;;
     install) shift; cli_install "$@"; exit $? ;;
     doctor)  shift; cli_doctor "$@"; exit $? ;;
     completions) shift; cli_completions "$@"; exit $? ;;
