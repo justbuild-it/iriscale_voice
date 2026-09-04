@@ -55,7 +55,7 @@ Then run `/iriscale-voice:test` — you should hear it. (Type `/iriscale-voice:`
 Run once in PowerShell (Git for Windows is the only prerequisite):
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.17/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.18/install.ps1 | iex
 ```
 
 Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show
@@ -115,6 +115,13 @@ sessions alike):
 wt -w iriscale --size 64,18 --pos 1180,80 --title sessions iriscale-voice board
 ```
 
+Or let it look after itself — with this on, the next session event opens the window
+if it isn't already there (after an update, a reboot, a stray close):
+
+```
+/iriscale-voice:config set board_autostart true      # /iriscale-voice:board opens it once
+```
+
 `iriscale-voice sessions` prints one frame for scripts. Details: [docs/CONFIG.md](docs/CONFIG.md#the-session-board).
 
 ## What it says, and when
@@ -169,7 +176,7 @@ above — tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
 
 ```sh
 sh test/run.sh                                  # full event, CLI, installer, and performance suite
-IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json
+IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json   # shows on the board too: forget --all after
 claude plugin validate .                        # manifests
 claude plugin marketplace add /path/to/checkout && claude plugin install iriscale-voice@iriscale
 ```

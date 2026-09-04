@@ -9,7 +9,7 @@ param(
     [switch]$SkipProfile,
     # Git ref to install from. Defaults to the release tag matching this installer, so a
     # pinned install.ps1 installs exactly that release. Pass -Ref main for the tip.
-    [string]$Ref = 'v0.1.17'
+    [string]$Ref = 'v0.1.18'
 )
 
 $ErrorActionPreference = 'Stop'
