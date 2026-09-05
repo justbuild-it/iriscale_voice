@@ -44,7 +44,10 @@ Inside Claude Code:
 /plugin install iriscale-voice@iriscale
 ```
 
-Then run `/iriscale-voice:test` — you should hear it. (Type `/iriscale-voice:` and autocomplete lists every command.) That's it; the `standard` preset is on.
+Then run `/iriscale-voice:test` — you should hear it. Silent on Windows? The same command
+says why: Windows keeps a per-app volume for PowerShell in the Volume Mixer, and every
+announcement is spoken through PowerShell, so a stray drag to 0% there mutes the plugin
+everywhere. `/iriscale-voice:test --fix` puts it back to 100%. (Type `/iriscale-voice:` and autocomplete lists every command.) That's it; the `standard` preset is on.
 
 > Windows: hooks run through Git Bash, which nearly every Claude Code install on
 > Windows already has. If `sh` isn't on your PATH, install
@@ -55,7 +58,7 @@ Then run `/iriscale-voice:test` — you should hear it. (Type `/iriscale-voice:`
 Run once in PowerShell (Git for Windows is the only prerequisite):
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.19/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.20/install.ps1 | iex
 ```
 
 Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show

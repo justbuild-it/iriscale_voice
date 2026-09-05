@@ -390,5 +390,16 @@ sh "$S" forget --all >/dev/null; [ -z "$(ls "$SESSD" 2>/dev/null)" ]; ok $? 0 "f
 sh "$S" forget >/dev/null 2>&1;                            ok $? 2 "forget with no argument is usage (exit 2)"
 sh "$S" --help | grep -q "forget <name";                   ok $? 0 "help lists forget"
 
+# Volume Mixer verdicts (Windows): pure string logic, checked everywhere via the hidden mixer-verdict entry.
+sh "$S" mixer-verdict "app=0 appmuted=False master=50 mastermuted=False fixed=False" | grep -q "at 0% in the Volume Mixer.*test --fix"; ok $? 0 "mixer: 0% app level warns and names test --fix"
+sh "$S" mixer-verdict "app=100 appmuted=True master=50 mastermuted=False fixed=False" | grep -q "muted in the Volume Mixer"; ok $? 0 "mixer: muted app warns"
+[ -z "$(sh "$S" mixer-verdict "app=100 appmuted=False master=50 mastermuted=False fixed=False")" ]; ok $? 0 "mixer: healthy levels print nothing"
+sh "$S" mixer-verdict "app=12 appmuted=False master=50 mastermuted=False fixed=False" | grep -q "note: Windows PowerShell is at 12%"; ok $? 0 "mixer: low app level is a note"
+sh "$S" mixer-verdict "app=100 appmuted=False master=50 mastermuted=False fixed=True" | grep -q "restored Windows PowerShell to 100%"; ok $? 0 "mixer: --fix reports the restore"
+sh "$S" mixer-verdict "app=100 appmuted=False master=0 mastermuted=True fixed=False" | grep -q "output device is muted"; ok $? 0 "mixer: muted output device warns"
+sh "$S" mixer-verdict "app=? appmuted=? master=? mastermuted=? fixed=False" | grep -q .; ok $? 1 "mixer: unknown report prints nothing"
+sh "$S" --help | grep -q "test \[--fix\]"; ok $? 0 "help documents test --fix"
+grep -q 'test $ARGUMENTS' "$here/../commands/test.md"; ok $? 0 "/iriscale-voice:test passes arguments through"
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
