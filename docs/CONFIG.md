@@ -112,7 +112,7 @@ iriscale-voice config path         # where the file is
 iriscale-voice mute | unmute
 iriscale-voice events              # every event, when it fires, what it says
 iriscale-voice presets
-iriscale-voice test                # speak a test phrase
+iriscale-voice test [--fix]        # speak a test phrase; Windows: also reads the Volume Mixer level for PowerShell, --fix restores 100%
 iriscale-voice say "any text"
 iriscale-voice doctor codex        # check a Codex setup
 iriscale-voice install codex       # print Codex snippets; --apply installs them (Windows)
