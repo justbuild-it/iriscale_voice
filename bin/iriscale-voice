@@ -845,7 +845,12 @@ case "$EVENT" in
         printf '  %-18s %-46s %s\n' EVENT "WHEN IT FIRES" "WHAT IT SAYS"
         events_table | while IFS='|' read -r e w s; do printf '  %-18s %-46s %s\n' "$e" "$w" "$s"; done; exit 0 ;;
     say|speak) shift; speak "${*:-iriscale voice test}"; exit 0 ;;
-    test)    speak "iriscale voice is working"; echo "spoke a test phrase via $(os) backend"; exit 0 ;;
+    test)    cfgv enabled enabled true
+             if [ -n "$IRISCALE_VOICE_OFF" ] || [ "$enabled" != "true" ]; then
+                 echo "muted - not speaking. Run 'unmute' first, or 'say <text>' to force speech while muted."
+                 exit 0
+             fi
+             speak "iriscale voice is working"; echo "spoke a test phrase via $(os) backend"; exit 0 ;;
     -*)      echo "unknown option: $EVENT" >&2; usage >&2; exit 2 ;;
 esac
 
