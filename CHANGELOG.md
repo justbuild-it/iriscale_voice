@@ -5,6 +5,14 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+### Fixed
+- **`test` now respects `mute`.** It used to call the speech backend unconditionally,
+  so `mute` (`enabled=false`) could not be trusted to mean "totally silent" - a muted
+  `test` still spoke. It now checks `enabled` (and `IRISCALE_VOICE_OFF`) first and, if
+  muted, prints a message instead of speaking and points to `say <text>` for anyone who
+  deliberately wants to force speech while muted (e.g. to sanity-check the backend before
+  unmuting).
+
 ## [0.1.19] — 2026-09-04
 
 ### Fixed

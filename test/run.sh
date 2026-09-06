@@ -319,6 +319,21 @@ t1=$(date +%s)
 if [ $((t1 - t0)) -le 2 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook blocked $((t1 - t0))s on speech - must background the speaker (limit 2s; the bug was 7s)"; fi
 sleep 4   # let the stubbed background speaker finish before the trap cleans the shim dir
 
+# `test` (the CLI diagnostic) must honor mute, not just hook events (regression: it used
+# to call the speech backend unconditionally, so `mute` could not be trusted to mean
+# "totally silent" - see the muted-test-still-spoke report).
+for spk in powershell.exe say spd-say espeak-ng espeak; do
+    printf '#!/bin/sh\necho spoke >> "%s"\n' "$SHIM/.speak.log" > "$SHIM/$spk"; chmod +x "$SHIM/$spk"
+done
+sh "$S" mute >/dev/null; : > "$SHIM/.speak.log"
+out=$(PATH="$SHIM:$PATH" sh "$S" test)
+case "$out" in muted*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL muted \`test\` must say so, not attempt speech: $out" ;; esac
+[ -s "$SHIM/.speak.log" ] && { fail=$((fail+1)); echo "FAIL \`test\` called the speech backend while muted"; } || pass=$((pass+1))
+sh "$S" unmute >/dev/null; : > "$SHIM/.speak.log"
+out=$(PATH="$SHIM:$PATH" sh "$S" test)
+case "$out" in "spoke a test phrase"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL unmuted \`test\` must still speak: $out" ;; esac
+[ -s "$SHIM/.speak.log" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL \`test\` did not call the speech backend once unmuted"; }
+
 # Degraded-environment guards (Codex launched the raw MSYS sh.exe with no /usr/bin on
 # PATH: date/uname/tr were all missing and hooks errored or mis-suppressed).
 # 1. os() must answer from $OS without uname.
