@@ -58,7 +58,7 @@ everywhere. `/iriscale-voice:test --fix` puts it back to 100%. (Type `/iriscale-
 Run once in PowerShell (Git for Windows is the only prerequisite):
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.21/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.22/install.ps1 | iex
 ```
 
 Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show
@@ -132,6 +132,8 @@ if it isn't already there (after an update, a reboot, a stray close):
 | the session… | you hear | what to do |
 |---|---|---|
 | finished its turn | *"my service done"* — *"…done after 6 minutes"* for long ones | review it when you reach a stopping point |
+| finished a turn but background agents or tasks are still running | nothing (verbose: *"…finished a step, 1 agent still running"*) - the board shows *working · waiting for 1 agent: …* | nothing; it wakes itself and says "done" when the whole job is finished |
+| paused for a `/loop` or scheduled wake-up | nothing (verbose: *"…paused until its next wake-up"*) - the board shows *scheduled* | nothing |
 | is blocked on a permission prompt | *"my service is waiting for your answer to run git push origin main"* / *"…to use Edit"* — credential-looking words are spoken as "redacted" | it can't continue until you answer — switch now |
 | died (rate limit, billing, auth) | *"my service stopped: rate limit"* | don't wait for it |
 | has sat idle waiting for input | *"my service is waiting for you"* | the agent's own reminder, relayed once |

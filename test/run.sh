@@ -416,5 +416,47 @@ sh "$S" mixer-verdict "app=? appmuted=? master=? mastermuted=? fixed=False" | gr
 sh "$S" --help | grep -q "test \[--fix\]"; ok $? 0 "help documents test --fix"
 grep -q 'test $ARGUMENTS' "$here/../commands/test.md"; ok $? 0 "/iriscale-voice:test passes arguments through"
 
+# Background-aware Stop: Claude Code (2.1+) sends background_tasks / session_crons on Stop.
+# A Stop with work in flight is a pause (StepDone, verbose only), not "done"; the turn
+# clock survives Claude's own wake-ups so "done after N minutes" covers the whole job.
+sh "$S" set preset standard >/dev/null
+BGDIR="${TMPDIR:-/tmp}/iriscale-voice"
+BG1='{"session_id":"bg-1","cwd":"/x/repo_digest","hook_event_name":"Stop","background_tasks":[{"id":"a1","type":"subagent","status":"running","description":"Repo digest: engine pin selection methodology","agent_type":"general-purpose"}],"session_crons":[]}'
+BG2='{"session_id":"bg-1","cwd":"/x/repo_digest","hook_event_name":"Stop","background_tasks":[{"id":"a1","type":"subagent","status":"running","description":"Repo digest"},{"id":"s1","type":"shell","status":"running","description":"pnpm test","command":"pnpm test"}],"session_crons":[]}'
+BG0='{"session_id":"bg-1","cwd":"/x/repo_digest","hook_event_name":"Stop","background_tasks":[],"session_crons":[]}'
+BGC='{"session_id":"bg-1","cwd":"/x/repo_digest","hook_event_name":"Stop","background_tasks":[],"session_crons":[{"id":"c1","schedule":"*/20 * * * *","recurring":true,"prompt":"check ci"}]}'
+BGX='{"session_id":"bg-1","cwd":"/x/repo_digest","hook_event_name":"Stop"}'
+printf '%s\n' "$(( $(date +%s) - 400 ))" > "$BGDIR/bg-1.start"; started=$(cat "$BGDIR/bg-1.start")
+out=$(printf '%s' "$BG1" | sh "$S" Stop)
+case "$out" in "SKIP  [StepDone]"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Stop with background work must be a silent StepDone: $out" ;; esac
+grep -q '^status=working' "$SESSD/bg-1";                                          ok $? 0 "background work -> board stays working"
+grep -q '^note=waiting for 1 agent: Repo digest: engine pin selection methodology' "$SESSD/bg-1"; ok $? 0 "board note names the agent"
+out=$(printf '%s' '{"session_id":"bg-1","cwd":"/x/repo_digest","hook_event_name":"UserPromptSubmit","source":"system","prompt":"agent finished"}' | sh "$S" stamp)
+[ "$(cat "$BGDIR/bg-1.start")" = "$started" ];                                       ok $? 0 "a system wake-up keeps the original turn start"
+out=$(printf '%s' "$BG0" | sh "$S" Stop)
+case "$out" in *"repo digest done after 6 minutes"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL final Stop must speak done with the whole elapsed time: $out" ;; esac
+grep -q '^status=ready' "$SESSD/bg-1";                                            ok $? 0 "empty background_tasks -> ready"
+grep -q '^note=$' "$SESSD/bg-1";                                                  ok $? 0 "note cleared when the work is done"
+out=$(printf '%s' '{"session_id":"bg-1","cwd":"/x/repo_digest","hook_event_name":"UserPromptSubmit","source":"user","prompt":"next"}' | sh "$S" stamp)
+[ "$(cat "$BGDIR/bg-1.start")" != "$started" ];                                      ok $? 0 "a real prompt restarts the turn clock"
+printf '%s
+' "$(( $(date +%s) - 400 ))" > "$BGDIR/bg-1.start"   # a real turn, not the 2 s since the stamp above
+out=$(printf '%s' "$BGX" | sh "$S" Stop)
+case "$out" in "SPEAK [Stop]"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Stop without the field (older host) must behave as before: $out" ;; esac
+out=$(printf '%s' "$BGC" | sh "$S" Stop)
+case "$out" in "SKIP  [Scheduled]"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Stop with a pending cron must be a silent Scheduled: $out" ;; esac
+grep -q '^status=scheduled' "$SESSD/bg-1";                                        ok $? 0 "pending cron -> board scheduled"
+sh "$S" sessions --plain | grep -q 'repo_digest.*scheduled.*paused until its next wake-up'; ok $? 0 "board shows scheduled with its note"
+sh "$S" set preset verbose >/dev/null
+out=$(printf '%s' "$BG1" | sh "$S" Stop)
+case "$out" in *"repo digest finished a step, 1 agent still running"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL verbose StepDone phrasing: $out" ;; esac
+out=$(printf '%s' "$BG2" | sh "$S" Stop)
+case "$out" in *"finished a step, 2 background tasks still running"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL verbose StepDone counts tasks: $out" ;; esac
+out=$(printf '%s' "$BGC" | sh "$S" Stop)
+case "$out" in *"repo digest paused until its next wake-up"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL verbose Scheduled phrasing: $out" ;; esac
+sh "$S" set preset standard >/dev/null
+sh "$S" events | grep -q '^  StepDone';                                          ok $? 0 "events table lists StepDone"
+rm -f "$BGDIR/bg-1.start"
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

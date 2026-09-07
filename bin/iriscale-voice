@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.21"
+VERSION="0.1.22"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -168,7 +168,7 @@ hour_now() { h=$(date +%H 2>/dev/null); case $h in ??) h=${h#0} ;; esac; printf 
 preset_events() {
     case "$1" in
         basic)    echo "Stop idle_prompt" ;;
-        verbose)  echo "Stop StopFailure PermissionRequest idle_prompt agent_completed SubagentStop SessionEnd" ;;
+        verbose)  echo "Stop StopFailure PermissionRequest idle_prompt agent_completed SubagentStop SessionEnd StepDone Scheduled" ;;
         off)      echo "" ;;
         *)        echo "Stop StopFailure PermissionRequest idle_prompt" ;;   # standard
     esac
@@ -256,6 +256,8 @@ PermissionRequest|Claude asks to run a tool|"<session> is waiting for your answe
 idle_prompt|Claude has been waiting for your input|"<session> is waiting for you"
 agent_completed|a background agent finished|"<session> agent finished"
 SubagentStop|a subagent stopped|"<session> sub agent done"
+StepDone|turn paused: background agents or tasks still running, Claude wakes itself|"<session> finished a step, 1 agent still running"
+Scheduled|turn paused until a /loop or scheduled wake-up|"<session> paused until its next wake-up"
 SessionEnd|session closed|"<session> session ended"
 stamp|(internal) marks turn start for min_turn_seconds|—
 EOF
@@ -656,12 +658,13 @@ cli_sessions() {
     seen=""
     for sf in "$SESS"/*; do
         [ -f "$sf" ] || continue
-        a=""; n=""; st=""; since=""; upd=""; said=""; fp=""
+        a=""; n=""; st=""; since=""; upd=""; said=""; fp=""; snote=""
         while IFS= read -r l || [ -n "$l" ]; do
             case $l in agent=*) a=${l#agent=} ;; name=*) n=${l#name=} ;; status=*) st=${l#status=} ;;
-                       since=*) since=${l#since=} ;; updated=*) upd=${l#updated=} ;; said=*) said=${l#said=} ;; pid=*) fp=${l#pid=} ;; esac
+                       since=*) since=${l#since=} ;; updated=*) upd=${l#updated=} ;; said=*) said=${l#said=} ;; pid=*) fp=${l#pid=} ;; note=*) snote=${l#note=} ;; esac
         done < "$sf"
         seen="$seen ${sf##*/} "
+        [ -n "$snote" ] && said=$snote   # what it is waiting on beats what it last said
         rows="$rows$(_row "$a" "$n" "$st" "${since:-0}" "${upd:-0}" "$said" "$fp")$NL"
     done
     # Claude sessions with no state file yet (started before this version)
@@ -691,6 +694,7 @@ cli_sessions() {
             ready)   dot="${G}*${N}"; label="READY" ;;
             working) dot="${Y}*${N}"; label="working" ;;
             waiting) dot="${D}*${N}"; label="waiting" ;;
+            scheduled) dot="${D}*${N}"; label="scheduled" ;;
             *)       dot="${D}o${N}"; label="idle" ;;
         esac
         if [ "$keys" = 1 ]; then
@@ -986,7 +990,49 @@ if [ -n "$sid" ]; then
     case $sid in ..|.|"") sid="" ;; *..*) sid=$(printf '%s' "$sid" | tr '.' '_') ;; esac
 fi
 
-[ "$EVENT" = "stamp" ] && [ -n "$sid" ] && printf '%s\n' "$NOW" > "$STATE/$sid.start"
+# Background work. Claude Code (2.1+) sends background_tasks (running/pending subagents,
+# shells, monitors, workflows) and session_crons (/loop, scheduled wake-ups) on Stop and
+# SubagentStop, exactly so a hook can tell "done" from "paused until that work wakes me".
+# A Stop with work in flight is spoken as StepDone (verbose only) and shown as working;
+# a Stop that only waits for a cron is Scheduled. No field = older host = plain Stop.
+# Builtins only (hook path).
+bg_state=unknown; bg_n=0; bg_kind=""; bg_desc=""; bg_note=""; crons=0
+case $payload in
+    *'"background_tasks":[]'*|*'"background_tasks": []'*) bg_state=empty ;;
+    *'"background_tasks":['*|*'"background_tasks": ['*)
+        bg_state=busy
+        _r=${payload#*\"background_tasks\"}; _r=${_r%%\"session_crons\"*}
+        bg_kind=$(jget type "$_r"); bg_desc=$(jget description "$_r")
+        while :; do case $_r in *'"status":'*) bg_n=$((bg_n+1)); _r=${_r#*\"status\":} ;; *) break ;; esac; done
+        [ "$bg_n" -gt 0 ] || bg_n=1 ;;
+esac
+case $payload in
+    *'"session_crons":[]'*|*'"session_crons": []'*) ;;
+    *'"session_crons":['*|*'"session_crons": ['*) crons=1 ;;
+esac
+if [ "$EVENT" = Stop ]; then
+    if [ "$bg_state" = busy ]; then
+        EVENT=StepDone
+        if [ "$bg_n" = 1 ] && [ "$bg_kind" = subagent ]; then bg_what="1 agent"
+        elif [ "$bg_n" = 1 ]; then bg_what="1 background task"
+        else bg_what="$bg_n background tasks"; fi
+        bg_note="waiting for $bg_what"; [ -n "$bg_desc" ] && bg_note="$bg_note: $(printf '%.48s' "$bg_desc")"
+        bg_note=$(clean "$bg_note")
+    elif [ "$crons" = 1 ]; then
+        EVENT=Scheduled; bg_note="paused until its next wake-up"
+    fi
+fi
+
+# stamp: a prompt from you starts the turn clock; a wake-up (source system, loop_wakeup,
+# schedule_wakeup, poll_event - Claude resuming itself after background work) keeps the
+# original start, so "done after N minutes" covers the whole job.
+if [ "$EVENT" = stamp ] && [ -n "$sid" ]; then
+    _src=$(jget source "$payload")
+    case $_src in
+        ''|user|sdk) printf '%s\n' "$NOW" > "$STATE/$sid.start" ;;
+        *)           [ -f "$STATE/$sid.start" ] || printf '%s\n' "$NOW" > "$STATE/$sid.start" ;;
+    esac
+fi
 
 # resolve a friendly session name: /rename'd name -> cwd folder -> "Claude".
 # Claude Code: ~/.claude/sessions/<pid>.json, one JSON object per file.
@@ -1029,9 +1075,9 @@ fi
 
 # ---------- session state (feeds `sessions` / `board`) -----------------------
 # One small key=value file per session under $SESS. Written with builtins only.
-# status: working | ready | blocked | waiting | error. `since` only moves when the
+# status: working | ready | blocked | waiting | error | scheduled. `since` only moves when the
 # status changes; `said` is the last line actually spoken for this session.
-state_write() {   # state_write <status> [said]
+state_write() {   # state_write <status> [said] [note]   (note: what the session is waiting on)
     [ -n "$sid" ] || return 0
     [ -d "$SESS" ] || mkdir -p -m 700 "$SESS" 2>/dev/null
     _sf="$SESS/$sid"; _os=""; _osince=""; _osaid=""
@@ -1042,12 +1088,14 @@ state_write() {   # state_write <status> [said]
     fi
     _since=$NOW; [ "$_os" = "$1" ] && [ -n "$_osince" ] && _since=$_osince
     _said=${2:-$_osaid}
-    printf 'agent=%s\nname=%s\nstatus=%s\nsince=%s\nupdated=%s\npid=%s\ncwd=%s\nsaid=%s\n' \
-        "$agent" "$name" "$1" "$_since" "$NOW" "$pid" "$cwd" "$_said" > "$_sf" 2>/dev/null
+    printf 'agent=%s\nname=%s\nstatus=%s\nsince=%s\nupdated=%s\npid=%s\ncwd=%s\nsaid=%s\nnote=%s\n' \
+        "$agent" "$name" "$1" "$_since" "$NOW" "$pid" "$cwd" "$_said" "${3:-}" > "$_sf" 2>/dev/null
 }
 if [ "$EVENT" = "stamp" ]; then state_write working; exit 0; fi
 case $EVENT in
     Stop)              st_new=ready ;;
+    StepDone)          st_new=working ;;
+    Scheduled)         st_new=scheduled ;;
     PermissionRequest) st_new=blocked ;;
     idle_prompt)       st_new=waiting ;;
     StopFailure)       st_new=error ;;
@@ -1153,6 +1201,8 @@ case "$EVENT" in
     idle_prompt)       tail="is waiting for you" ;;
     agent_completed)   tail="agent finished" ;;
     SubagentStop)      tail="sub agent done" ;;      # "subagent" gets read as "soob-agent"
+    StepDone)          tail="finished a step, $bg_what still running" ;;
+    Scheduled)         tail="paused until its next wake-up" ;;
     SessionEnd)        tail="session ended"; [ -n "$sid" ] && rm -f "$STATE/$sid.start" ;;
     *)                 tail="$EVENT" ;;
 esac
@@ -1185,7 +1235,7 @@ fi
 
 # record the session's new state for the board, whether or not we speak
 if [ -n "$st_new" ]; then
-    if [ -z "$reason" ]; then state_write "$st_new" "$line"; else state_write "$st_new"; fi
+    if [ -z "$reason" ]; then state_write "$st_new" "$line" "$bg_note"; else state_write "$st_new" "" "$bg_note"; fi
 fi
 
 # ---------- act ---------------------------------------------------------------
