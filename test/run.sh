@@ -138,9 +138,9 @@ grep -q '^said=payments api is waiting for your answer to run git push' "$SESSD/
 printf '%s' '{"session_id":"brd-3","cwd":"/x/data_migration","reason":"rate_limit"}' | sh "$S" StopFailure >/dev/null
 grep -q '^status=error' "$SESSD/brd-3";                   ok $? 0 "StopFailure -> state error"
 out=$(sh "$S" sessions --plain)
-printf '%s' "$out" | grep -q 'payments_api.*NEEDS YOU';   ok $? 0 "sessions shows NEEDS YOU"
+printf '%s' "$out" | grep -q 'payments_api.*NEEDS ANSWER'; ok $? 0 "sessions shows NEEDS ANSWER"
 printf '%s' "$out" | grep -q 'billing_service.*READY';    ok $? 0 "sessions shows READY"
-printf '%s' "$out" | grep -q 'data_migration.*ERROR';     ok $? 0 "sessions shows ERROR"
+printf '%s' "$out" | grep -q 'data_migration.*NEEDS ACTION'; ok $? 0 "sessions shows NEEDS ACTION"
 first=$(printf '%s' "$out" | grep -E 'payments_api|billing_service|data_migration' | head -n1)
 case $first in *payments_api*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL blocked session must sort first: $first" ;; esac
 printf '%s' "$out" | grep -q 'needs your answer';         ok $? 0 "sessions prints the legend"
@@ -457,6 +457,96 @@ case "$out" in *"repo digest paused until its next wake-up"*) pass=$((pass+1)) ;
 sh "$S" set preset standard >/dev/null
 sh "$S" events | grep -q '^  StepDone';                                          ok $? 0 "events table lists StepDone"
 rm -f "$BGDIR/bg-1.start"
+
+# Passive review lifecycle (0.1.23). Driven through `tick` so nothing sleeps.
+sh "$S" set preset standard >/dev/null; sh "$S" set repeat_cooldown 0 >/dev/null
+LCDIR="${TMPDIR:-/tmp}/iriscale-voice"; rm -f "$LCDIR/last_prompt"
+LC1='{"session_id":"lc-1","cwd":"/x/billing","hook_event_name":"Stop","background_tasks":[],"session_crons":[]}'
+LC2='{"session_id":"lc-2","cwd":"/x/payments","tool_name":"Bash","tool_input":{"command":"git push"}}'
+LC3='{"session_id":"lc-3","cwd":"/x/migration","reason":"rate_limit"}'
+printf '%s' '{"session_id":"lc-1","cwd":"/x/billing","hook_event_name":"UserPromptSubmit","source":"user"}' | sh "$S" stamp >/dev/null
+printf '%s' "$LC1" | sh "$S" Stop >/dev/null
+grep -q '^status=ready' "$SESSD/lc-1";                       ok $? 0 "lifecycle: Stop -> ready"
+grep -q '^reminded=0' "$SESSD/lc-1";                         ok $? 0 "lifecycle: Stop arms the reminder counter"
+ra=$(sed -n 's/^remind_at=//p' "$SESSD/lc-1"); since=$(sed -n 's/^since=//p' "$SESSD/lc-1")
+[ "$ra" = "$((since + 900))" ];                              ok $? 0 "lifecycle: standard review reminder is 15 min after the turn end"
+# the state file says agent=claude only for payloads shaped like Claude's; brd payloads carried hook_event_name
+grep -q '^agent=claude' "$SESSD/lc-1";                       ok $? 0 "lifecycle: Claude-shaped payload -> agent=claude"
+# 1. reviewed: READY outlives the idle window with no idle notice -> a key was pressed there
+sh "$S" tick lc-1 >/dev/null; grep -q '^status=ready' "$SESSD/lc-1";   ok $? 0 "tick inside the idle window leaves READY alone"
+old=$(( $(date +%s) - 200 )); sed "s/^since=.*/since=$old/" "$SESSD/lc-1" > "$SESSD/lc-1.tmp" && mv "$SESSD/lc-1.tmp" "$SESSD/lc-1"
+out=$(sh "$S" tick lc-1); grep -q '^status=reviewed' "$SESSD/lc-1";   ok $? 0 "tick past the idle window -> reviewed (no idle notice = key pressed)"
+grep -q '^remind_at=$' "$SESSD/lc-1";                        ok $? 0 "reviewed clears the reminder"
+sh "$S" sessions --plain | grep -q 'billing.*reviewed';       ok $? 0 "board shows reviewed"
+# 2. the idle notice arrives instead -> needs your review; it never demotes a permission prompt
+printf '%s' "$LC1" | sh "$S" Stop >/dev/null
+printf '%s' '{"session_id":"lc-1","cwd":"/x/billing","hook_event_name":"Notification","notification_type":"idle_prompt"}' | sh "$S" idle_prompt >/dev/null
+grep -q '^status=review' "$SESSD/lc-1";                      ok $? 0 "idle notice on READY -> needs your review"
+printf '%s' "$LC2" | sh "$S" PermissionRequest >/dev/null
+printf '%s' '{"session_id":"lc-2","cwd":"/x/payments"}' | sh "$S" idle_prompt >/dev/null
+grep -q '^status=blocked' "$SESSD/lc-2";                     ok $? 0 "idle notice never demotes needs-your-answer"
+ra=$(sed -n 's/^remind_at=//p' "$SESSD/lc-2"); since=$(sed -n 's/^since=//p' "$SESSD/lc-2")
+[ "$ra" = "$((since + 180))" ];                              ok $? 0 "standard answer reminder is 3 min after the prompt"
+# 3. one reminder due -> one line with the age; counter and next time advance
+rm -f "$LCDIR/last_prompt"   # the stamp above counted as activity; reminders must not be paused here
+now=$(date +%s); sed "s/^remind_at=.*/remind_at=$((now - 5))/; s/^since=.*/since=$((now - 600))/" "$SESSD/lc-2" > "$SESSD/lc-2.tmp" && mv "$SESSD/lc-2.tmp" "$SESSD/lc-2"
+out=$(sh "$S" tick lc-2)
+case "$out" in *"SPEAK [Remind] payments still needs your answer, 10 minutes"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL single reminder: $out" ;; esac
+grep -q '^reminded=1' "$SESSD/lc-2";                         ok $? 0 "reminder counted"
+[ "$(sed -n 's/^remind_at=//p' "$SESSD/lc-2")" = "$((now - 600 + 600))" ]; ok $? 0 "second answer reminder lands at +10 min from the prompt"
+# 4. two due at once -> merged into one line, both counted; caps clear remind_at
+sed "s/^remind_at=.*/remind_at=$((now - 5))/" "$SESSD/lc-2" > "$SESSD/lc-2.tmp" && mv "$SESSD/lc-2.tmp" "$SESSD/lc-2"
+sed "s/^remind_at=.*/remind_at=$((now - 5))/; s/^since=.*/since=$((now - 1000))/" "$SESSD/lc-1" > "$SESSD/lc-1.tmp" && mv "$SESSD/lc-1.tmp" "$SESSD/lc-1"
+out=$(sh "$S" tick lc-1)
+case "$out" in *"SPEAK [Remind] still waiting: billing ready for review, payments needs your answer"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL merged reminder: $out" ;; esac
+grep -q '^remind_at=$' "$SESSD/lc-1";                        ok $? 0 "review reminder capped after one (standard)"
+grep -q '^remind_at=$' "$SESSD/lc-2";                        ok $? 0 "answer reminders capped after two (standard)"
+out=$(sh "$S" tick lc-1); case "$out" in *SPEAK*) fail=$((fail+1)); echo "FAIL capped reminders must stay silent: $out" ;; *) pass=$((pass+1)) ;; esac
+# 5. active elsewhere -> the step is skipped, not deferred
+printf '%s' "$LC3" | sh "$S" StopFailure >/dev/null
+sed "s/^remind_at=.*/remind_at=$((now - 5))/" "$SESSD/lc-3" > "$SESSD/lc-3.tmp" && mv "$SESSD/lc-3.tmp" "$SESSD/lc-3"
+printf '%s\n' "$now" > "$LCDIR/last_prompt"
+out=$(sh "$S" tick lc-3)
+case "$out" in *remind_pause*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL remind_pause must skip while you are active: $out" ;; esac
+grep -q '^reminded=1' "$SESSD/lc-3";                         ok $? 0 "a skipped reminder still counts"
+# 6. presets and overrides
+# reminders are (re)armed when the status changes, as in real life a prompt precedes the next turn
+STAMP2='{"session_id":"lc-2","cwd":"/x/payments","hook_event_name":"UserPromptSubmit","source":"user"}'
+STAMP1='{"session_id":"lc-1","cwd":"/x/billing","hook_event_name":"UserPromptSubmit","source":"user"}'
+sh "$S" set preset basic >/dev/null; printf '%s' "$STAMP2" | sh "$S" stamp >/dev/null; printf '%s' "$LC2" | sh "$S" PermissionRequest >/dev/null
+grep -q '^remind_at=$' "$SESSD/lc-2";                        ok $? 0 "basic preset never reminds"
+sh "$S" set preset verbose >/dev/null; printf '%s' "$STAMP1" | sh "$S" stamp >/dev/null; printf '%s' "$LC1" | sh "$S" Stop >/dev/null
+ra=$(sed -n 's/^remind_at=//p' "$SESSD/lc-1"); since=$(sed -n 's/^since=//p' "$SESSD/lc-1")
+[ "$ra" = "$((since + 600))" ];                              ok $? 0 "verbose review reminder is 10 min"
+sh "$S" set preset standard >/dev/null; sh "$S" set remind_review off >/dev/null; printf '%s' "$STAMP1" | sh "$S" stamp >/dev/null; printf '%s' "$LC1" | sh "$S" Stop >/dev/null
+grep -q '^remind_at=$' "$SESSD/lc-1";                        ok $? 0 "remind_review=off disables review reminders"
+sh "$S" set remind_review 5 >/dev/null; printf '%s' "$STAMP1" | sh "$S" stamp >/dev/null; printf '%s' "$LC1" | sh "$S" Stop >/dev/null
+ra=$(sed -n 's/^remind_at=//p' "$SESSD/lc-1"); since=$(sed -n 's/^since=//p' "$SESSD/lc-1")
+[ "$ra" = "$((since + 300))" ];                              ok $? 0 "remind_review=5 overrides the preset"
+sh "$S" unset remind_review >/dev/null
+# 7. welcome back: a prompt after a long quiet spell summarises what is waiting; a wake-up does not
+printf '%s\n' "$((now - 700))" > "$LCDIR/last_prompt"
+out=$(printf '%s' '{"session_id":"lc-9","cwd":"/x/docs","hook_event_name":"UserPromptSubmit","source":"system"}' | sh "$S" stamp)
+case "$out" in *welcome_back*) fail=$((fail+1)); echo "FAIL a wake-up must not trigger welcome back: $out" ;; *) pass=$((pass+1)) ;; esac
+printf '%s\n' "$((now - 700))" > "$LCDIR/last_prompt"
+out=$(printf '%s' '{"session_id":"lc-9","cwd":"/x/docs","hook_event_name":"UserPromptSubmit","source":"user"}' | sh "$S" stamp)
+case "$out" in *"while you were away: "*"payments needs your answer"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL welcome back summary: $out" ;; esac
+[ "$(cat "$LCDIR/last_prompt")" != "$((now - 700))" ];        ok $? 0 "a real prompt refreshes last_prompt"
+out=$(printf '%s' '{"session_id":"lc-9","cwd":"/x/docs","source":"user"}' | sh "$S" stamp)
+case "$out" in *welcome_back*) fail=$((fail+1)); echo "FAIL welcome back must not repeat right away: $out" ;; *) pass=$((pass+1)) ;; esac
+# 8. the Remind / WelcomeBack events respect the usual gates (mute)
+sh "$S" mute >/dev/null
+out=$(printf '%s' '{"session_id":"lc-2","message":"payments still needs your answer, 3 minutes"}' | sh "$S" Remind)
+case "$out" in SKIP*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL Remind must honour mute: $out" ;; esac
+sh "$S" unmute >/dev/null
+# 9. board vocabulary
+out=$(sh "$S" sessions --plain)
+printf '%s' "$out" | grep -q 'payments.*NEEDS ANSWER';        ok $? 0 "board: NEEDS ANSWER"
+printf '%s' "$out" | grep -q 'migration.*NEEDS ACTION';       ok $? 0 "board: NEEDS ACTION"
+printf '%s' "$out" | grep -q 'needs your action';             ok $? 0 "board legend names the three verbs"
+[ "$(sh "$S" sessions --keys --plain | grep 'marks it reviewed' | awk '{print length}')" -le 80 ]; ok $? 0 "board note about keypresses fits 80 columns"
+sh "$S" events | grep -q '^  Remind';                         ok $? 0 "events table lists Remind"
+rm -f "$LCDIR/last_prompt"; sh "$S" set repeat_cooldown 0 >/dev/null
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

@@ -46,8 +46,12 @@ The file is created the first time a setting is written (`config set`, a preset 
 | `volume` | `100` | 0–100 (Windows only; others use system volume) |
 | `serialize` | `true` | queue announcements so concurrent sessions never talk over each other |
 | `repeat_cooldown` | `60` | seconds; the *same* announcement for the *same* session inside this window is said once. Guards against a looping subagent or a double-firing hook. `0` disables |
+| `remind_answer` | `3,10` | minutes after a permission prompt to say "still needs your answer" (comma list); `off` = never. Presets: standard `3,10`, verbose `3,10,20`, basic never |
+| `remind_review` | `15` | minutes after a turn ends to remind about a session nobody reviewed; `off` = never. Presets: standard `15`, verbose `10,30` |
+| `remind_action` | `10` | minutes after an error to remind; `off` = never |
+| `remind_pause` | `2` | skip a reminder (it still counts toward the cap) if you sent a prompt anywhere within this many minutes |
+| `welcome_back` | `10` | after this many quiet minutes, your next prompt is preceded by *"while you were away: …"* naming what waits; `0` = off |
 | `log` | `~/.claude/iriscale-voice.log` | tab-separated `time  event  text`. `none` to disable |
-| `board_ready_minutes` | `15` | on the board, a finished session shows **READY** for this long, then **idle** |
 | `board_hide_hours` | `24` | a session with no process and no event for this long is forgotten (Codex records no pid) |
 | `board_interval` | `30` | seconds between board heartbeats (the *for* column ticks); a state change redraws immediately regardless |
 | `board_autostart` | `false` | `true` = whenever a session event arrives and no board window is open, open one in its own terminal window. The board comes back by itself after an update, a reboot, or an accidental close |
@@ -77,8 +81,18 @@ next event.
 
 State comes from one small file per session in `~/.claude/iriscale-voice-sessions/`,
 written by the same script on every hook event — so any agent that calls it feeds the
-board. States: **needs your answer** (permission prompt) · **ready** for review ·
-working · waiting · error · idle. A small window off to the side, on Windows Terminal:
+board. States, in board order: **needs your answer** (permission prompt) · **needs your
+action** (error) · **needs your review** (finished, and a minute passed with no key pressed
+there) · **ready** (finished under a minute ago) · working · scheduled · **reviewed**.
+
+**Reviewed is passive.** Claude Code fires its idle notice 60 s after a turn ends only if
+no key was pressed in that session; the plugin listens for it. No notice inside the
+window means a key was pressed, so the row becomes *reviewed*; the notice arriving means
+nobody touched it, so it becomes *needs your review* and the reminders start. **Clicking
+into the session or giving it focus does not count; press a key.** The window is Claude
+Code's `messageIdleNotifThresholdMs` (default 60000) plus 30 s. Codex has no idle notice,
+so Codex sessions stay *ready* until your next prompt there. Reminders and the
+welcome-back summary are the `remind_*` and `welcome_back` keys above. A small window off to the side, on Windows Terminal:
 
 ```
 wt -w iriscale --size 64,18 --pos 1180,80 --title sessions iriscale-voice board

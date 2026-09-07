@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.22"
+VERSION="0.1.23"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -168,9 +168,9 @@ hour_now() { h=$(date +%H 2>/dev/null); case $h in ??) h=${h#0} ;; esac; printf 
 preset_events() {
     case "$1" in
         basic)    echo "Stop idle_prompt" ;;
-        verbose)  echo "Stop StopFailure PermissionRequest idle_prompt agent_completed SubagentStop SessionEnd StepDone Scheduled" ;;
+        verbose)  echo "Stop StopFailure PermissionRequest idle_prompt agent_completed SubagentStop SessionEnd StepDone Scheduled Remind WelcomeBack" ;;
         off)      echo "" ;;
-        *)        echo "Stop StopFailure PermissionRequest idle_prompt" ;;   # standard
+        *)        echo "Stop StopFailure PermissionRequest idle_prompt Remind WelcomeBack" ;;   # standard
     esac
 }
 preset_min_turn() { case "$1" in standard) echo 30 ;; *) echo 0 ;; esac; }
@@ -233,6 +233,11 @@ min_turn_seconds|$(preset_min_turn "$p")|don't say "done" for turns shorter than
 say_elapsed|true|append "after N minutes" to "done" for turns of 60s or more
 command_detail|redacted|what a permission prompt says about the command: redacted = up to 60 chars with credential-looking words scrubbed; program = program + first word only ("git push"); full = verbatim
 repeat_cooldown|60|seconds; identical line for the same session inside the window is said once; 0 disables
+remind_answer|$(preset_remind "$p" answer)|minutes after a permission prompt to say "still needs your answer" (comma list); off = never. standard 3,10 · verbose 3,10,20 · basic never
+remind_review|$(preset_remind "$p" review)|minutes after a turn ends to remind about an unreviewed session; off = never. standard 15 · verbose 10,30
+remind_action|$(preset_remind "$p" action)|minutes after an error to remind; off = never. standard 10 · verbose 10
+remind_pause|2|skip a reminder (it still counts) if you sent a prompt anywhere within this many minutes
+welcome_back|10|after this many quiet minutes, your next prompt is preceded by "while you were away: ..."; 0 = off
 mute_sessions|(none)|comma-separated session names to never announce
 only_sessions|(none = all)|comma-separated; if set, announce ONLY these
 voice|(OS default)|Windows: e.g. Microsoft Zira Desktop; macOS: any from \`say -v ?\`; Linux: ignored
@@ -240,7 +245,6 @@ rate|0|speaking speed, -10 slow .. 10 fast
 volume|100|0-100 (Windows only; others use system volume)
 serialize|true|queue announcements so concurrent sessions never overlap
 log|$CLAUDE_DIR/iriscale-voice.log|tab-separated activity log; \`none\` disables
-board_ready_minutes|15|on the board, a finished session shows READY for this long, then idle
 board_hide_hours|24|a session with no process and no event for this long is forgotten (Codex records no pid)
 board_interval|30|seconds between board heartbeats (ages tick); state changes redraw immediately
 board_autostart|false|true = whenever a session event arrives and no board window is open, open one (own terminal window, off to the side)
@@ -259,6 +263,8 @@ SubagentStop|a subagent stopped|"<session> sub agent done"
 StepDone|turn paused: background agents or tasks still running, Claude wakes itself|"<session> finished a step, 1 agent still running"
 Scheduled|turn paused until a /loop or scheduled wake-up|"<session> paused until its next wake-up"
 SessionEnd|session closed|"<session> session ended"
+Remind|a session has needed you for a while (remind_answer / remind_review / remind_action)|"<session> still needs your answer, 10 minutes"
+WelcomeBack|your first prompt after welcome_back quiet minutes, if anything waits|"while you were away: payments needs your answer, billing ready for review"
 stamp|(internal) marks turn start for min_turn_seconds|—
 EOF
 }
@@ -595,6 +601,142 @@ cli_windows_lifecycle() {
     esac
 }
 
+# ---------- review lifecycle (passive) ----------------------------------------
+# Nothing here asks the user to click or acknowledge anything. Claude Code's idle
+# notice fires 60 s (messageIdleNotifThresholdMs) after a turn ends only if no key was
+# pressed in that session - focus and mouse do not count. So: a READY Claude session
+# that outlives that window without an idle_prompt was reviewed; one that gets the
+# notice needs your review. Reminders come from a detached watcher per session-turn,
+# merged into one line when several are due, skipped while you are active elsewhere,
+# and capped by the schedule (remind_answer / remind_review / remind_action).
+st_get() {   # st_get <state-file> <key>
+    _v=""
+    [ -f "$1" ] && while IFS= read -r _l || [ -n "$_l" ]; do case $_l in "$2="*) _v=${_l#"$2="} ;; esac; done < "$1"
+    printf '%s' "$_v"
+}
+st_put() {   # st_put <state-file> <key> <value>  (builtins; adds the key if missing)
+    [ -f "$1" ] || return 1
+    _out=""; _seen=0
+    while IFS= read -r _l || [ -n "$_l" ]; do
+        case $_l in "$2="*) _out="$_out$2=$3$NL"; _seen=1 ;; *) _out="$_out$_l$NL" ;; esac
+    done < "$1"
+    [ "$_seen" = 1 ] || _out="$_out$2=$3$NL"
+    printf '%s' "$_out" > "$1"
+}
+preset_remind() {   # preset_remind <preset> <answer|review|action> -> minutes, comma list, or ""
+    case "$1:$2" in
+        verbose:answer)  echo "3,10,20" ;; verbose:review)  echo "10,30" ;; verbose:action)  echo "10" ;;
+        standard:answer) echo "3,10" ;;    standard:review) echo "15" ;;    standard:action) echo "10" ;;
+        *) echo "" ;;
+    esac
+}
+remind_schedule() {   # remind_schedule <kind> -> minutes list after config (off/none/empty = never)
+    cfgv _rp preset standard
+    cfgv _rs "remind_$1" "$(preset_remind "$_rp" "$1")"
+    case $_rs in off|none|never|false) _rs="" ;; esac
+    printf '%s' "$_rs"
+}
+next_remind() {   # next_remind <kind> <since> <reminded-so-far> -> epoch of the next reminder, or ""
+    _sched=$(remind_schedule "$1"); [ -n "$_sched" ] || return 0
+    _i=0; _pick=""; _oifs=$IFS; IFS=,; set -f
+    for _m in $_sched; do [ "$_i" = "$3" ] && { _pick=$_m; break; }; _i=$((_i+1)); done
+    set +f; IFS=$_oifs
+    case $_pick in ''|*[!0-9]*) return 0 ;; esac
+    printf '%s' $(( $2 + _pick * 60 ))
+}
+idle_window() {   # seconds after a turn end by which Claude's idle notice has fired, plus grace
+    _w=60000
+    if [ -f "$CLAUDE_DIR/settings.json" ]; then
+        _sj=""; while IFS= read -r _l || [ -n "$_l" ]; do _sj="$_sj$_l"; done < "$CLAUDE_DIR/settings.json"
+        _t=$(jnum messageIdleNotifThresholdMs "$_sj"); case $_t in ''|*[!0-9]*) ;; *) _w=$_t ;; esac
+    fi
+    printf '%s' $(( _w / 1000 + 30 ))
+}
+spoken() {   # '_' and '-' read as spaces
+    _o=""; _s=$1
+    while [ -n "$_s" ]; do _c=${_s%"${_s#?}"}; _s=${_s#?}; case $_c in _|-) _c=' ' ;; esac; _o="$_o$_c"; done
+    printf '%s' "$_o"
+}
+# pending_kind <status> <agent> -> answer|review|action, or "" when the row is not waiting on you
+pending_kind() {
+    case $1 in blocked) echo answer ;; error) echo action ;; review|waiting) echo review ;;
+                ready) [ "$2" = claude ] || echo review ;; esac   # a Codex READY has no idle notice to graduate it
+}
+# One line naming every pending row: "<a> needs your answer, <b> ready for review, <c> stopped"
+pending_summary() {
+    _ps=""
+    for _f in "$SESS"/*; do
+        [ -f "$_f" ] || continue
+        _k=$(pending_kind "$(st_get "$_f" status)" "$(st_get "$_f" agent)"); [ -n "$_k" ] || continue
+        _nm=$(spoken "$(st_get "$_f" name)")
+        case $_k in answer) _ps="$_ps, $_nm needs your answer" ;; review) _ps="$_ps, $_nm ready for review" ;; action) _ps="$_ps, $_nm stopped" ;; esac
+    done
+    printf '%s' "${_ps#, }"
+}
+# tick <sid>: apply the lifecycle to this moment. Idempotent; the watcher calls it at
+# the scheduled times, the test suite calls it directly. Speaks through the normal
+# event pipeline (Remind) so presets, quiet hours, mutes and the cooldown all apply.
+cli_tick() {
+    _sf="$SESS/$1"; [ -f "$_sf" ] || return 0
+    _now=$(date +%s 2>/dev/null); case $_now in ''|*[!0-9]*) return 0 ;; esac
+    _st=$(st_get "$_sf" status); _since=$(st_get "$_sf" since); case $_since in ''|*[!0-9]*) _since=$_now ;; esac
+    if [ "$_st" = ready ] && [ "$(st_get "$_sf" agent)" = claude ] && [ $(( _now - _since )) -ge "$(idle_window)" ]; then
+        st_put "$_sf" status reviewed; st_put "$_sf" since "$_now"; st_put "$_sf" remind_at ""
+        [ -n "$IRISCALE_VOICE_DEBUG" ] && echo "(tick: $1 reviewed - no idle notice inside the window, so a key was pressed there)"
+        return 0
+    fi
+    _due=""; _n=0
+    for _f in "$SESS"/*; do
+        [ -f "$_f" ] || continue
+        _k=$(pending_kind "$(st_get "$_f" status)" "$(st_get "$_f" agent)"); [ -n "$_k" ] || continue
+        _ra=$(st_get "$_f" remind_at); case $_ra in ''|*[!0-9]*) continue ;; esac
+        [ "$_now" -ge "$_ra" ] || continue
+        _rc=$(st_get "$_f" reminded); case $_rc in ''|*[!0-9]*) _rc=0 ;; esac; _rc=$((_rc+1))
+        _sn=$(st_get "$_f" since); case $_sn in ''|*[!0-9]*) _sn=$_now ;; esac
+        st_put "$_f" reminded "$_rc"; st_put "$_f" remind_at "$(next_remind "$_k" "$_sn" "$_rc")"
+        _n=$((_n+1)); _due="$_due|$_k|$(spoken "$(st_get "$_f" name)")|$(( (_now - _sn) / 60 ))"
+    done
+    [ "$_n" -gt 0 ] || return 0
+    cfgv _pause remind_pause 2; _lp=0
+    [ -f "$STATE/last_prompt" ] && { IFS= read -r _lp < "$STATE/last_prompt" || :; }; case $_lp in ''|*[!0-9]*) _lp=0 ;; esac
+    if [ "$_pause" -gt 0 ] 2>/dev/null && [ $(( _now - _lp )) -lt $(( _pause * 60 )) ]; then
+        [ -n "$IRISCALE_VOICE_DEBUG" ] && echo "(tick: reminder skipped, you prompted $(( _now - _lp ))s ago - remind_pause)"
+        return 0
+    fi
+    if [ "$_n" = 1 ]; then
+        _d=${_due#|}; _k=${_d%%|*}; _d=${_d#*|}; _nm=${_d%%|*}; _m=${_d#*|}
+        case $_k in answer) _line="$_nm still needs your answer, $_m minutes" ;;
+                    review) _line="$_nm still ready for review, $_m minutes" ;;
+                    action) _line="$_nm still stopped, $_m minutes" ;; esac
+    else
+        _line="still waiting"; _rest=$_due
+        while [ -n "$_rest" ]; do
+            _rest=${_rest#|}; _k=${_rest%%|*}; _rest=${_rest#*|}; _nm=${_rest%%|*}; _rest=${_rest#*|}; _rest=${_rest#*[0-9]}; _rest=${_rest#"${_rest%%|*}"}
+            case $_k in answer) _line="$_line, $_nm needs your answer" ;; review) _line="$_line, $_nm ready for review" ;; action) _line="$_line, $_nm stopped" ;; esac
+        done
+        _line=$(printf '%s' "$_line" | sed 's/^still waiting, /still waiting: /')
+    fi
+    printf '{"session_id":"%s","message":"%s"}' "$1" "$(clean "$_line")" | sh "$0" Remind
+}
+# watch <sid> <since>: detached by the hook after a turn ends, a permission prompt, or an
+# error. Sleeps until the next lifecycle moment and ticks; exits as soon as the session
+# moves on (since changes) or nothing more is scheduled. Bounded so it cannot linger.
+cli_watch() {
+    _wsid=$1; _tok=$2; _wsf="$SESS/$_wsid"; _g=0
+    while [ "$_g" -lt 40 ]; do
+        _g=$((_g+1))
+        [ -f "$_wsf" ] || return 0
+        [ "$(st_get "$_wsf" since)" = "$_tok" ] || return 0
+        _wnow=$(date +%s 2>/dev/null); case $_wnow in ''|*[!0-9]*) return 0 ;; esac
+        _next=""
+        if [ "$(st_get "$_wsf" status)" = ready ] && [ "$(st_get "$_wsf" agent)" = claude ]; then _next=$(( _tok + $(idle_window) )); fi
+        _ra=$(st_get "$_wsf" remind_at); case $_ra in ''|*[!0-9]*) ;; *) if [ -z "$_next" ] || [ "$_ra" -lt "$_next" ]; then _next=$_ra; fi ;; esac
+        [ -n "$_next" ] || return 0
+        _d=$(( _next - _wnow )); [ "$_d" -gt 0 ] && sleep "$_d"
+        cli_tick "$_wsid" >/dev/null 2>&1
+    done
+}
+
 # ---------- session board -----------------------------------------------------
 _ago() { s=$1; if [ "$s" -lt 60 ]; then printf '%ss' "$s"; elif [ "$s" -lt 3600 ]; then printf '%sm' "$((s/60))"; else printf '%sh' "$((s/3600))"; fi; }
 
@@ -653,7 +795,7 @@ cli_sessions() {
     if [ "$plain" = 1 ] || { [ "$force" = 0 ] && [ ! -t 1 ]; }; then G=""; Y=""; R=""; M=""; D=""; B=""; N=""; EL=""
     else G="${ESC}[32m"; Y="${ESC}[33m"; R="${ESC}[31m"; M="${ESC}[35m"; D="${ESC}[2m"; B="${ESC}[1m"; N="${ESC}[0m"; EL="${ESC}[K"; fi
     now=$(date +%s 2>/dev/null); case $now in ''|*[!0-9]*) now=0 ;; esac
-    cfgv readym board_ready_minutes 15; cfgv hideh board_hide_hours 24
+    cfgv hideh board_hide_hours 24
     rows=""
     seen=""
     for sf in "$SESS"/*; do
@@ -681,21 +823,22 @@ cli_sessions() {
         done
     fi
     printf "${B}iriscale voice${N} ${D}v$VERSION${N}   ${B}sessions${N}   ${D}updated %s${N}\n\n" "$(date +%H:%M:%S 2>/dev/null)"
-    if [ "$keys" = 1 ]; then printf "   %-26s %-10s %-6s %-8s %s\n" "SESSION" "STATE" "FOR" "AGENT" "LAST SAID"
-    else printf "     %-26s %-10s %-6s %-8s %s\n" "SESSION" "STATE" "FOR" "AGENT" "LAST SAID"; fi
+    if [ "$keys" = 1 ]; then printf "   %-26s %-13s %-6s %-8s %s\n" "SESSION" "STATE" "FOR" "AGENT" "LAST SAID"
+    else printf "     %-26s %-13s %-6s %-8s %s\n" "SESSION" "STATE" "FOR" "AGENT" "LAST SAID"; fi
     [ "$keys" = 1 ] && : > "$STATE/board.rows"
     idx=0
     printf '%s' "$rows" | sort | while IFS='|' read -r _p a n st age said spid; do
         [ -n "$n" ] || continue
         idx=$((idx+1))
         case $st in
-            blocked) dot="${R}*${N}"; label="NEEDS YOU" ;;
-            error)   dot="${M}*${N}"; label="ERROR" ;;
-            ready)   dot="${G}*${N}"; label="READY" ;;
-            working) dot="${Y}*${N}"; label="working" ;;
-            waiting) dot="${D}*${N}"; label="waiting" ;;
+            blocked)   dot="${R}*${N}"; label="NEEDS ANSWER" ;;
+            error)     dot="${M}*${N}"; label="NEEDS ACTION" ;;
+            review|waiting) dot="${G}*${N}"; label="NEEDS REVIEW" ;;
+            ready)     dot="${G}*${N}"; label="READY" ;;
+            working)   dot="${Y}*${N}"; label="working" ;;
             scheduled) dot="${D}*${N}"; label="scheduled" ;;
-            *)       dot="${D}o${N}"; label="idle" ;;
+            reviewed)  dot="${D}o${N}"; label="reviewed" ;;
+            *)         dot="${D}o${N}"; label="idle" ;;
         esac
         if [ "$keys" = 1 ]; then
             printf '%s|%s|%s|%s\n' "$idx" "$spid" "$n" "$a" >> "$STATE/board.rows"
@@ -705,8 +848,9 @@ cli_sessions() {
             printf "  %s  %-26.26s %-10s %-6s %-8s ${D}%.44s${N}${EL}\n" "$dot" "$n" "$label" "$(_ago "$age")" "$a" "$said"
         fi
     done
-    printf "\n  ${R}*${N} needs your answer   ${G}*${N} ready for review   ${Y}*${N} working   ${M}*${N} error   ${D}o${N} idle${EL}\n"
+    printf "\n  ${R}*${N} needs your answer   ${M}*${N} needs your action   ${G}*${N} ready for review   ${Y}*${N} working   ${D}o${N} reviewed${EL}\n"
     [ "$keys" = 1 ] && printf "  ${D}click a row or press its number to bring it to the front - q quits${N}${EL}\n"
+    [ "$keys" = 1 ] && printf "  ${D}any key in a session marks it reviewed - clicking or focusing it is not enough${N}${EL}\n"
     return 0   # (a trailing failed [ ] test made `sessions` exit 1 - caught by CI)
 }
 # _row agent name status since updated said pid -> "prio|agent|name|status|age|said|pid" (or nothing if hidden)
@@ -715,8 +859,7 @@ _row() {
     [ "$now" -gt 0 ] && quiet=$(( now - $5 )) || quiet=0
     [ "$quiet" -gt $(( hideh * 3600 )) ] && return 0
     st=$3
-    [ "$st" = ready ] && [ "$age" -gt $(( readym * 60 )) ] && st=idle
-    case $st in blocked) p=0 ;; error) p=1 ;; ready) p=2 ;; working) p=3 ;; waiting) p=4 ;; *) p=5 ;; esac
+    case $st in blocked) p=0 ;; error) p=1 ;; review|waiting) p=2 ;; ready) p=3 ;; working) p=4 ;; scheduled) p=5 ;; *) p=6 ;; esac
     printf '%s|%s|%s|%s|%s|%s|%s' "$p" "$1" "$2" "$st" "$age" "$6" "${7:-}"
 }
 
@@ -921,6 +1064,8 @@ case "$EVENT" in
     board)   shift; cli_board "$@"; exit $? ;;
     focus)   shift; cli_focus "$@"; exit $? ;;
     forget)  shift; cli_forget "$@"; exit $? ;;
+    tick)    shift; cli_tick "$@"; exit $? ;;      # (internal) apply the review lifecycle now
+    watch)   shift; cli_watch "$@"; exit $? ;;     # (internal) follow one session-turn
     install) shift; cli_install "$@"; exit $? ;;
     doctor)  shift; cli_doctor "$@"; exit $? ;;
     completions) shift; cli_completions "$@"; exit $? ;;
@@ -1075,15 +1220,16 @@ fi
 
 # ---------- session state (feeds `sessions` / `board`) -----------------------
 # One small key=value file per session under $SESS. Written with builtins only.
-# status: working | ready | blocked | waiting | error | scheduled. `since` only moves when the
+# status: working | ready | review | reviewed | blocked | error | scheduled. `since` only moves when the
 # status changes; `said` is the last line actually spoken for this session.
 state_write() {   # state_write <status> [said] [note]   (note: what the session is waiting on)
     [ -n "$sid" ] || return 0
     [ -d "$SESS" ] || mkdir -p -m 700 "$SESS" 2>/dev/null
-    _sf="$SESS/$sid"; _os=""; _osince=""; _osaid=""
+    _sf="$SESS/$sid"; _os=""; _osince=""; _osaid=""; _orem=""; _ora=""
     if [ -f "$_sf" ]; then
         while IFS= read -r _l || [ -n "$_l" ]; do
-            case $_l in status=*) _os=${_l#status=} ;; since=*) _osince=${_l#since=} ;; said=*) _osaid=${_l#said=} ;; esac
+            case $_l in status=*) _os=${_l#status=} ;; since=*) _osince=${_l#since=} ;; said=*) _osaid=${_l#said=} ;;
+                       reminded=*) _orem=${_l#reminded=} ;; remind_at=*) _ora=${_l#remind_at=} ;; esac   # lifecycle fields survive rewrites
         done < "$_sf"
     fi
     _since=$NOW; [ "$_os" = "$1" ] && [ -n "$_osince" ] && _since=$_osince
@@ -1091,13 +1237,32 @@ state_write() {   # state_write <status> [said] [note]   (note: what the session
     printf 'agent=%s\nname=%s\nstatus=%s\nsince=%s\nupdated=%s\npid=%s\ncwd=%s\nsaid=%s\nnote=%s\n' \
         "$agent" "$name" "$1" "$_since" "$NOW" "$pid" "$cwd" "$_said" "${3:-}" > "$_sf" 2>/dev/null
 }
-if [ "$EVENT" = "stamp" ]; then state_write working; exit 0; fi
+if [ "$EVENT" = "stamp" ]; then
+    state_write working
+    # a prompt from you (not a wake-up) is the one sure sign you are here: it feeds
+    # remind_pause, and after welcome_back quiet minutes it earns a summary of what waited
+    case $(jget source "$payload") in
+        ''|user|sdk)
+            _lp=0; [ -f "$STATE/last_prompt" ] && { IFS= read -r _lp < "$STATE/last_prompt" || :; }; case $_lp in ''|*[!0-9]*) _lp=0 ;; esac
+            [ "$NOW" -gt 0 ] && printf '%s\n' "$NOW" > "$STATE/last_prompt" 2>/dev/null
+            cfgv _wb welcome_back 10
+            if [ "$_wb" -gt 0 ] 2>/dev/null && [ "$_lp" -gt 0 ] && [ $(( NOW - _lp )) -ge $(( _wb * 60 )) ]; then
+                _sum=$(pending_summary)
+                if [ -n "$_sum" ]; then
+                    _wl="while you were away: $_sum"
+                    if [ -n "$IRISCALE_VOICE_DEBUG" ]; then echo "(welcome_back: would say: $_wl)"
+                    else printf '{"session_id":"%s","message":"%s"}' "$sid" "$(clean "$_wl")" | sh "$0" WelcomeBack </dev/null >/dev/null 2>&1 & fi
+                fi
+            fi ;;
+    esac
+    exit 0
+fi
 case $EVENT in
     Stop)              st_new=ready ;;
     StepDone)          st_new=working ;;
     Scheduled)         st_new=scheduled ;;
     PermissionRequest) st_new=blocked ;;
-    idle_prompt)       st_new=waiting ;;
+    idle_prompt)       st_new=review; case $(st_get "$SESS/$sid" status) in blocked|error) st_new="" ;; esac ;;
     StopFailure)       st_new=error ;;
     SessionEnd)        st_new=""; [ -n "$sid" ] && rm -f "$SESS/$sid" 2>/dev/null ;;
     *)                 st_new="" ;;
@@ -1212,6 +1377,7 @@ if [ "$EVENT" = "Stop" ] && [ -n "$elapsed" ] && [ "$elapsed" -ge 60 ] && [ "$sa
     m=$((elapsed / 60)); tail="$tail after $m minute$( [ "$m" -ne 1 ] && echo s)"
 fi
 line="$spoken_name $tail"
+case $EVENT in Remind|WelcomeBack) line=$(jget message "$payload") ;; esac   # whole line comes from tick / stamp
 
 # repeat guard: the same announcement for the same session within repeat_cooldown
 # seconds is noise (a subagent looping, a hook double-firing) — say it once.
@@ -1236,6 +1402,18 @@ fi
 # record the session's new state for the board, whether or not we speak
 if [ -n "$st_new" ]; then
     if [ -z "$reason" ]; then state_write "$st_new" "$line" "$bg_note"; else state_write "$st_new" "" "$bg_note"; fi
+fi
+# passive lifecycle bookkeeping, after the state is recorded (builtins only)
+if [ -n "$sid" ] && [ -n "$st_new" ] && [ -f "$SESS/$sid" ] && [ "$(st_get "$SESS/$sid" since)" = "$NOW" ]; then
+    case $st_new in
+        ready|review|blocked|error)
+            _rk=$(pending_kind "$st_new" "$agent"); [ "$st_new" = ready ] && _rk=review
+            st_put "$SESS/$sid" reminded 0; st_put "$SESS/$sid" remind_at "$(next_remind "$_rk" "$NOW" 0)"
+            # one detached watcher per session-turn: sleeps until the review check /
+            # reminders are due, exits when the session moves on. Debug runs skip it
+            # (the suite drives `tick` directly).
+            [ -n "$IRISCALE_VOICE_DEBUG" ] || ( cli_watch "$sid" "$NOW" ) </dev/null >/dev/null 2>&1 & ;;
+    esac
 fi
 
 # ---------- act ---------------------------------------------------------------
