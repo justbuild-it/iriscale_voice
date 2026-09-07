@@ -5,6 +5,29 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.23] — 2026-09-07
+
+### Added
+- **Passive review lifecycle.** Nothing to click or acknowledge. Claude Code fires its
+  idle notice 60 s after a turn ends only if no key was pressed in that session (focus and
+  mouse do not count); the plugin already receives it. A READY Claude session that
+  outlives that window with no notice becomes **reviewed**; one that gets the notice
+  becomes **needs your review**. The board now says **needs your answer** (permission
+  prompt), **needs your action** (error), **needs your review**, ready, working,
+  scheduled, reviewed - and no longer greys a row out by the clock (`board_ready_minutes`
+  removed).
+- **Reminders, few and merged.** After the first announcement, a session that still needs
+  you is reminded on a schedule: answers at 3 and 10 minutes, review at 15, errors at
+  10 (`remind_answer` / `remind_review` / `remind_action`; `verbose` 3,10,20 / 10,30 /
+  10; `basic` never). Several due at once become one line (*"still waiting: payments
+  needs your answer, billing ready for review"*); a reminder is skipped, not deferred,
+  if you sent a prompt anywhere in the last `remind_pause` minutes (2); then silence.
+- **Welcome back.** After `welcome_back` quiet minutes (10), your next prompt is preceded
+  by *"while you were away: …"* naming what waits. Off with `0`.
+- Events `Remind` and `WelcomeBack` (on in standard and verbose) so quiet hours, mutes
+  and the cooldown apply to them too. A detached watcher per session-turn does the
+  timing; the hook path stays builtins-only.
+
 ## [0.1.22] — 2026-09-07
 
 ### Fixed
@@ -393,7 +416,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.22...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.23...HEAD
+[0.1.23]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.19...v0.1.20

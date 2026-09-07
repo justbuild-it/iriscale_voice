@@ -58,7 +58,7 @@ everywhere. `/iriscale-voice:test --fix` puts it back to 100%. (Type `/iriscale-
 Run once in PowerShell (Git for Windows is the only prerequisite):
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.22/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.23/install.ps1 | iex
 ```
 
 Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show
@@ -136,10 +136,20 @@ if it isn't already there (after an update, a reboot, a stray close):
 | paused for a `/loop` or scheduled wake-up | nothing (verbose: *"…paused until its next wake-up"*) - the board shows *scheduled* | nothing |
 | is blocked on a permission prompt | *"my service is waiting for your answer to run git push origin main"* / *"…to use Edit"* — credential-looking words are spoken as "redacted" | it can't continue until you answer — switch now |
 | died (rate limit, billing, auth) | *"my service stopped: rate limit"* | don't wait for it |
-| has sat idle waiting for input | *"my service is waiting for you"* | the agent's own reminder, relayed once |
+| a minute passed and no key was pressed there | *"my service is waiting for you"* | the board marks it **needs your review** |
+| still needs you after a while | *"payments still needs your answer, 10 minutes"* — merged when several: *"still waiting: payments needs your answer, billing ready for review"* | answers at 3 and 10 min, review at 15, errors at 10, then silence — see below |
+| you come back after 10 quiet minutes | *"while you were away: payments needs your answer, billing ready for review"* | one summary, before your prompt runs |
 | subagent / session end *(verbose preset)* | *"…sub agent done"*, *"…session ended"* | usually noise; off by default |
 
-Each of these is spoken **once**. Nothing repeats on its own, and the `standard` preset
+Each first line is spoken **once**. Reminders follow only while a session still needs
+you: merged into one sentence when several do, skipped while you are typing elsewhere
+(`remind_pause`), and capped by the schedule (`remind_answer` 3,10 · `remind_review` 15 ·
+`remind_action` 10 minutes; `basic` never reminds). Then silence; the board keeps the row.
+
+**A session counts as reviewed when you press any key in it within a minute of it
+finishing. Clicking into it or giving it focus is not enough** — that is what Claude
+Code's own idle notice keys on, and the plugin reads that notice. Codex sessions stay
+*ready for review* until your next prompt there. The `standard` preset also
 stays silent on turns under 30 seconds so it isn't chatty while you're actively working
 in that session. Underscores and hyphens are spoken as spaces, so name sessions like
 `payments-api`.
