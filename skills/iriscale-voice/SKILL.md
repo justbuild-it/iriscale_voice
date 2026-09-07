@@ -22,7 +22,7 @@ installation or user configuration.
 
 - Inspect: `iriscale-voice status`, `iriscale-voice sessions`, `iriscale-voice doctor codex`,
   `iriscale-voice config list`
-- Test: `iriscale-voice test`
+- Test: `iriscale-voice test` (Windows: also reports PowerShell's Volume Mixer level; `test --fix` restores it to 100%)
 - Control: `iriscale-voice mute`, `iriscale-voice unmute`,
   `iriscale-voice config set <key> <value>`
 - Board: `iriscale-voice board` (live pane; click or press a row number to raise that

@@ -30,15 +30,16 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.16 | Board clock labelled "updated"; tab selection declared out of scope | shipped 2026-08-28 |
 | 0.1.17 | Release-readiness: privacy default for permission prompts, id sanitising, mode-700 state dirs, log rotation, pinned installer, CI on Ubuntu/macOS/Windows, SECURITY.md, docs reconciled | this PR |
 | 0.1.18 | The board keeps itself open (`board_autostart`, `board --open`, `/iriscale-voice:board`); dead sessions forgotten; `forget` | shipped 2026-09-04 |
-| 0.1.19 | `update` moves to the latest release (it re-installed the pinned one) | this PR |
-| 0.1.20 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
-| 0.1.21 | Speak a one-line summary of what was done (from `transcript_path`) | planned |
-| 0.1.22 | Escalate unanswered permission prompts (3 min, 10 min) | planned |
-| 0.1.23 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
-| 0.1.24 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
-| 0.1.25 | Per-session voice signatures; stamp housekeeping | planned |
-| 0.1.26 | Windows-without-Git-Bash PowerShell fallback | planned |
-| 0.1.27 | Windsurf, Cline, Aider (done-only) | planned |
+| 0.1.19 | `update` moves to the latest release (it re-installed the pinned one) | shipped 2026-09-04 |
+| 0.1.20 | `test` reads PowerShell's Volume Mixer level on Windows (0% = silent everywhere); `test --fix` | this PR |
+| 0.1.21 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
+| 0.1.22 | Speak a one-line summary of what was done (from `transcript_path`) | planned |
+| 0.1.23 | Escalate unanswered permission prompts (3 min, 10 min) | planned |
+| 0.1.24 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
+| 0.1.25 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
+| 0.1.26 | Per-session voice signatures; stamp housekeeping | planned |
+| 0.1.27 | Windows-without-Git-Bash PowerShell fallback | planned |
+| 0.1.28 | Windsurf, Cline, Aider (done-only) | planned |
 | later | macOS/Linux bar plugins; Windows tray (opt-in); macOS/Linux live verification as users report | |
 | out of scope | **Selecting the terminal tab inside an IDE.** Real setups run several IDE windows across screens, each with several terminal tabs; IDE tabs are not addressable from outside. The board raises the correct window and names the tab. Windows Terminal tabs via UI Automation remains a possible opt-in if sessions run there. | decided 2026-08-28 |
 

@@ -5,6 +5,18 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.20] — 2026-09-04
+
+### Added
+- **`test` finds the silent-plugin case on Windows.** Windows keeps a volume level per
+  application in the Volume Mixer, and every announcement is spoken by `powershell.exe`,
+  so one stray drag of that slider to 0% mutes the plugin in every session while the
+  speech engine still reports success (this happened to us). `iriscale-voice test` now
+  speaks through a PowerShell that reads its own mixer level while it talks and warns
+  when it is 0% or muted (and when the output device is); `test --fix` sets it back to
+  100%. `/iriscale-voice:test` passes arguments through, so `/iriscale-voice:test --fix`
+  works from Claude Code.
+
 ## [0.1.19] — 2026-09-04
 
 ### Fixed
@@ -351,7 +363,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.19...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.20...HEAD
+[0.1.20]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.16...v0.1.17

@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.19"
+VERSION="0.1.20"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -270,7 +270,8 @@ USAGE
 
 COMMANDS
   status                 what's configured and what will speak
-  test                   speak a test phrase out loud
+  test [--fix]           speak a test phrase; on Windows also reads PowerShell's level in the
+                         Volume Mixer (0% there = silent everywhere); --fix sets it to 100%
   say <text>             speak arbitrary text
   mute | unmute          silence / restore (sets enabled=false/true)
   config list            every setting: key, current value, default, meaning
@@ -480,6 +481,92 @@ EOF
             ;;
         *) echo "usage: iriscale-voice completions <powershell|bash|zsh>" >&2; return 2 ;;
     esac
+}
+
+# ---------- test (with the Windows Volume Mixer check) ------------------------
+# Windows keeps a volume level per application in the Volume Mixer, and every
+# announcement is spoken by powershell.exe - so if that slider is at 0% (one stray
+# drag while an announcement is showing in the mixer) the plugin goes silent in every
+# session while the speech engine still reports success. `test` speaks through a
+# PowerShell that reads its own session level while it talks; `--fix` sets it to 100%.
+mixer_verdict() {   # mixer_verdict "app=0 appmuted=False master=50 mastermuted=False fixed=False"
+    _app=""; _am=""; _mv=""; _mm=""; _fx=""
+    for _kv in $1; do case $_kv in app=*) _app=${_kv#app=} ;; appmuted=*) _am=${_kv#appmuted=} ;; master=*) _mv=${_kv#master=} ;;
+                                   mastermuted=*) _mm=${_kv#mastermuted=} ;; fixed=*) _fx=${_kv#fixed=} ;; esac; done
+    [ "$_fx" = True ] && echo "  restored Windows PowerShell to 100% in the Volume Mixer"
+    if [ "$_am" = True ]; then
+        echo "  WARNING: Windows PowerShell is muted in the Volume Mixer, so every announcement is silent. Run: iriscale-voice test --fix"
+    elif [ "$_app" = 0 ]; then
+        echo "  WARNING: Windows PowerShell is at 0% in the Volume Mixer, so every announcement is silent. Run: iriscale-voice test --fix"
+    elif [ -n "$_app" ] && [ "$_app" != "?" ] && [ "$_app" -lt 30 ] 2>/dev/null; then
+        echo "  note: Windows PowerShell is at ${_app}% in the Volume Mixer (Settings > System > Sound > Volume mixer); test --fix sets 100%"
+    fi
+    if [ "$_mm" = True ]; then echo "  WARNING: the output device is muted"
+    elif [ "$_mv" = 0 ]; then echo "  WARNING: the output device volume is 0"; fi
+    return 0
+}
+cli_test() {
+    fixarg=""; for _a in "$@"; do case $_a in --fix) fixarg=-Fix ;; esac; done
+    text="iriscale voice is working"
+    if [ "$(os)" != win ]; then speak "$text"; echo "spoke a test phrase via $(os) backend"; return 0; fi
+    cfgv vol volume 100; cfgv rate rate 0; cfgv voice voice ""
+    case $vol in ''|*[!0-9]*) vol=100 ;; esac
+    case $rate in ''|-) rate=0 ;; -[0-9]*|[0-9]*) case ${rate#-} in *[!0-9]*) rate=0 ;; esac ;; *) rate=0 ;; esac
+    case $voice in *[!A-Za-z0-9\ ._-]*) voice="" ;; esac
+    [ -d "$STATE" ] || mkdir -p -m 700 "$STATE" 2>/dev/null
+    cat > "$STATE/mixer.ps1" <<'EOF'
+param([string]$Phrase = 'iriscale voice is working', [int]$Volume = 100, [int]$Rate = 0, [string]$Voice = '', [switch]$Fix)
+$code = @'
+using System; using System.Runtime.InteropServices;
+[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDeviceEnumerator { int _0(); int GetDefaultAudioEndpoint(int flow, int role, out IMMDevice d); }
+[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDevice { int Activate(ref Guid id, int ctx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object a); }
+[Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionManager2 { int _0(); int _1(); int GetSessionEnumerator(out IAudioSessionEnumerator e); }
+[Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionEnumerator { int GetCount(out int n); int GetSession(int i, out IAudioSessionControl2 s); }
+[Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionControl2 { int GetState(out int s); int _1(); int _2(); int _3(); int _4(); int _5(); int _6(); int _7(); int _8(); int _9(); int _10(); int GetProcessId(out uint pid); }
+[Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface ISimpleAudioVolume { int SetMasterVolume(float v, ref Guid c); int GetMasterVolume(out float v); int SetMute(bool m, ref Guid c); int GetMute(out bool m); }
+[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioEndpointVolume { int _0(); int _1(); int _2(); int _3(); int _4(); int _5(); int GetMasterVolumeLevelScalar(out float l); int _7(); int _8(); int _9(); int _10(); int _11(); int GetMute(out bool m); }   // vtable: GetMasterVolumeLevelScalar=6, GetMute=12 (SetMute=11)
+[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumeratorComObject { }
+public class Mixer { public static string Report(uint me, bool fix) {
+  var e = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject()); IMMDevice d; e.GetDefaultAudioEndpoint(0, 1, out d);
+  var gv = typeof(IAudioEndpointVolume).GUID; object ov; d.Activate(ref gv, 23, IntPtr.Zero, out ov);
+  float ml; ((IAudioEndpointVolume)ov).GetMasterVolumeLevelScalar(out ml); bool mm; ((IAudioEndpointVolume)ov).GetMute(out mm);
+  var g = typeof(IAudioSessionManager2).GUID; object o; d.Activate(ref g, 23, IntPtr.Zero, out o);
+  IAudioSessionEnumerator en; ((IAudioSessionManager2)o).GetSessionEnumerator(out en); int n; en.GetCount(out n);
+  string app = "?"; string am = "?"; string fixed_ = "False";
+  for (int i = 0; i < n; i++) { IAudioSessionControl2 s; en.GetSession(i, out s); uint pid; s.GetProcessId(out pid); if (pid != me) continue;
+    var sv = (ISimpleAudioVolume)s; float v; sv.GetMasterVolume(out v); bool m; sv.GetMute(out m);
+    if (fix && (v < 0.995f || m)) { Guid z = Guid.Empty; sv.SetMasterVolume(1.0f, ref z); sv.SetMute(false, ref z); sv.GetMasterVolume(out v); sv.GetMute(out m); fixed_ = "True"; }
+    app = Math.Round(v * 100).ToString(); am = m.ToString(); break; }
+  return "app=" + app + " appmuted=" + am + " master=" + Math.Round(ml * 100) + " mastermuted=" + mm + " fixed=" + fixed_; } }
+'@
+$report = 'app=? appmuted=? master=? mastermuted=? fixed=False'
+try {
+    Add-Type -AssemblyName System.Speech
+    $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+    $s.Volume = $Volume; $s.Rate = $Rate
+    if ($Voice) { try { $s.SelectVoice($Voice) } catch {} }
+    $null = $s.SpeakAsync($Phrase)
+    Start-Sleep -Milliseconds 600
+    try { Add-Type -TypeDefinition $code -ErrorAction Stop; $report = [Mixer]::Report([uint32]$PID, [bool]$Fix) } catch {}
+    $waited = 0
+    while ($s.State -ne 'Ready' -and $waited -lt 150) { Start-Sleep -Milliseconds 100; $waited++ }
+    $s.Dispose()
+} catch {}
+Write-Output $report
+EOF
+    rep=$(powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$STATE/mixer.ps1" -Phrase "$text" -Volume "$vol" -Rate "$rate" -Voice "$voice" $fixarg 2>/dev/null | tr -d '\r')
+    case $rep in
+        app=*) echo "spoke a test phrase via win backend"; mixer_verdict "$rep" ;;
+        *)     speak "$text"; echo "spoke a test phrase via win backend (Volume Mixer check unavailable)" ;;
+    esac
+    return 0
 }
 
 cli_windows_lifecycle() {
@@ -845,7 +932,8 @@ case "$EVENT" in
         printf '  %-18s %-46s %s\n' EVENT "WHEN IT FIRES" "WHAT IT SAYS"
         events_table | while IFS='|' read -r e w s; do printf '  %-18s %-46s %s\n' "$e" "$w" "$s"; done; exit 0 ;;
     say|speak) shift; speak "${*:-iriscale voice test}"; exit 0 ;;
-    test)    speak "iriscale voice is working"; echo "spoke a test phrase via $(os) backend"; exit 0 ;;
+    test)    shift; cli_test "$@"; exit $? ;;
+    mixer-verdict) mixer_verdict "$2"; exit 0 ;;   # (test suite) render one mixer report line
     -*)      echo "unknown option: $EVENT" >&2; usage >&2; exit 2 ;;
 esac
 
