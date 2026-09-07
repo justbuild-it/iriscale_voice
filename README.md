@@ -58,7 +58,7 @@ everywhere. `/iriscale-voice:test --fix` puts it back to 100%. (Type `/iriscale-
 Run once in PowerShell (Git for Windows is the only prerequisite):
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.20/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.21/install.ps1 | iex
 ```
 
 Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show

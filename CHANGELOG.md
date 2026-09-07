@@ -5,6 +5,16 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.21] — 2026-09-07
+
+### Fixed
+- **`test` now respects `mute`.** It used to call the speech backend unconditionally,
+  so `mute` (`enabled=false`) could not be trusted to mean "totally silent" - a muted
+  `test` still spoke. It now checks `enabled` (and `IRISCALE_VOICE_OFF`) first and, if
+  muted, prints a message instead of speaking and points to `say <text>` for anyone who
+  deliberately wants to force speech while muted (e.g. to sanity-check the backend before
+  unmuting). Found and fixed by @VayakAkshay while verifying the plugin end-to-end (#24, #25).
+
 ## [0.1.20] — 2026-09-04
 
 ### Added
@@ -363,7 +373,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.20...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.21...HEAD
+[0.1.21]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.17...v0.1.18
