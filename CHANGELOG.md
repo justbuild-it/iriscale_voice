@@ -5,6 +5,26 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.22] — 2026-09-07
+
+### Fixed
+- **No more "done" when the session is only between steps.** Claude Code (2.1+) sends
+  `background_tasks` and `session_crons` on `Stop`, precisely so a hook can tell "done" from
+  "paused until background work wakes me". A `Stop` with agents, shells, monitors or
+  workflows in flight is now the `StepDone` event: silent in `basic`/`standard`, spoken
+  in `verbose` as *"…finished a step, 1 agent still running"*, and the board keeps the
+  row on **working** with a note naming what it waits for (*waiting for 1 agent: Repo
+  digest…*). A `Stop` that only waits for a `/loop` or scheduled wake-up is `Scheduled`
+  (silent, board **scheduled**). Hosts without the field behave as before.
+- **"done after N minutes" now covers the whole job.** Claude's own wake-ups after
+  background work arrive as `UserPromptSubmit` with `source` other than `user`; those no
+  longer restart the turn clock, so the elapsed time runs from your prompt to the real
+  finish.
+
+### Added
+- `note=` in the session state file (what the session is waiting on); the board shows it
+  in the last column when present.
+
 ## [0.1.21] — 2026-09-07
 
 ### Fixed
@@ -373,7 +393,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.21...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.22...HEAD
+[0.1.22]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.18...v0.1.19

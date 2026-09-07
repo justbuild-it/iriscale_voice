@@ -34,7 +34,7 @@ The file is created the first time a setting is written (`config set`, a preset 
 |---|---|---|
 | `preset` | `standard` | see above |
 | `enabled` | `true` | `false` = silent. `/iriscale-voice:mute` sets this |
-| `event.<Event>` | *(from preset)* | `on`/`off` — override one event regardless of preset. Events: `Stop`, `StopFailure`, `PermissionRequest`, `idle_prompt`, `agent_completed`, `SubagentStop`, `SessionEnd` |
+| `event.<Event>` | *(from preset)* | `on`/`off` — override one event regardless of preset. Events: `Stop`, `StopFailure`, `PermissionRequest`, `idle_prompt`, `agent_completed`, `SubagentStop`, `SessionEnd`, `StepDone` (turn paused, background work running), `Scheduled` (turn paused for a /loop or scheduled wake-up) |
 | `quiet_hours` | *(none)* | `22-8` style, 24-hour, may wrap midnight. Nothing speaks inside the window |
 | `min_turn_seconds` | `30` (standard) / `0` | don't announce "done" for turns shorter than this. Errors and permission prompts ignore it — those always speak |
 | `say_elapsed` | `true` | append "after N minutes" to "done" when a turn ran 60 s or more |

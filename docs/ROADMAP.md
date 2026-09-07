@@ -32,15 +32,16 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.18 | The board keeps itself open (`board_autostart`, `board --open`, `/iriscale-voice:board`); dead sessions forgotten; `forget` | shipped 2026-09-04 |
 | 0.1.19 | `update` moves to the latest release (it re-installed the pinned one) | shipped 2026-09-04 |
 | 0.1.20 | `test` reads PowerShell's Volume Mixer level on Windows (0% = silent everywhere); `test --fix` | shipped 2026-09-07 |
-| 0.1.21 | `test` respects `mute` (PR #25, @VayakAkshay) | this PR |
-| 0.1.22 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
-| 0.1.23 | Speak a one-line summary of what was done (from `transcript_path`) | planned |
-| 0.1.24 | Escalate unanswered permission prompts (3 min, 10 min) | planned |
-| 0.1.25 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
-| 0.1.26 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
-| 0.1.27 | Per-session voice signatures; stamp housekeeping | planned |
-| 0.1.28 | Windows-without-Git-Bash PowerShell fallback | planned |
-| 0.1.29 | Windsurf, Cline, Aider (done-only) | planned |
+| 0.1.21 | `test` respects `mute` (PR #25, @VayakAkshay) | shipped 2026-09-07 |
+| 0.1.22 | Background-aware Stop: `StepDone` / `Scheduled` instead of a false "done"; turn clock survives wake-ups; board note | this PR |
+| 0.1.23 | Passive review lifecycle: reviewed inferred from a keypress in the idle window; states needs your answer / action / review; reminders 3+10 / 15 / 10 min, merged, capped, paused while you are active; welcome-back summary; no time decay | planned |
+| 0.1.24 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
+| 0.1.25 | Speak a one-line summary of what was done (from `transcript_path`) (`last_assistant_message` is on the Stop payload) | planned |
+| 0.1.26 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
+| 0.1.27 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
+| 0.1.28 | Per-session voice signatures; stamp housekeeping | planned |
+| 0.1.29 | Windows-without-Git-Bash PowerShell fallback | planned |
+| 0.1.30 | Windsurf, Cline, Aider (done-only) | planned |
 | later | macOS/Linux bar plugins; Windows tray (opt-in); macOS/Linux live verification as users report | |
 | out of scope | **Selecting the terminal tab inside an IDE.** Real setups run several IDE windows across screens, each with several terminal tabs; IDE tabs are not addressable from outside. The board raises the correct window and names the tab. Windows Terminal tabs via UI Automation remains a possible opt-in if sessions run there. | decided 2026-08-28 |
 
