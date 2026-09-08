@@ -20,9 +20,9 @@ No direct pushes to `main` — including maintainers, including one-line fixes.
 
 A release is its own small PR:
 
-1. Bump the version in **all four** places — `VERSION=` in `bin/iriscale-voice`,
-   `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and
-   `.codex-plugin/plugin.json` (`test/run.sh`
+1. Bump the version in **all five** places — `VERSION=` in `bin/iriscale-voice`,
+   `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`,
+   `.codex-plugin/plugin.json`, and `package.json` (`test/run.sh`
    fails if they disagree). `claude plugin update` only re-copies on a version
    change, so a fix without a bump never reaches installed users.
    - **Versioning policy:** while we're pre-1.0, every release — fixes and features
@@ -46,12 +46,20 @@ A release is its own small PR:
    git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
    gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <(sed -n '/^## \[X.Y.Z\]/,/^## \[/p' CHANGELOG.md | sed '$d')
    ```
-Users get it with `/plugin marketplace update iriscale`.
+   finally publish the npm package — `npx iriscale-voice@latest install <codex|claude>
+   --apply` installs from it on every OS, so a release that skips this step leaves those
+   users on the old version:
+   ```sh
+   npm publish --dry-run  # check the file list, then:
+   npm publish            # prepublishOnly runs both suites first
+   ```
+Users get it with `/plugin marketplace update iriscale`, or `iriscale-voice update`.
 
 ## Local iteration
 
 ```sh
 sh test/run.sh                          # silent, uses a throwaway config dir
+sh test/npm.sh                          # the npm installer, against a throwaway ~/.codex
 IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json
 claude plugin validate .
 claude plugin uninstall iriscale-voice@iriscale && claude plugin install iriscale-voice@iriscale

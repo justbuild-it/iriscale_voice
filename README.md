@@ -53,31 +53,51 @@ everywhere. `/iriscale-voice:test --fix` puts it back to 100%. (Type `/iriscale-
 > Windows already has. If `sh` isn't on your PATH, install
 > [Git for Windows](https://git-scm.com/download/win).
 
-### Codex CLI on Windows
+### Codex CLI (macOS, Linux, Windows)
 
-Run once in PowerShell (Git for Windows is the only prerequisite):
+One command, wherever you have Node 18+:
+
+```sh
+npx iriscale-voice@latest install codex --apply
+```
+
+> The same installer does Claude Code without the plugin —
+> `npx iriscale-voice@latest install claude --apply` — for one install path across every
+> agent. It writes the seven hooks into `~/.claude/settings.json`, the skill, and the
+> commands as `/iriscale-voice-status` (flat files; only the plugin gets the `:` spelling).
+> The plugin above is still the better route for Claude Code — self-updating, edits none of
+> your files — and running **both** speaks everything twice, so the installer refuses when
+> it finds the plugin enabled. `iriscale-voice doctor claude` checks all of it.
+> See [docs/install/npm.md](docs/install/npm.md).
+
+Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show
+`Installed 1`. It installs the script to a stable directory, adds `iriscale-voice` to
+your `PATH`, installs the `$iriscale-voice` Codex skill, and merges Codex configuration
+— backing up every file it touches and rewriting only its own lines. Reversed exactly by
+`npx iriscale-voice@latest uninstall codex`. Details: [docs/install/npm.md](docs/install/npm.md).
+
+Codex speaks as soon as you restart it — the hooks hold absolute paths, so nothing here
+depends on your `PATH`. To *also* run the CLI yourself, put its directory on `PATH` (the
+installer prints the exact line for your shell) or use `npm install -g iriscale-voice`:
+
+```sh
+iriscale-voice status
+iriscale-voice doctor codex
+iriscale-voice test
+```
+
+**Node is needed to install, never to run**: Codex calls the same zero-dependency shell
+script directly. Want the config but not the installer? `npx iriscale-voice@latest
+install codex` (no `--apply`) prints exactly what to paste and writes nothing.
+
+Windows without Node? The PowerShell installer does the same job, and additionally sets
+up tab completion (Git for Windows is its only prerequisite):
 
 ```powershell
 irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.23/install.ps1 | iex
 ```
 
-Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show
-`Installed 1`. The installer adds `iriscale-voice` to your user `PATH`, enables
-PowerShell tab completion, merges Codex configuration (taking a backup of each file
-it touches), and is reversed exactly by `iriscale-voice uninstall codex`. Prefer to read
-it first? [SECURITY.md](SECURITY.md) shows how. Then type `$iriscale-voice` in Codex for
-the skill, or use the CLI anywhere:
-
-```powershell
-iriscale-voice status
-iriscale-voice doctor codex
-iriscale-voice <Tab>
-```
-
-### Codex CLI on macOS / Linux
-
-No installer yet: put the script on your PATH ([docs/CONFIG.md → Command line](docs/CONFIG.md#command-line))
-and add the one `notify` line from [docs/install/codex.md](docs/install/codex.md).
+Prefer to read either installer first? [SECURITY.md](SECURITY.md) shows how.
 
 ## Choose how chatty
 
@@ -96,9 +116,9 @@ Or edit `~/.claude/iriscale-voice.conf` by hand — it's just `key=value` lines.
 knob is in [docs/CONFIG.md](docs/CONFIG.md).
 
 The same thing exists as a normal command, **`iriscale-voice`**, for use outside Claude
-Code (`iriscale-voice --help`, `iriscale-voice config list`, …). The Windows Codex
-installer adds it to `PATH`; manual macOS/Linux setup is in
-[docs/CONFIG.md → Command line](docs/CONFIG.md#command-line).
+Code (`iriscale-voice --help`, `iriscale-voice config list`, …). `npm install -g
+iriscale-voice` puts it on your `PATH` on any OS (so does either Codex installer);
+manual setup is in [docs/CONFIG.md → Command line](docs/CONFIG.md#command-line).
 
 ## See them all at once: the session board
 
@@ -176,8 +196,8 @@ bell). No `jq`, `node`, or `python` needed.
 ## Other agents
 
 **Codex CLI is supported and verified live.** See the one-command
-[Codex setup](docs/install/codex.md), including installation, diagnostics, completion,
-updates, and removal. Copilot CLI, Grok
+[Codex setup](docs/install/codex.md) — or [npm/npx](docs/install/npm.md) on any OS —
+including installation, diagnostics, completion, updates, and removal. Copilot CLI, Grok
 Build, Gemini CLI, Cursor, and the remaining agents are mapped out in
 [docs/PLATFORMS.md](docs/PLATFORMS.md).
 
@@ -191,6 +211,7 @@ above — tracked in [docs/ROADMAP.md](docs/ROADMAP.md). Issues and PRs welcome.
 
 ```sh
 sh test/run.sh                                  # full event, CLI, installer, and performance suite
+sh test/npm.sh                                  # the npm installer, against a throwaway ~/.codex
 IRISCALE_VOICE_DEBUG=1 sh bin/iriscale-voice Stop < payload.json   # shows on the board too: forget --all after
 claude plugin validate .                        # manifests
 claude plugin marketplace add /path/to/checkout && claude plugin install iriscale-voice@iriscale
@@ -209,7 +230,9 @@ then **restart Claude Code**. A version change is not picked up by `/reload-plug
 running session keeps the plugin directory it started with, so new or renamed commands
 only appear after a restart (`/exit`, then `claude --continue` keeps your conversation).
 
-Windows install (Codex): `iriscale-voice update`, then restart Codex. macOS/Linux
-checkout: `git pull`.
+npm install: `npx iriscale-voice@latest update` (or `iriscale-voice update` from a
+global install), then restart the agent — upgrading the package alone leaves the copy
+your hooks run on the old version. Windows installer: `iriscale-voice update`.
+Checkout: `git pull`.
 
 MIT © Iriscale

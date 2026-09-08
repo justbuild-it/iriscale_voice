@@ -49,7 +49,7 @@ Keep one script. Add three thin layers, all inside `bin/iriscale-voice`:
    `idle_prompt ← notification{agent_idle}`.
 
 Then `docs/install/<agent>.md` with the exact JSON to paste for each, and a
-`iriscale-voice install <agent>` helper that prints (not writes) that snippet with the
+`iriscale-voice install <agent>` helper that prints (or, with `--apply`, writes) that snippet with the
 absolute script path filled in. Writing into another tool's config file is left to the
 user for now — those files are theirs.
 

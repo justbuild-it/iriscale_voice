@@ -3,6 +3,8 @@
 *.log
 *.tmp
 *.new
+node_modules/
+*.tgz
 .DS_Store
 Thumbs.db
 # editor / OS

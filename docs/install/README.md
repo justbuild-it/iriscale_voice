@@ -7,6 +7,7 @@ Every other agent calls the same script, `bin/iriscale-voice`, from its own hook
 notify setting. One page per agent, each with the exact snippet to paste:
 
 - [Codex CLI](codex.md) — verified live
+- [npm / npx](npm.md) — one command on macOS, Linux and Windows; installs Codex, or Claude Code without the plugin
 - Copilot CLI, Grok Build, Gemini CLI — next (see [../PLATFORMS.md](../PLATFORMS.md))
 
 `iriscale-voice install <agent>` prints the snippet for your machine with paths filled

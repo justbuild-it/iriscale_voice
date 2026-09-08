@@ -5,6 +5,55 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+### Added
+- **`npx iriscale-voice@latest install codex --apply` — a Codex installer for every OS.**
+  macOS and Linux had no installer at all (README: *"No installer yet"*), and getting
+  `iriscale-voice` onto a PATH meant cloning the repo. One command now installs the
+  script to a stable directory (`~/.local/share/iriscale-voice`, or
+  `%LOCALAPPDATA%\Programs\iriscale-voice` — the same root `install.ps1` uses), puts it
+  on PATH, installs the `$iriscale-voice` skill, and merges `notify` plus the
+  `UserPromptSubmit`/`PermissionRequest` hooks into `~/.codex/`. It backs up every file
+  it edits, validates a pre-existing `hooks.json` **before** writing anything, is
+  idempotent, and is reversed exactly by `iriscale-voice uninstall codex`. Without
+  `--apply` it writes nothing and prints the configuration with your paths filled in.
+  Node is an install-time dependency only — hooks still call the same zero-dependency
+  POSIX script directly, and `npm install` on its own touches no configuration. The
+  hooks hold absolute paths, so voice works whether or not the command is on your
+  `PATH`; when `~/.local/bin` is not on it, the installer prints the exact line for
+  your shell. ([docs/install/npm.md](docs/install/npm.md))
+- **`install claude --apply` — Claude Code without the plugin.** The same npx line
+  installs the seven hooks into `~/.claude/settings.json`, the skill, and the
+  slash commands, resolving `${CLAUDE_PLUGIN_ROOT}` to the stable path as it writes.
+  `~/.claude/commands/` takes flat files only — a subdirectory there is not a namespace,
+  only skills namespace by directory — so outside the plugin the commands are spelled
+  `/iriscale-voice-status` rather than `/iriscale-voice:status`. `iriscale-voice doctor
+  claude` reports what is installed and flags a duplicated hook (counted per matcher, so
+  the two `Notification` matchers are not mistaken for one). The plugin stays the recommended route for Claude Code; running both
+  would speak twice — Claude Code deduplicates a handler across settings files but keeps a
+  plugin's copy separate — so the installer refuses unless `--force`, keying on
+  `enabledPlugins` in the settings files and on a real plugin manifest rather than on a
+  marketplace merely having been added. Both agents share one copy of the script — uninstalling one leaves it for
+  the other, and the last one out removes it.
+- **Your own configuration survives.** Codex allows a single top-level `notify`, so ours
+  displaces any other — it is now remembered and restored on uninstall instead of leaving
+  you to dig it out of the backup. And a hook of your own that happens to call the CLI
+  (`iriscale-voice say "build done"`) is no longer mistaken for one of ours and removed:
+  ownership is decided by the internal event argument our own entries always end with.
+- **Hooks are appended, never replaced.** Installing for either agent used to overwrite
+  the whole `UserPromptSubmit` entry, discarding a hook of the user's own on the same
+  event. Our entries are now merged in beside existing ones and replaced individually on
+  re-install, and uninstall removes only ours.
+- **Known divergence, unchanged:** `install.ps1` still *replaces* each Codex hook event
+  rather than appending, so the PowerShell route can still discard a `UserPromptSubmit`
+  hook of the user's own where the npm route now preserves it. Running the npm installer
+  over a PowerShell install is safe (it recognises those entries as ours and replaces
+  them without duplicating), so no one ends up speaking twice. Fixing `install.ps1`
+  itself needs a Windows machine to verify on and is deliberately left for a maintainer
+  who has one.
+- `package.json` joins the version guard: script `VERSION`, three manifests and the
+  package must agree, and `test/npm.sh` covers both installers against throwaway
+  `~/.codex` and `~/.claude` directories.
+
 ## [0.1.23] — 2026-09-07
 
 ### Added

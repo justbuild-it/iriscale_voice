@@ -2,12 +2,26 @@
 
 Verified against Codex CLI 0.147.0 on Windows. Git for Windows is the only prerequisite.
 
-## Recommended: one-command Windows install
+## Recommended: one command, any OS
+
+With Node 18+ (macOS, Linux, Windows):
+
+```sh
+npx iriscale-voice@latest install codex --apply
+```
+
+It installs the script to a stable directory, puts `iriscale-voice` on your `PATH`,
+installs the `$iriscale-voice` skill, and merges `notify` plus two hooks into your Codex
+files — backing up everything it edits. Full details, including what it writes and how
+to undo it: [npm.md](npm.md). Node is not needed afterwards; Codex calls the shell
+script directly.
+
+## Windows without Node
 
 Run in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.23/install.ps1 | iex
 ```
 
 The installer downloads Iriscale Voice to `%LOCALAPPDATA%\Programs\iriscale-voice`,
@@ -30,15 +44,19 @@ Type `iriscale-voice ` and press Tab for shell commands. In Codex, invoke the bu
 `$iriscale-voice` skill for status, diagnostics, and configuration help. Codex owns
 slash commands, so Claude Code's `/iriscale-voice:*` commands are not used here.
 
-Lifecycle commands:
+Lifecycle commands for **this** (PowerShell) install:
 
 ```powershell
 iriscale-voice update
 iriscale-voice uninstall codex
 ```
 
-The rest of this page documents the generated configuration for manual or non-Windows
-setups.
+Installed with npm instead? Those verbs belong to npm — `npx iriscale-voice@latest
+update` / `npx iriscale-voice@latest uninstall codex`. The command on your PATH tells
+you which one you have, and names the exact line to run. See [npm.md](npm.md).
+
+The rest of this page documents the generated configuration for manual setups.
+`iriscale-voice install codex` (without `--apply`) prints it with your paths filled in.
 
 ## Basic: one line, no trust prompts
 

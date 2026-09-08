@@ -15,10 +15,21 @@
   scrubber is pattern-based and cannot catch every secret shape; in a shared office or
   on calls set `command_detail=program` to speak only the program name, or
   `command_detail=full` if you explicitly want the verbatim command.
-- **The Windows installer** (`install.ps1`) edits your user PATH, your PowerShell
-  `$PROFILE`, and Codex's `~/.codex/config.toml` / `hooks.json`, taking a backup of
-  each file before writing. `iriscale-voice uninstall codex` reverses exactly those
-  edits. It never asks for elevation.
+- **The installers** write a copy of the script to a fixed directory
+  (`~/.local/share/iriscale-voice`, or `%LOCALAPPDATA%\Programs\iriscale-voice`), put that
+  on your PATH, and edit the configuration of the agent you named:
+  - `install codex` — `~/.codex/config.toml` (the single top-level `notify`),
+    `~/.codex/hooks.json` (two events), `~/.codex/skills/iriscale-voice/`.
+  - `install claude` — `~/.claude/settings.json` (seven hook events, **appended** to
+    whatever is already there), `~/.claude/skills/iriscale-voice/`, and
+    `~/.claude/commands/iriscale-voice-*.md`.
+  - The Windows `install.ps1` additionally edits your PowerShell `$PROFILE`.
+
+  Every file is backed up beside itself before it is written, your own entries are left
+  in place, and `iriscale-voice uninstall <codex|claude>` reverses exactly those edits —
+  including restoring a `notify` of your own that ours had to displace. Nothing asks for
+  elevation. **Nothing is written until you ask**: `npm install` runs no install script,
+  and `install <agent>` without `--apply` only prints what it would write.
 - **Session names and ids from the agent are untrusted.** Names are scrubbed before
   they reach a shell or the speech engine; ids are restricted to `[A-Za-z0-9._-]`
   before they become file names.
@@ -35,6 +46,18 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 Pin to a release tag rather than `main` if you want a fixed, reviewed version.
+
+The npm installer can be read the same way before it runs. Unpack the published
+tarball, read `package/npm/`, and pin to that exact version when you install — replace
+`X.Y.Z` with the release you reviewed:
+
+```sh
+npm pack iriscale-voice@X.Y.Z && tar -xzf iriscale-voice-X.Y.Z.tgz   # read package/npm/
+npx iriscale-voice@X.Y.Z install codex           # prints its plan, writes nothing
+npx iriscale-voice@X.Y.Z install codex --apply
+```
+
+`npm view iriscale-voice versions` lists what has been published.
 
 ## Reporting a vulnerability
 
