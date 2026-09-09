@@ -8,7 +8,7 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 ## [0.1.24] — 2026-09-09
 
 ### Added
-- **`npx iriscale-voice@latest install codex --apply` — a Codex installer for every OS.**
+- **`npx @iriscale/voice@latest install codex --apply` — a Codex installer for every OS.**
   macOS and Linux had no installer at all (README: *"No installer yet"*), and getting
   `iriscale-voice` onto a PATH meant cloning the repo. One command now installs the
   script to a stable directory (`~/.local/share/iriscale-voice`, or

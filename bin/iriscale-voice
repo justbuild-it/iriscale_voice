@@ -297,9 +297,9 @@ COMMANDS
                          (Windows; Linux with wmctrl; not yet on macOS)
   install codex          print Codex config snippets with absolute paths
   install codex --apply  install script, PATH, skill, notify and hooks (Windows; on
-                         macOS/Linux: npx iriscale-voice@latest install codex --apply)
+                         macOS/Linux: npx @iriscale/voice@latest install codex --apply)
                          npm also installs Claude Code without the plugin:
-                         npx iriscale-voice@latest install claude --apply
+                         npx @iriscale/voice@latest install claude --apply
   doctor codex           diagnose Codex notify and hook configuration
                          (npm also: doctor claude)
   completions <shell>    print completion for powershell, bash, or zsh
@@ -390,8 +390,8 @@ npm_installed() {
 # instead of failing with something about PowerShell.
 npm_only() {
     echo "this copy was installed by the npm package, which owns '$*'." >&2
-    echo "run:  npx iriscale-voice@latest $*" >&2
-    echo "      (already installed globally? npm exec -- iriscale-voice $*)" >&2
+    echo "run:  npx @iriscale/voice@latest $*" >&2
+    echo "      (already installed globally? npm exec -- @iriscale/voice $*)" >&2
     return 2
 }
 
@@ -407,7 +407,7 @@ cli_install() {
         # --apply here is the PowerShell installer. The npm one does the same job on
         # every OS in node, so that is what we point at when this path is unavailable.
         npm_installed && { npm_only install codex --apply; return $?; }
-        npx_hint="run instead: npx iriscale-voice@latest install codex --apply"
+        npx_hint="run instead: npx @iriscale/voice@latest install codex --apply"
         [ "$(os)" = win ] || { echo "--apply needs PowerShell; $npx_hint" >&2; return 1; }
         case $0 in */*) invoked=$0 ;; *) invoked=$(command -v "$0") ;; esac
         script_dir=$(CDPATH= cd -- "$(dirname -- "$invoked")" 2>/dev/null && pwd -P)
@@ -643,7 +643,7 @@ cli_windows_lifecycle() {
     case $0 in */*) invoked=$0 ;; *) invoked=$(command -v "$0") ;; esac
     script_dir=$(CDPATH= cd -- "$(dirname -- "$invoked")" 2>/dev/null && pwd -P)
     installer="$script_dir/../install.ps1"; [ -f "$installer" ] || installer="$script_dir/install.ps1"
-    hint="installed with npm? use the iriscale-voice on your PATH, or: npx iriscale-voice@latest install codex --apply"
+    hint="installed with npm? use the iriscale-voice on your PATH, or: npx @iriscale/voice@latest install codex --apply"
     [ -f "$installer" ] || { echo "installed install.ps1 not found; $hint" >&2; return 1; }
     command -v powershell.exe >/dev/null 2>&1 || { echo "PowerShell is required; $hint" >&2; return 1; }
     case $action in

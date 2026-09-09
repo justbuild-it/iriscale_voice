@@ -15,11 +15,11 @@ installation or user configuration.
   `:quiet <start-end|off>`, `:config <list|get|set|unset|path>`, `:help`. The same CLI is
   at `${CLAUDE_PLUGIN_ROOT}/bin/iriscale-voice` for anything else (`sessions`, `board`,
   `focus`).
-- **Claude Code, npm install** (`npx iriscale-voice@latest install claude --apply`): the
+- **Claude Code, npm install** (`npx @iriscale/voice@latest install claude --apply`): the
   same commands are flat and hyphenated - `/iriscale-voice-status`, `/iriscale-voice-test`,
   `/iriscale-voice-preset` - and `iriscale-voice doctor claude` diagnoses the setup.
 - **Codex** or a plain shell: use the `iriscale-voice` CLI on PATH. If it is missing,
-  install it on any OS with `npx iriscale-voice@latest install codex --apply`
+  install it on any OS with `npx @iriscale/voice@latest install codex --apply`
   (Windows without Node: the PowerShell one-liner in the README).
 
 ## Commands
@@ -31,7 +31,7 @@ installation or user configuration.
   `iriscale-voice config set <key> <value>`
 - Board: `iriscale-voice board` (live pane; click or press a row number to raise that
   session's window; `q` quits)
-- Install (any OS, needs Node 18+): `npx iriscale-voice@latest install codex --apply`;
+- Install (any OS, needs Node 18+): `npx @iriscale/voice@latest install codex --apply`;
   without `--apply` it writes nothing and prints the config to paste. Lifecycle:
   `iriscale-voice update`, `iriscale-voice uninstall codex`
 - Discover: `iriscale-voice --help`

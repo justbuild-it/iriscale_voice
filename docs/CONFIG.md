@@ -111,8 +111,8 @@ The command is named after the product: **`iriscale-voice`**. It's the same scri
 hooks call. `--help` is the source of truth; the table above is kept in sync with
 `config list` by a test.
 
-Get it on your PATH with `npm install -g iriscale-voice` (any OS), or let
-`npx iriscale-voice@latest install <codex|claude> --apply` link it for you — see
+Get it on your PATH with `npm install -g @iriscale/voice` (any OS), or let
+`npx @iriscale/voice@latest install <codex|claude> --apply` link it for you — see
 [install/npm.md](install/npm.md). Either Codex installer also puts it there.
 
 ```sh

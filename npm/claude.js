@@ -291,7 +291,7 @@ function uninstall (argv) {
   // Only once everything is gone is there anything left for npm to remove.
   if (last) {
     core.reportLeftovers()
-    console.log('Installed with npm as well? Finish with: npm uninstall -g iriscale-voice')
+    console.log('Installed with npm as well? Finish with: npm uninstall -g @iriscale/voice')
   }
   return 0
 }

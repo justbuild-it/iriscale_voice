@@ -46,7 +46,7 @@ A release is its own small PR:
    git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
    gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <(sed -n '/^## \[X.Y.Z\]/,/^## \[/p' CHANGELOG.md | sed '$d')
    ```
-   finally publish the npm package — `npx iriscale-voice@latest install <codex|claude>
+   finally publish the npm package — `npx @iriscale/voice@latest install <codex|claude>
    --apply` installs from it on every OS, so a release that skips this step leaves those
    users on the old version:
    ```sh

@@ -58,11 +58,11 @@ everywhere. `/iriscale-voice:test --fix` puts it back to 100%. (Type `/iriscale-
 One command, wherever you have Node 18+:
 
 ```sh
-npx iriscale-voice@latest install codex --apply
+npx @iriscale/voice@latest install codex --apply
 ```
 
 > The same installer does Claude Code without the plugin —
-> `npx iriscale-voice@latest install claude --apply` — for one install path across every
+> `npx @iriscale/voice@latest install claude --apply` — for one install path across every
 > agent. It writes the seven hooks into `~/.claude/settings.json`, the skill, and the
 > commands as `/iriscale-voice-status` (flat files; only the plugin gets the `:` spelling).
 > The plugin above is still the better route for Claude Code — self-updating, edits none of
@@ -74,11 +74,11 @@ Restart Codex and your terminal, open `/hooks`, and trust the two hooks that sho
 `Installed 1`. It installs the script to a stable directory, adds `iriscale-voice` to
 your `PATH`, installs the `$iriscale-voice` Codex skill, and merges Codex configuration
 — backing up every file it touches and rewriting only its own lines. Reversed exactly by
-`npx iriscale-voice@latest uninstall codex`. Details: [docs/install/npm.md](docs/install/npm.md).
+`npx @iriscale/voice@latest uninstall codex`. Details: [docs/install/npm.md](docs/install/npm.md).
 
 Codex speaks as soon as you restart it — the hooks hold absolute paths, so nothing here
 depends on your `PATH`. To *also* run the CLI yourself, put its directory on `PATH` (the
-installer prints the exact line for your shell) or use `npm install -g iriscale-voice`:
+installer prints the exact line for your shell) or use `npm install -g @iriscale/voice`:
 
 ```sh
 iriscale-voice status
@@ -87,7 +87,7 @@ iriscale-voice test
 ```
 
 **Node is needed to install, never to run**: Codex calls the same zero-dependency shell
-script directly. Want the config but not the installer? `npx iriscale-voice@latest
+script directly. Want the config but not the installer? `npx @iriscale/voice@latest
 install codex` (no `--apply`) prints exactly what to paste and writes nothing.
 
 Windows without Node? The PowerShell installer does the same job, and additionally sets
@@ -230,7 +230,7 @@ then **restart Claude Code**. A version change is not picked up by `/reload-plug
 running session keeps the plugin directory it started with, so new or renamed commands
 only appear after a restart (`/exit`, then `claude --continue` keeps your conversation).
 
-npm install: `npx iriscale-voice@latest update` (or `iriscale-voice update` from a
+npm install: `npx @iriscale/voice@latest update` (or `iriscale-voice update` from a
 global install), then restart the agent — upgrading the package alone leaves the copy
 your hooks run on the old version. Windows installer: `iriscale-voice update`.
 Checkout: `git pull`.

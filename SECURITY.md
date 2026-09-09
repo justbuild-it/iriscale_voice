@@ -57,7 +57,7 @@ npx iriscale-voice@X.Y.Z install codex           # prints its plan, writes nothi
 npx iriscale-voice@X.Y.Z install codex --apply
 ```
 
-`npm view iriscale-voice versions` lists what has been published.
+`npm view @iriscale/voice versions` lists what has been published.
 
 ## Reporting a vulnerability
 

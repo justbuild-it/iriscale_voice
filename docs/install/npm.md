@@ -3,9 +3,13 @@
 One command per agent, on any OS that has Node 18+:
 
 ```sh
-npx iriscale-voice@latest install codex --apply     # Codex CLI
-npx iriscale-voice@latest install claude --apply    # Claude Code, without the plugin
+npx @iriscale/voice@latest install codex --apply     # Codex CLI
+npx @iriscale/voice@latest install claude --apply    # Claude Code, without the plugin
 ```
+
+The package is **`@iriscale/voice`**; the command it puts on your PATH is
+**`iriscale-voice`**. npm resolves the one to the other because the package ships a
+single executable — every example below keeps that distinction.
 
 For Claude Code the [plugin](../../README.md#claude-code-any-os) is still the better
 route — it updates itself and edits none of your files. Use the npx route when you want
@@ -30,7 +34,7 @@ iriscale-voice doctor codex
 Or skip the PATH edit entirely — a global install puts the command there for you:
 
 ```sh
-npm install -g iriscale-voice
+npm install -g @iriscale/voice
 iriscale-voice install codex --apply
 ```
 
@@ -65,18 +69,18 @@ Without `--apply`, the installer writes nothing — it prints the exact configur
 *would* write, with your machine's paths already filled in:
 
 ```sh
-npx iriscale-voice@latest install codex
+npx @iriscale/voice@latest install codex
 ```
 
 ## Update
 
 The hooks execute the copy in the stable directory, not `node_modules`, so
-`npm install -g iriscale-voice@latest` on its own upgrades the CLI and leaves the voice
+`npm install -g @iriscale/voice@latest` on its own upgrades the CLI and leaves the voice
 on the old version. `update` does both — and `doctor` and `status` tell you when they
 have drifted apart (`STALE  your hooks run 0.1.23, but this package is 0.1.24`).
 
 ```sh
-npx iriscale-voice@latest update    # npm upgrades, then re-applies every agent you
+npx @iriscale/voice@latest update    # npm upgrades, then re-applies every agent you
                                     # have configured (codex, claude, or both)
 iriscale-voice update               # same, from a global install
 ```
@@ -91,18 +95,18 @@ hands the four installer verbs back to npm, naming the exact command:
 ```
 $ iriscale-voice uninstall codex
 this copy was installed by the npm package, which owns 'uninstall codex'.
-run:  npx iriscale-voice@latest uninstall codex
-      (already installed globally? npm exec -- iriscale-voice uninstall codex)
+run:  npx @iriscale/voice@latest uninstall codex
+      (already installed globally? npm exec -- @iriscale/voice uninstall codex)
 ```
 
-`npm install -g iriscale-voice` puts the node CLI on your PATH instead, and then every
+`npm install -g @iriscale/voice` puts the node CLI on your PATH instead, and then every
 command — installer verbs included — works directly.
 
 ## Uninstall
 
 ```sh
-npx iriscale-voice@latest uninstall codex    # or: uninstall claude
-npm uninstall -g iriscale-voice              # if you installed it globally
+npx @iriscale/voice@latest uninstall codex    # or: uninstall claude
+npm uninstall -g @iriscale/voice              # if you installed it globally
 ```
 
 That removes the config it wrote, the skill, the commands, the PATH entry and the
