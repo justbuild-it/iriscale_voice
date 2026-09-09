@@ -89,8 +89,11 @@ has '"PermissionRequest"' "$HOOKS" "PermissionRequest hook written"
 has '"SessionStart"' "$HOOKS" "unrelated hooks survive"
 hasnt '"async"' "$HOOKS" "no async hooks (Codex 0.147 skips them)"
 ok "$(grep -c '"command":' "$HOOKS")" "3" "each hook has a command field"
-node -e 'JSON.parse(require("fs").readFileSync(process.env.CODEX_HOME+"/hooks.json","utf8"))' 2>/dev/null
-ok $? 0 "hooks.json is still valid JSON"
+# 2>&1, not 2>/dev/null: a swallowed error here says only "got 1 wanted 0", which is
+# the one thing a JSON failure must never be. Show what node actually objected to.
+jsonerr=$(node -e 'JSON.parse(require("fs").readFileSync(process.env.CODEX_HOME+"/hooks.json","utf8"))' 2>&1); jsonst=$?
+ok "$jsonst" 0 "hooks.json is still valid JSON"
+[ "$jsonst" = 0 ] || echo "     node: $jsonerr"
 
 # The sh script's own diagnostic has to agree with what the installer wrote.
 sh "$root/bin/iriscale-voice" doctor codex >/dev/null 2>&1
@@ -456,7 +459,10 @@ out=$(CLAUDE_CONFIG_DIR="$KEEPCFG" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-kee
 exists "$KEEPCFG/iriscale-voice.conf" "uninstall keeps your settings file"
 case $out in *"settings and session state are kept"*) pass=$((pass+1)) ;;
   *) fail=$((fail+1)); echo "FAIL uninstall says what it kept" ;; esac
-case $out in *"$KEEPCFG/iriscale-voice.conf"*) pass=$((pass+1)) ;;
+# node prints a native path (backslashes on Windows); $KEEPCFG is cygpath -m (forward).
+# Compare on one separator so this asserts the filename, not the OS.
+out_slash=$(printf '%s' "$out" | tr '\\' '/')
+case $out_slash in *"$KEEPCFG/iriscale-voice.conf"*) pass=$((pass+1)) ;;
   *) fail=$((fail+1)); echo "FAIL uninstall names the settings file it kept" ;; esac
 
 
