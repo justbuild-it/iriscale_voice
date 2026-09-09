@@ -12,6 +12,10 @@ tmp=${TMPDIR:-/tmp}; tmp=${tmp%/}      # macOS TMPDIR ends in / and node normali
 SANDBOX="$tmp/iriscale-voice-npm-test-$$"
 # Under Git Bash only PATH/HOME/TMP-like variables get MSYS->Win32 conversion; every other
 # path we hand to node arrives as a raw POSIX string and resolves against the cwd drive.
+# The mirror-image trap is in ARGUMENTS: MSYS rewrites anything in an argv that looks like
+# an absolute POSIX path, so a bare "/hooks.json" inside a `node -e` script becomes
+# "C:/Program Files/Git/hooks.json" and the concatenation silently reads the wrong file.
+# Every node -e below therefore builds paths with path.join and no leading-slash literal.
 # Normalising $SANDBOX once fixes every variable derived from it. WINDOWS also gates the
 # PATH tests below, which on Windows would edit the REAL user PATH.
 WINDOWS=0
@@ -91,7 +95,7 @@ hasnt '"async"' "$HOOKS" "no async hooks (Codex 0.147 skips them)"
 ok "$(grep -c '"command":' "$HOOKS")" "3" "each hook has a command field"
 # 2>&1, not 2>/dev/null: a swallowed error here says only "got 1 wanted 0", which is
 # the one thing a JSON failure must never be. Show what node actually objected to.
-jsonerr=$(node -e 'JSON.parse(require("fs").readFileSync(process.env.CODEX_HOME+"/hooks.json","utf8"))' 2>&1); jsonst=$?
+jsonerr=$(node -e 'JSON.parse(require("fs").readFileSync(require("path").join(process.env.CODEX_HOME,"hooks.json"),"utf8"))' 2>&1); jsonst=$?
 ok "$jsonst" 0 "hooks.json is still valid JSON"
 [ "$jsonst" = 0 ] || echo "     node: $jsonerr"
 
@@ -256,13 +260,13 @@ claude_cli install claude --apply --skip-path --force >/dev/null 2>&1
 ok $? 0 "--force installs anyway"
 rm -rf "$CDIR/plugins"
 # enabledPlugins in settings.json is the authoritative signal
-D="$CDIR" node -e 'const fs=require("fs"),p=process.env.D+"/settings.json";const d=JSON.parse(fs.readFileSync(p,"utf8"));d.enabledPlugins={"iriscale-voice@iriscale":true};fs.writeFileSync(p,JSON.stringify(d,null,2))'
+D="$CDIR" node -e 'const fs=require("fs"),p=require("path").join(process.env.D,"settings.json");const d=JSON.parse(fs.readFileSync(p,"utf8"));d.enabledPlugins={"iriscale-voice@iriscale":true};fs.writeFileSync(p,JSON.stringify(d,null,2))'
 claude_cli install claude --apply --skip-path >/dev/null 2>&1
 ok $? 1 "install refuses when enabledPlugins lists the plugin"
-D="$CDIR" node -e 'const fs=require("fs"),p=process.env.D+"/settings.json";const d=JSON.parse(fs.readFileSync(p,"utf8"));d.enabledPlugins={"iriscale-voice@iriscale":false};fs.writeFileSync(p,JSON.stringify(d,null,2))'
+D="$CDIR" node -e 'const fs=require("fs"),p=require("path").join(process.env.D,"settings.json");const d=JSON.parse(fs.readFileSync(p,"utf8"));d.enabledPlugins={"iriscale-voice@iriscale":false};fs.writeFileSync(p,JSON.stringify(d,null,2))'
 claude_cli install claude --apply --skip-path >/dev/null 2>&1
 ok $? 0 "a DISABLED plugin does not block the install"
-D="$CDIR" node -e 'const fs=require("fs"),p=process.env.D+"/settings.json";const d=JSON.parse(fs.readFileSync(p,"utf8"));delete d.enabledPlugins;fs.writeFileSync(p,JSON.stringify(d,null,2))' 
+D="$CDIR" node -e 'const fs=require("fs"),p=require("path").join(process.env.D,"settings.json");const d=JSON.parse(fs.readFileSync(p,"utf8"));delete d.enabledPlugins;fs.writeFileSync(p,JSON.stringify(d,null,2))' 
 
 # --- one install directory, two agents -------------------------------------------
 CODEX2="$SANDBOX/codex2"; mkdir -p "$CODEX2"
@@ -309,7 +313,7 @@ ok $? 0 "doctor claude passes on a fresh install"
 # Notification carries two of ours under different matchers - that is not a duplicate
 doc_cli doctor claude 2>&1 | grep -q 'speak 2 times' && { fail=$((fail+1)); echo "FAIL doctor claude miscounts the two Notification matchers"; } || pass=$((pass+1))
 # ...but a real duplicate on one matcher must be caught
-D="$DDIR" node -e 'const fs=require("fs"),p=process.env.D+"/settings.json";const d=JSON.parse(fs.readFileSync(p,"utf8"));d.hooks.Stop.push(JSON.parse(JSON.stringify(d.hooks.Stop[0])));fs.writeFileSync(p,JSON.stringify(d,null,2))'
+D="$DDIR" node -e 'const fs=require("fs"),p=require("path").join(process.env.D,"settings.json");const d=JSON.parse(fs.readFileSync(p,"utf8"));d.hooks.Stop.push(JSON.parse(JSON.stringify(d.hooks.Stop[0])));fs.writeFileSync(p,JSON.stringify(d,null,2))'
 doc_cli doctor claude >/dev/null 2>&1
 ok $? 1 "doctor claude catches a genuinely duplicated hook"
 doc_cli install claude --apply --skip-path >/dev/null 2>&1
