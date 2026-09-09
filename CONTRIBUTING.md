@@ -86,7 +86,7 @@ fails if any doc mentions a bare `/<command>`, because built-ins shadow bare nam
 ## Guard tests worth knowing about
 
 `test/run.sh` is the gate, and several checks exist to stop specific past bugs from
-returning: the version must agree across all four manifests; every `config list` key
+returning: the version must agree across all five manifests; every `config list` key
 must be documented in `docs/CONFIG.md`; the hook path may spawn at most one text tool;
 a stubbed 3 s speaker must not block the hook for more than 2 s; `sessions --color` must
 emit real escape bytes and `--plain` none; a permission prompt must never speak a token;

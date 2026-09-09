@@ -5,6 +5,8 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.24] — 2026-09-09
+
 ### Added
 - **`npx iriscale-voice@latest install codex --apply` — a Codex installer for every OS.**
   macOS and Linux had no installer at all (README: *"No installer yet"*), and getting
@@ -20,7 +22,7 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
   POSIX script directly, and `npm install` on its own touches no configuration. The
   hooks hold absolute paths, so voice works whether or not the command is on your
   `PATH`; when `~/.local/bin` is not on it, the installer prints the exact line for
-  your shell. ([docs/install/npm.md](docs/install/npm.md))
+  your shell. ([docs/install/npm.md](docs/install/npm.md), #28)
 - **`install claude --apply` — Claude Code without the plugin.** The same npx line
   installs the seven hooks into `~/.claude/settings.json`, the skill, and the
   slash commands, resolving `${CLAUDE_PLUGIN_ROOT}` to the stable path as it writes.
@@ -465,7 +467,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.23...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.24...HEAD
+[0.1.24]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.23...v0.1.24
 [0.1.23]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.20...v0.1.21
