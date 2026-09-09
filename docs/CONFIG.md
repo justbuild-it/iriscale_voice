@@ -111,6 +111,10 @@ The command is named after the product: **`iriscale-voice`**. It's the same scri
 hooks call. `--help` is the source of truth; the table above is kept in sync with
 `config list` by a test.
 
+Get it on your PATH with `npm install -g iriscale-voice` (any OS), or let
+`npx iriscale-voice@latest install <codex|claude> --apply` link it for you — see
+[install/npm.md](install/npm.md). Either Codex installer also puts it there.
+
 ```sh
 iriscale-voice --help              # all commands
 iriscale-voice status              # what's configured, what will speak
@@ -129,8 +133,10 @@ iriscale-voice presets
 iriscale-voice test [--fix]        # speak a test phrase; Windows: also reads the Volume Mixer level for PowerShell, --fix restores 100%
 iriscale-voice say "any text"
 iriscale-voice doctor codex        # check a Codex setup
-iriscale-voice install codex       # print Codex snippets; --apply installs them (Windows)
-iriscale-voice update | uninstall codex     # Windows installs
+iriscale-voice doctor claude       # check a Claude Code setup (npm installs)
+iriscale-voice install codex       # print the config; --apply writes it
+iriscale-voice install claude      # same, for Claude Code without the plugin (npm)
+iriscale-voice update | uninstall codex | uninstall claude
 iriscale-voice completions powershell|bash|zsh
 iriscale-voice --version
 ```

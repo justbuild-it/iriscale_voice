@@ -41,9 +41,42 @@ jobs:
       - name: versions agree
         run: |
           v=$(grep -o '^VERSION="[^"]*"' bin/iriscale-voice | cut -d'"' -f2)
-          for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json; do
+          for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json package.json; do
             grep -q "\"version\": *\"$v\"" "$f" || { echo "$f is not at $v"; exit 1; }
           done
           echo "all at $v"
       - name: JSON parses
-        run: for f in .claude-plugin/*.json .codex-plugin/*.json hooks/hooks.json; do python3 -m json.tool "$f" >/dev/null || exit 1; done
+        run: for f in .claude-plugin/*.json .codex-plugin/*.json hooks/hooks.json package.json; do python3 -m json.tool "$f" >/dev/null || exit 1; done
+
+  npm:
+    name: npm installer / ${{ matrix.os }} / node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # 18 is the floor declared in package.json engines - test it, don't assume it.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['18', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ matrix.node }}' }
+      - name: installer suite
+        shell: bash
+        run: sh test/npm.sh
+      - name: pack and install globally, then run the shim
+        shell: bash
+        run: |
+          npm pack
+          npm install -g --prefix "$RUNNER_TEMP/npmglobal" ./iriscale-voice-*.tgz
+          # npm puts global shims in <prefix>/bin on POSIX and <prefix> itself on Windows
+          if [ "$RUNNER_OS" = Windows ]; then bin="$RUNNER_TEMP/npmglobal/iriscale-voice"
+          else bin="$RUNNER_TEMP/npmglobal/bin/iriscale-voice"; fi
+          "$bin" --version
+          "$bin" status
+          "$bin" install codex        # prints the plan, must write nothing
+          "$bin" install claude       # ditto for the Claude Code route
+          test -z "$("$bin" install claude | grep CLAUDE_PLUGIN_ROOT || true)"   # must be resolved
+          # ...and wrote nothing: the plan is read-only (bash -e fails the step on either)
+          test ! -e "$HOME/.codex"
+          test ! -e "$HOME/.claude/settings.json"

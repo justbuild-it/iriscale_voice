@@ -226,7 +226,7 @@ sh "$S" completions powershell | grep 'Register-ArgumentCompleter' >/dev/null; o
 sh "$S" completions bash | grep 'complete -F' >/dev/null;   ok $? 0 "Bash completion is available"
 sh "$S" completions zsh | grep '#compdef' >/dev/null;       ok $? 0 "Zsh completion is available"
 sh "$S" completions nope >/dev/null 2>&1;                   ok $? 2 "unknown completion shell exits 2"
-# version must agree in script, plugin.json, marketplace.json (release process guard)
+# version must agree in script, plugin.json, marketplace.json, package.json (release guard)
 v_script=$(sh "$S" --version)
 v_plugin=$(grep -o '"version": *"[^"]*"' "$here/../.claude-plugin/plugin.json"      | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
 v_market=$(grep -o '"version": *"[^"]*"' "$here/../.claude-plugin/marketplace.json" | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
@@ -235,12 +235,19 @@ ok "$v_plugin" "$v_script" "plugin.json version == script VERSION"
 ok "$v_market" "$v_script" "marketplace.json version == script VERSION"
 v_codex=$(grep -o '"version": *"[^"]*"' "$here/../.codex-plugin/plugin.json" | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
 ok "$v_codex" "$v_script" ".codex-plugin/plugin.json version == script VERSION"
+v_npm=$(grep -o '"version": *"[^"]*"' "$here/../package.json" | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')
+ok "$v_npm" "$v_script" "package.json version == script VERSION"
+grep -q '"iriscale-voice": "npm/cli.js"' "$here/../package.json"; ok $? 0 "package.json exposes the iriscale-voice bin"
 # the pinned install URLs and the installer's default -Ref must name this release
 v_ref=$(grep -o "\[string\]\$Ref = 'v[^']*'" "$here/../install.ps1" | sed "s/.*'v\([^']*\)'/\1/")
 ok "$v_ref" "$v_script" "install.ps1 -Ref default == script VERSION"
 grep -q "releases/latest" "$here/../install.ps1";           ok $? 0 "install.ps1 -Update resolves the latest release (not the pinned ref)"
 grep -q "iriscale_voice/v$v_script/install.ps1" "$here/../README.md";   ok $? 0 "README one-liner pins v$v_script"
 grep -q "iriscale_voice/v$v_script/install.ps1" "$here/../SECURITY.md"; ok $? 0 "SECURITY.md pins v$v_script"
+grep -q "iriscale_voice/v$v_script/install.ps1" "$here/../docs/install/codex.md"; ok $? 0 "docs/install/codex.md pins v$v_script"
+# an unpinned installer URL means users run whatever main happens to be that minute
+unpinned=$(grep -rl 'iriscale_voice/main/install.ps1' "$here/.." --include='*.md' 2>/dev/null | tr '\n' ' ')
+ok "$unpinned" "" "no document ships an unpinned install.ps1 URL"
 ok "$v_codex" "$v_script" "Codex plugin version == script VERSION"
 [ -f "$here/../.codex-plugin/plugin.json" ];                ok $? 0 "Codex plugin manifest exists"
 [ -f "$here/../skills/iriscale-voice/SKILL.md" ];           ok $? 0 "Codex skill exists"

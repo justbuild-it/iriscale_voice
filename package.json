@@ -1,0 +1,56 @@
+{
+  "name": "iriscale-voice",
+  "version": "0.1.24",
+  "description": "Let your coding agents tell you when they are done and need attention. Speaks the session name when a turn finishes, fails, or needs permission — so you can walk away.",
+  "keywords": [
+    "notifications",
+    "tts",
+    "voice",
+    "hooks",
+    "productivity",
+    "multi-session",
+    "codex",
+    "claude-code",
+    "agents"
+  ],
+  "homepage": "https://github.com/justbuild-it/iriscale_voice",
+  "bugs": "https://github.com/justbuild-it/iriscale_voice/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justbuild-it/iriscale_voice.git"
+  },
+  "license": "MIT",
+  "type": "commonjs",
+  "author": {
+    "name": "Iriscale",
+    "url": "https://github.com/justbuild-it"
+  },
+  "bin": {
+    "iriscale-voice": "npm/cli.js"
+  },
+  "files": [
+    "bin/",
+    "npm/",
+    "skills/",
+    "commands/",
+    "hooks/",
+    "docs/CONFIG.md",
+    "docs/install/",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "scripts": {
+    "test": "sh test/run.sh && sh test/npm.sh",
+    "prepublishOnly": "sh test/run.sh && sh test/npm.sh"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

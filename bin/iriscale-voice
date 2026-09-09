@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.23"
+VERSION="0.1.24"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -296,11 +296,16 @@ COMMANDS
   forget <name|--all>    drop a session from the board now (it returns on its next event)
                          (Windows; Linux with wmctrl; not yet on macOS)
   install codex          print Codex config snippets with absolute paths
-  install codex --apply  install launcher, completion, notify, and hooks (Windows)
+  install codex --apply  install script, PATH, skill, notify and hooks (Windows; on
+                         macOS/Linux: npx iriscale-voice@latest install codex --apply)
+                         npm also installs Claude Code without the plugin:
+                         npx iriscale-voice@latest install claude --apply
   doctor codex           diagnose Codex notify and hook configuration
+                         (npm also: doctor claude)
   completions <shell>    print completion for powershell, bash, or zsh
-  update                 install the latest release (Windows)
-  uninstall codex        remove the Windows install and owned Codex config
+  update                 install the latest release (Windows; npm installs own their own)
+  uninstall codex        remove the install and the Codex config it owns
+                         (npm installs own this: uninstall codex | uninstall claude)
   presets                the four presets and what each speaks
   events                 every event, when it fires, what it says
   help, -h, --help       this text          -V, --version   print version
@@ -356,20 +361,60 @@ cli_config() {
     esac
 }
 
+# Where this script really lives, following one symlink: the npm installer links
+# ~/.local/bin/iriscale-voice -> <root>/bin/iriscale-voice, and taking dirname of the LINK
+# would give ~/.local/bin, which is why this used to hunt for ~/.local/install.ps1.
+self_root() {
+    case $0 in */*) _inv=$0 ;; *) _inv=$(command -v "$0" 2>/dev/null) ;; esac
+    [ -n "$_inv" ] || return 1
+    if [ -L "$_inv" ]; then
+        _t=$(readlink "$_inv" 2>/dev/null)
+        case $_t in
+            /*) _inv=$_t ;;
+            ?*) _inv=$(dirname -- "$_inv")/$_t ;;
+        esac
+    fi
+    _d=$(CDPATH= cd -- "$(dirname -- "$_inv")" 2>/dev/null && pwd -P) || return 1
+    printf '%s' "${_d%/bin}"
+}
+
+# Did the npm package install this copy? Its marker says so, and that decides who owns
+# the lifecycle verbs. Zero dependencies: a grep, not a JSON parser.
+npm_installed() {
+    _r=$(self_root) || return 1
+    [ -f "$_r/install.json" ] || return 1
+    grep -q '"installer"[[:space:]]*:[[:space:]]*"npm"' "$_r/install.json" 2>/dev/null
+}
+
+# A verb the npm package owns and this script cannot perform. Name the exact command
+# instead of failing with something about PowerShell.
+npm_only() {
+    echo "this copy was installed by the npm package, which owns '$*'." >&2
+    echo "run:  npx iriscale-voice@latest $*" >&2
+    echo "      (already installed globally? npm exec -- iriscale-voice $*)" >&2
+    return 2
+}
+
 cli_install() {
     agent=$1
+    [ "$agent" = claude ] && { npm_only install claude --apply; return $?; }
     [ "$agent" = codex ] || {
         echo "usage: iriscale-voice install codex" >&2
         return 2
     }
 
     if [ "${2:-}" = "--apply" ]; then
+        # --apply here is the PowerShell installer. The npm one does the same job on
+        # every OS in node, so that is what we point at when this path is unavailable.
+        npm_installed && { npm_only install codex --apply; return $?; }
+        npx_hint="run instead: npx iriscale-voice@latest install codex --apply"
+        [ "$(os)" = win ] || { echo "--apply needs PowerShell; $npx_hint" >&2; return 1; }
         case $0 in */*) invoked=$0 ;; *) invoked=$(command -v "$0") ;; esac
         script_dir=$(CDPATH= cd -- "$(dirname -- "$invoked")" 2>/dev/null && pwd -P)
         installer="$script_dir/../install.ps1"
         [ -f "$installer" ] || installer="$script_dir/install.ps1"
-        [ -f "$installer" ] || { echo "install.ps1 not found next to iriscale-voice" >&2; return 1; }
-        command -v powershell.exe >/dev/null 2>&1 || { echo "PowerShell is required for --apply" >&2; return 1; }
+        [ -f "$installer" ] || { echo "install.ps1 not found next to iriscale-voice; $npx_hint" >&2; return 1; }
+        command -v powershell.exe >/dev/null 2>&1 || { echo "PowerShell is required for --apply; $npx_hint" >&2; return 1; }
         source_root=$(CDPATH= cd -- "$script_dir/.." 2>/dev/null && pwd -P)
         powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$installer" -SourcePath "$source_root"
         return $?
@@ -584,11 +629,23 @@ EOF
 
 cli_windows_lifecycle() {
     action=$1
+    # An npm install owns update and uninstall: the node CLI knows which agents are
+    # configured and how to reverse each. Say so, rather than reporting a missing
+    # install.ps1 on a machine that never had one.
+    # `update` takes no agent; `uninstall` does. Name the verb exactly as it is typed.
+    npm_installed && {
+        case $action in
+            uninstall) npm_only uninstall "${2:-codex}" ;;
+            *)         npm_only "$action" ;;
+        esac
+        return $?
+    }
     case $0 in */*) invoked=$0 ;; *) invoked=$(command -v "$0") ;; esac
     script_dir=$(CDPATH= cd -- "$(dirname -- "$invoked")" 2>/dev/null && pwd -P)
     installer="$script_dir/../install.ps1"; [ -f "$installer" ] || installer="$script_dir/install.ps1"
-    [ -f "$installer" ] || { echo "installed install.ps1 not found" >&2; return 1; }
-    command -v powershell.exe >/dev/null 2>&1 || { echo "PowerShell is required" >&2; return 1; }
+    hint="installed with npm? use the iriscale-voice on your PATH, or: npx iriscale-voice@latest install codex --apply"
+    [ -f "$installer" ] || { echo "installed install.ps1 not found; $hint" >&2; return 1; }
+    command -v powershell.exe >/dev/null 2>&1 || { echo "PowerShell is required; $hint" >&2; return 1; }
     case $action in
         # Detached: this script is the file the installer must replace, and bash keeps
         # it open while running - Windows refuses to overwrite an open file, so an
@@ -1012,6 +1069,13 @@ cli_board() {
 
 cli_doctor() {
     agent=$1
+    # `doctor claude` only applies to the npm install (the plugin needs no diagnosis), so
+    # it lives in the node CLI. Point there rather than printing a bare usage line.
+    [ "$agent" = claude ] && {
+        npm_only doctor claude
+        echo "(a plugin install needs no diagnosis - /iriscale-voice:status shows everything)" >&2
+        return 2
+    }
     [ "$agent" = codex ] || {
         echo "usage: iriscale-voice doctor codex" >&2
         return 2
@@ -1070,8 +1134,12 @@ case "$EVENT" in
     doctor)  shift; cli_doctor "$@"; exit $? ;;
     completions) shift; cli_completions "$@"; exit $? ;;
     update) cli_windows_lifecycle update; exit $? ;;
-    uninstall) [ "${2:-}" = codex ] || { echo "usage: iriscale-voice uninstall codex" >&2; exit 2; }
-               cli_windows_lifecycle uninstall; exit $? ;;
+    uninstall) case "${2:-}" in
+                   claude) npm_only uninstall claude; exit $? ;;
+                   codex)  ;;
+                   *) echo "usage: iriscale-voice uninstall <codex|claude>" >&2; exit 2 ;;
+               esac
+               cli_windows_lifecycle uninstall codex; exit $? ;;
     config)  shift; cli_config "$@"; exit $? ;;
     set)     [ -n "$2" ] || { echo "usage: iriscale-voice set <key> <value>" >&2; exit 2; }
              cfg_set "$2" "$3" || exit $?; echo "$2=$3"; exit 0 ;;
