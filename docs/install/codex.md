@@ -7,7 +7,7 @@ Verified against Codex CLI 0.147.0 on Windows. Git for Windows is the only prere
 With Node 18+ (macOS, Linux, Windows):
 
 ```sh
-npx iriscale-voice@latest install codex --apply
+npx @iriscale/voice@latest install codex --apply
 ```
 
 It installs the script to a stable directory, puts `iriscale-voice` on your `PATH`,
@@ -51,8 +51,8 @@ iriscale-voice update
 iriscale-voice uninstall codex
 ```
 
-Installed with npm instead? Those verbs belong to npm — `npx iriscale-voice@latest
-update` / `npx iriscale-voice@latest uninstall codex`. The command on your PATH tells
+Installed with npm instead? Those verbs belong to npm — `npx @iriscale/voice@latest
+update` / `npx @iriscale/voice@latest uninstall codex`. The command on your PATH tells
 you which one you have, and names the exact line to run. See [npm.md](npm.md).
 
 The rest of this page documents the generated configuration for manual setups.

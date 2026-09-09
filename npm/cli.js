@@ -63,7 +63,7 @@ const npmOpts = U.isWindows ? { shell: true } : {}
 function globalPackageDir () {
   try {
     const root = execFileSync(U.npmBin, ['root', '-g'], { encoding: 'utf8', ...npmOpts }).trim()
-    const dir = path.join(root, 'iriscale-voice')
+    const dir = path.join(root, ...core.packageName().split('/'))
     return fs.realpathSync(dir) === fs.realpathSync(U.packageRoot()) ? dir : null
   } catch { return null }
 }
@@ -74,14 +74,14 @@ function update () {
   if (!globalPackageDir()) {
     console.log('This copy is not a global npm install, so there is nothing to upgrade in place.')
     console.log('Get the latest release and re-apply it with:')
-    console.log('  npx iriscale-voice@latest install codex --apply     (or: install claude)')
+    console.log('  npx @iriscale/voice@latest install codex --apply     (or: install claude)')
     return 0
   }
   const marker = core.readMarker()
   const installed = Object.keys((marker && marker.agents) || {})
   console.log('Fetching the latest release from npm...')
-  const r = spawnSync(U.npmBin, ['install', '-g', 'iriscale-voice@latest'], { stdio: 'inherit', ...npmOpts })
-  if (r.status !== 0) U.die('npm install -g iriscale-voice@latest failed')
+  const r = spawnSync(U.npmBin, ['install', '-g', '@iriscale/voice@latest'], { stdio: 'inherit', ...npmOpts })
+  if (r.status !== 0) U.die('npm install -g @iriscale/voice@latest failed')
   const dir = globalPackageDir()
   if (!dir) U.die('the upgrade completed but the global package could not be located; re-run the installer by hand')
   if (!installed.length) {

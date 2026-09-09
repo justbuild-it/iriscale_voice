@@ -22,6 +22,12 @@ function version () {
   return require(path.join(U.packageRoot(), 'package.json')).version
 }
 
+// The published name is scoped, so npm unpacks it to node_modules/@scope/name. Read it
+// from the manifest rather than hard-coding either half, so a rename cannot desync them.
+function packageName () {
+  return require(path.join(U.packageRoot(), 'package.json')).name
+}
+
 // Fails before anything is written, so a bad environment cannot leave a half-install.
 function preflight () {
   if (!fs.existsSync(packagedScript())) U.die(`packaged script is missing: ${packagedScript()}`)
@@ -240,11 +246,11 @@ function pathAdvice (pathResult) {
   console.log('Voice works either way: the hooks use absolute paths, not PATH.')
   console.log('To run iriscale-voice yourself (status, board, test), add its directory:')
   console.log(`  ${U.pathHint(pathResult.hintDir)}`)
-  console.log('Or install the command globally instead: npm install -g iriscale-voice')
+  console.log('Or install the command globally instead: npm install -g @iriscale/voice')
 }
 
 module.exports = {
-  layout, packagedScript, version, preflight, materialize, linkOnPath, unlinkFromPath,
+  layout, packagedScript, version, packageName, preflight, materialize, linkOnPath, unlinkFromPath,
   isOurGroup, isOurCommand, reportLeftovers, driftWarning, installedScriptVersion,
   readMarker, recordAgent, returnCreated, forgetAgent, report, pathAdvice
 }

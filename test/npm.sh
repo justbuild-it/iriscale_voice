@@ -574,7 +574,7 @@ if [ "$WINDOWS" = 0 ]; then
     for verb in "uninstall codex" "uninstall claude" "update" "doctor claude" "install claude --apply"; do
         out=$(HOME="$LC/home" sh "$LINK" $verb 2>&1)
         case $out in
-            *"npx iriscale-voice@latest $verb"*) pass=$((pass+1)) ;;
+            *"npx @iriscale/voice@latest $verb"*) pass=$((pass+1)) ;;
             *) fail=$((fail+1)); echo "FAIL '$verb' through the PATH entry names the npm command: got '$out'" ;;
         esac
         case $out in
@@ -595,7 +595,7 @@ fi
 
 # --- an npm upgrade that leaves the stable copy behind must be visible --------------
 # The hooks execute <installRoot>/bin/iriscale-voice, not node_modules, so
-# `npm i -g iriscale-voice@latest` alone upgrades the CLI and not the voice.
+# `npm i -g @iriscale/voice@latest` alone upgrades the CLI and not the voice.
 DR="$SANDBOX/drift"; DRROOT="$SANDBOX/opt-drift/iriscale-voice"
 mkdir -p "$DR"
 CLAUDE_CONFIG_DIR="$DR" IRISCALE_VOICE_INSTALL_ROOT="$DRROOT" $CLI install claude --apply --skip-path >/dev/null 2>&1
