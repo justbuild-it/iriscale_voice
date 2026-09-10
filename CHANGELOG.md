@@ -5,6 +5,17 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.26] — 2026-09-10
+
+### Fixed
+- **The test suite no longer shares state with your live sessions.** The script keeps its
+  turn clocks, cooldown files, `last_prompt` and the board pid under `$TMPDIR/iriscale-voice`,
+  and the suite used the real one: a `last_prompt` older than ten minutes from your own
+  sessions made `stamp` print a welcome-back line inside a captured check (the traversal
+  test then failed with `[: integer expression expected`), and the suite left its
+  `evil.start` and `brd-*.last` files next to yours. `TMPDIR` now points into the
+  suite's throwaway directory. CI never saw it - fresh runners have no history.
+
 ## [0.1.25] — 2026-09-10
 
 ### Added
@@ -533,7 +544,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.25...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.26...HEAD
+[0.1.26]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.25...v0.1.26
 [0.1.25]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.24...v0.1.25
 [0.1.24]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.23...v0.1.24
 [0.1.23]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.22...v0.1.23
