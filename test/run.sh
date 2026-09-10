@@ -8,6 +8,11 @@ S="$here/../bin/iriscale-voice"
 export IRISCALE_VOICE_DEBUG=1
 export CLAUDE_CONFIG_DIR="${TMPDIR:-/tmp}/iriscale-voice-test-$$"
 mkdir -p "$CLAUDE_CONFIG_DIR"
+# The script keeps locks, turn clocks, last_prompt and the board pid under $TMPDIR/iriscale-voice.
+# Point that at the sandbox too, so the suite never reads your live sessions' state (a
+# 10-minute-old last_prompt made `stamp` print a welcome-back line and broke a capture)
+# and never leaves its evil.start / brd-*.last files in yours.
+export TMPDIR="$CLAUDE_CONFIG_DIR/tmp"; mkdir -p "$TMPDIR"
 trap 'rm -rf "$CLAUDE_CONFIG_DIR" "${TMPDIR:-/tmp}/iriscale-voice/test-"*' EXIT
 fail=0; pass=0
 P='{"session_id":"test-sess","cwd":"/home/dev/my_service"}'
@@ -60,7 +65,7 @@ out=$(printf '%s' "$SECRETCMD" | sh "$S" PermissionRequest)
 case "$out" in *sk-live-abc123*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL full mode must be verbatim: $out" ;; esac
 sh "$S" config unset command_detail >/dev/null
 # SECURITY: session ids become file names - traversal must be neutralised
-out=$(printf '%s' '{"session_id":"../../evil","cwd":"/x/api"}' | sh "$S" stamp; ls "${TMPDIR:-/tmp}/iriscale-voice/" | grep -c 'evil')
+out=$(printf '%s' '{"session_id":"../../evil","cwd":"/x/api"}' | sh "$S" stamp >/dev/null; ls "${TMPDIR:-/tmp}/iriscale-voice/" | grep -c 'evil')
 [ "$out" -ge 1 ] && [ ! -e "${TMPDIR:-/tmp}/evil.start" ]; ok $? 0 "traversal in session_id is neutralised"
 # SECURITY: clean() must never admit quote/backslash/backtick/dollar (PowerShell single-quoted string)
 out=$(printf '%s' '{"session_id":"q","cwd":"/x/a'"'"');calc;('"'"'b"}' | sh "$S" Stop)

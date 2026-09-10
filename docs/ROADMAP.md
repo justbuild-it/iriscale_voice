@@ -37,13 +37,14 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.23 | Passive review lifecycle: reviewed inferred from a keypress in the idle window; states needs your answer / action / review; reminders 3+10 / 15 / 10 min, merged, capped, paused while you are active; welcome-back summary; no time decay | shipped 2026-09-07 |
 | 0.1.24 | `npx @iriscale/voice@latest install codex\|claude --apply`: a real installer for macOS and Linux; hooks merged not replaced; uninstall restores your own `notify` | shipped 2026-09-10 |
 | 0.1.25 | `/iriscale-voice:speaker` picks the voice; `pronounce`; announcements tuned for the ear (pause after the name, CamelCase split, hashes spelled out); "still needs your answer" no longer spoken after you answered (PostToolUse `resume`, the eighth hook); `install claude` sweeps stale commands (PR #30) | shipped 2026-09-10 |
-| 0.1.26 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
-| 0.1.27 | Speak a one-line summary of what was done (from `transcript_path`) (`last_assistant_message` is on the Stop payload) | planned |
-| 0.1.28 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
-| 0.1.29 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
-| 0.1.30 | Per-session voice signatures; stamp housekeeping | planned |
-| 0.1.31 | Windows-without-Git-Bash PowerShell fallback | planned |
-| 0.1.32 | Windsurf, Cline, Aider (done-only) | planned |
+| 0.1.26 | Test suite isolates `$TMPDIR` state from live sessions | shipped 2026-09-10 |
+| 0.1.27 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
+| 0.1.28 | Speak a one-line summary of what was done (from `transcript_path`) (`last_assistant_message` is on the Stop payload) | planned |
+| 0.1.29 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
+| 0.1.30 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
+| 0.1.31 | Per-session voice signatures; stamp housekeeping | planned |
+| 0.1.32 | Windows-without-Git-Bash PowerShell fallback | planned |
+| 0.1.33 | Windsurf, Cline, Aider (done-only) | planned |
 | later | macOS/Linux bar plugins; Windows tray (opt-in); macOS/Linux live verification as users report | |
 | out of scope | **Selecting the terminal tab inside an IDE.** Real setups run several IDE windows across screens, each with several terminal tabs; IDE tabs are not addressable from outside. The board raises the correct window and names the tab. Windows Terminal tabs via UI Automation remains a possible opt-in if sessions run there. | decided 2026-08-28 |
 
