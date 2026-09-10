@@ -30,7 +30,9 @@ you're on and then switch. That's the whole product.
   users, not by us — [reports welcome](https://github.com/justbuild-it/iriscale_voice/issues).
 - Tells you what it's waiting on — *"…to run git push origin main --force"* — with
   anything that looks like a credential scrubbed before it reaches the speaker or the
-  log. Shared office? `command_detail=program` speaks the program name only. See
+  log. Shared office? `command_detail=program` speaks the program name only. Hard to
+  understand? `iriscale-voice voices` lists clearer voices to `set voice`, and
+  `pronounce=word=spoken,…` fixes any word it mangles. See
   [SECURITY.md](SECURITY.md).
 
 ## Install (30 seconds)
@@ -63,7 +65,7 @@ npx @iriscale/voice@latest install codex --apply
 
 > The same installer does Claude Code without the plugin —
 > `npx @iriscale/voice@latest install claude --apply` — for one install path across every
-> agent. It writes the seven hooks into `~/.claude/settings.json`, the skill, and the
+> agent. It writes the eight hooks into `~/.claude/settings.json`, the skill, and the
 > commands as `/iriscale-voice-status` (flat files; only the plugin gets the `:` spelling).
 > The plugin above is still the better route for Claude Code — self-updating, edits none of
 > your files — and running **both** speaks everything twice, so the installer refuses when
@@ -105,6 +107,7 @@ Prefer to read either installer first? [SECURITY.md](SECURITY.md) shows how.
 /iriscale-voice:preset basic     # done + waiting for you. Nothing else.
 /iriscale-voice:preset standard  # + errors + "waiting for your answer …". Quiet on turns under 30 s.  (default)
 /iriscale-voice:preset verbose   # + subagents, session end
+/iriscale-voice:speaker          # the voices worth using (--all for every one); :speaker "Samantha" sets one and speaks a sample
 /iriscale-voice:mute             # silence, stays installed      /iriscale-voice:unmute
 /iriscale-voice:quiet 22-8       # nothing between 10 pm and 8 am
 /iriscale-voice:status           # what's configured
@@ -165,6 +168,8 @@ Each first line is spoken **once**. Reminders follow only while a session still 
 you: merged into one sentence when several do, skipped while you are typing elsewhere
 (`remind_pause`), and capped by the schedule (`remind_answer` 3,10 · `remind_review` 15 ·
 `remind_action` 10 minutes; `basic` never reminds). Then silence; the board keeps the row.
+Answering a permission prompt or a question clears *needs your answer* the moment the
+tool runs, so no reminder follows a dialog you have already dealt with.
 
 **A session counts as reviewed when you press any key in it within a minute of it
 finishing. Clicking into it or giving it focus is not enough** — that is what Claude

@@ -12,7 +12,7 @@ installation or user configuration.
 
 - **Claude Code, plugin install**: use the slash commands `/iriscale-voice:status`,
   `:test`, `:preset <basic|standard|verbose|off>`, `:mute`, `:unmute`,
-  `:quiet <start-end|off>`, `:config <list|get|set|unset|path>`, `:help`. The same CLI is
+  `:quiet <start-end|off>`, `:speaker [<name>|default]`, `:config <list|get|set|unset|path>`, `:help`. The same CLI is
   at `${CLAUDE_PLUGIN_ROOT}/bin/iriscale-voice` for anything else (`sessions`, `board`,
   `focus`).
 - **Claude Code, npm install** (`npx @iriscale/voice@latest install claude --apply`): the
@@ -27,6 +27,10 @@ installation or user configuration.
 - Inspect: `iriscale-voice status`, `iriscale-voice sessions`, `iriscale-voice doctor codex`,
   `iriscale-voice config list`
 - Test: `iriscale-voice test` (Windows: also reports PowerShell's Volume Mixer level; `test --fix` restores it to 100%)
+- Speaker: `iriscale-voice speaker` shows the voices worth using on this machine, `speaker --all`
+  every one (alias: `voices`);
+  `iriscale-voice speaker "<name>"` sets one and speaks a sample; `speaker default` restores
+  the system voice. `config set pronounce "word=spoken,..."` fixes words it mangles.
 - Control: `iriscale-voice mute`, `iriscale-voice unmute`,
   `iriscale-voice config set <key> <value>`
 - Board: `iriscale-voice board` (live pane; click or press a row number to raise that

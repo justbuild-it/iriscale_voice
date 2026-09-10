@@ -123,7 +123,7 @@ trace. A file that was already yours is kept, minus our line, with a backup besi
 | what | where |
 |---|---|
 | the script | the same stable directory as the Codex install — both agents share one copy |
-| seven hooks | `~/.claude/settings.json` under `hooks`, **appended** to whatever is already there — your own `Stop` or `Notification` hooks are untouched, and re-running replaces only our own entries |
+| eight hooks | `~/.claude/settings.json` under `hooks`, **appended** to whatever is already there — your own `Stop` or `Notification` hooks are untouched, and re-running replaces only our own entries |
 | the skill | `~/.claude/skills/iriscale-voice/` |
 | the commands | `~/.claude/commands/iriscale-voice-*.md` — spelled **`/iriscale-voice-status`**, `/iriscale-voice-preset` … (a hyphen, not the plugin's colon: `~/.claude/commands/` takes flat files only, and a subdirectory there is not a namespace — only skills namespace by directory) |
 

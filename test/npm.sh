@@ -216,16 +216,32 @@ exists "$CDIR/skills/iriscale-voice/SKILL.md"  "the Claude Code skill"
 exists "$CDIR/commands/iriscale-voice-status.md" "the flat, prefixed slash commands"
 ok "$(ls "$CDIR/commands"/iriscale-voice-*.md 2>/dev/null | wc -l | tr -d '[:space:]')" \
    "$(ls "$root/commands"/*.md | wc -l | tr -d '[:space:]')" "every command is installed"
+# a command we shipped once and renamed must not linger in the picker (the `voice` command
+# became `speaker`). A user's own file sharing the prefix, and any unprefixed file, stay put.
+printf -- '---\ndescription: old\n---\nRun: sh "/x/iriscale-voice" oldthing\n' > "$CDIR/commands/iriscale-voice-oldthing.md"
+printf -- '---\ndescription: mine\n---\nmy own notes\n' > "$CDIR/commands/iriscale-voice-mine.md"
+printf -- '---\ndescription: mine\n---\nmy own notes\n' > "$CDIR/commands/notes.md"
+claude_cli install claude --apply --skip-path >/dev/null 2>&1
+gone "$CDIR/commands/iriscale-voice-oldthing.md" "a renamed command is pruned on install"
+exists "$CDIR/commands/iriscale-voice-mine.md"   "a user's own prefixed file is left alone"
+exists "$CDIR/commands/notes.md"                 "an unprefixed file is left alone"
+exists "$CDIR/commands/iriscale-voice-status.md" "the shipping commands survive the prune"
 # ~/.claude/commands takes flat files only - a subdirectory there is NOT a namespace
 gone "$CDIR/commands/iriscale-voice" "no subdirectory (Claude Code would not find it)"
 
 # ${CLAUDE_PLUGIN_ROOT} only exists inside the plugin system; outside it must be resolved
 hasnt 'CLAUDE_PLUGIN_ROOT' "$CDIR/commands/iriscale-voice-status.md" "commands have no unresolved plugin root"
 has "$CROOT" "$CDIR/commands/iriscale-voice-status.md" "commands point at the stable script"
+# a command that tells the user to run /iriscale-voice:speaker must respell it: the
+# namespaced form does not exist outside the plugin, so the example would be dead.
+has '/iriscale-voice-speaker "Samantha"' "$CDIR/commands/iriscale-voice-speaker.md" \
+    "the example command is respelled flat"
+hasnt '/iriscale-voice:' "$CDIR/commands/iriscale-voice-speaker.md" \
+    "no plugin-namespaced command spelling survives the install"
 hasnt 'CLAUDE_PLUGIN_ROOT' "$SET" "settings.json has no unresolved plugin root"
 
-ok "$(jq_node "const d=require('$SET');console.log(Object.keys(d.hooks).length)")" "7" \
-   "all seven hook events are configured"
+ok "$(jq_node "const d=require('$SET');console.log(Object.keys(d.hooks).length)")" "8" \
+   "all eight hook events are configured"
 ok "$(jq_node "const d=require('$SET');console.log(d.model)")" "opus" "unrelated settings survive"
 ok "$(jq_node "const d=require('$SET');console.log(d.permissions.allow[0])")" "Bash(ls *)" "permissions survive"
 ok "$(jq_node "const d=require('$SET');console.log(d.hooks.Stop.filter(g=>JSON.stringify(g).includes('my-own-hook')).length)")" \
@@ -286,6 +302,8 @@ ok "$(jq_node "const d=require('$SET');console.log(JSON.stringify(d.hooks.Stop[0
 ok "$(jq_node "const d=require('$SET');console.log(d.model)")" "opus" "unrelated settings still survive"
 gone "$CDIR/skills/iriscale-voice"   "the Claude Code skill directory"
 gone "$CDIR/commands/iriscale-voice-status.md" "the installed commands"
+gone "$CDIR/commands/iriscale-voice-oldthing.md" "and any command from an older version"
+exists "$CDIR/commands/iriscale-voice-mine.md"   "uninstall still leaves a user's own file"
 gone "$CROOT" "the shared install directory goes with the last agent"
 
 # --- Codex: a user's own hook on one of our events must survive too ---------------
@@ -477,9 +495,9 @@ for shape in '{}' '{"hooks":null}' '{"hooks":[]}' '{"hooks":"nope"}' '{"model":"
     CLAUDE_CONFIG_DIR="$ODDS" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-odd/iriscale-voice" \
       $CLI install claude --apply --skip-path >/dev/null 2>&1
     st=$?
-    valid=$(S="$ODDS/settings.json" node -e 'const d=JSON.parse(require("fs").readFileSync(process.env.S,"utf8"));console.log(d.hooks&&Object.keys(d.hooks).length===7)' 2>/dev/null)
+    valid=$(S="$ODDS/settings.json" node -e 'const d=JSON.parse(require("fs").readFileSync(process.env.S,"utf8"));console.log(d.hooks&&Object.keys(d.hooks).length===8)' 2>/dev/null)
     if [ "$st" = 0 ] && [ "$valid" = true ]; then pass=$((pass+1))
-    else fail=$((fail+1)); echo "FAIL install claude over settings.json = $shape (exit $st, 7 events: $valid)"; fi
+    else fail=$((fail+1)); echo "FAIL install claude over settings.json = $shape (exit $st, 8 events: $valid)"; fi
     CLAUDE_CONFIG_DIR="$ODDS" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-odd/iriscale-voice" \
       $CLI uninstall claude --skip-path >/dev/null 2>&1
 done

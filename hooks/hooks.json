@@ -13,6 +13,9 @@
     "PermissionRequest": [
       { "hooks": [ { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/bin/iriscale-voice\" PermissionRequest", "async": true, "timeout": 30 } ] }
     ],
+    "PostToolUse": [
+      { "hooks": [ { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/bin/iriscale-voice\" resume", "async": true, "timeout": 10 } ] }
+    ],
     "Notification": [
       { "matcher": "idle_prompt",     "hooks": [ { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/bin/iriscale-voice\" idle_prompt",     "async": true, "timeout": 30 } ] },
       { "matcher": "agent_completed", "hooks": [ { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/bin/iriscale-voice\" agent_completed", "async": true, "timeout": 30 } ] }

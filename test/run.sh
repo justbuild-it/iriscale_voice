@@ -313,6 +313,12 @@ sh "$S" set preset standard >/dev/null; : > "$SHIM/.log"
 printf '%s' '{"session_id":"perf-1","cwd":"/x/perf_svc","tool_name":"Bash","tool_input":{"command":"ls"}}' | PATH="$SHIM:$PATH" sh "$S" PermissionRequest >/dev/null
 spawns=$(wc -l < "$SHIM/.log" | tr -d ' ')
 if [ "$spawns" -le 1 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook path spawned $spawns text-tool processes (limit 1): $(sort "$SHIM/.log" | uniq -c | tr '\n' ' ')"; fi
+# resume runs on EVERY tool call (PostToolUse), on a blocked row here so the write path is measured
+: > "$SHIM/.log"
+printf '%s' '{"session_id":"perf-1","cwd":"/x/perf_svc","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls"},"tool_response":{"stdout":"a\nb"}}' | PATH="$SHIM:$PATH" sh "$S" resume >/dev/null
+spawns=$(wc -l < "$SHIM/.log" | tr -d ' ')
+if [ "$spawns" -eq 0 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL resume (every tool call) spawned $spawns text-tool processes (limit 0): $(sort "$SHIM/.log" | uniq -c | tr '\n' ' ')"; fi
+grep -q '^status=working' "$SESSD/perf-1";                   ok $? 0 "perf: resume did clear the blocked row it was measured on"
 
 # Non-blocking speech guard: hosts that run hooks synchronously (Codex) must get the
 # hook back in well under a second even though speaking takes seconds. Stub every
@@ -325,6 +331,101 @@ printf '%s' '{"session_id":"sync-1","cwd":"/x/sync_host"}' | IRISCALE_VOICE_DEBU
 t1=$(date +%s)
 if [ $((t1 - t0)) -le 2 ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL hook blocked $((t1 - t0))s on speech - must background the speaker (limit 2s; the bug was 7s)"; fi
 sleep 4   # let the stubbed background speaker finish before the trap cleans the shim dir
+
+# Speech clarity: what the synthesizer actually receives. Debug prints it as "spoken as:".
+sh "$S" set preset standard >/dev/null; sh "$S" set repeat_cooldown 0 >/dev/null
+spoken() { printf '%s' "$1" | sh "$S" "$2" | sed -n 's/^      spoken as: //p'; }
+out=$(spoken '{"session_id":"sp-1","cwd":"/x/iriscale-voice-4d","tool_name":"AskUserQuestion"}' PermissionRequest)
+ok "$out" "iris scale voice 4 D, is waiting for your answer to use Ask User Question" "spoken: pause after the name, hash suffix spelled, CamelCase split"
+out=$(spoken '{"session_id":"sp-2","cwd":"/x/payments_api","tool_name":"Bash","tool_input":{"command":"npx eslint src && kubectl get pods"}}' PermissionRequest)
+ok "$out" "payments A P I, is waiting for your answer to run N P X E S lint src and then kube control get pods" "spoken: CLI names said the human way"
+out=$(spoken '{"session_id":"sp-3","cwd":"/x/bad-cafe-0f","tool_name":"WebFetch"}' PermissionRequest)
+ok "$out" "bad cafe 0 F, is waiting for your answer to use Web Fetch" "spoken: real hex-looking words stay words, 0f is spelled"
+out=$(spoken '{"session_id":"sp-4","cwd":"/x/billing"}' Stop)
+ok "$out" "billing, done" "spoken: an ordinary name is only given its pause"
+# a range like [a-z] is matched by the locale's COLLATION: in a UTF-8 locale [A-Z] also
+# matches lowercase letters, which spelled every word out ("pa y m e n t s"). A locale the
+# machine does not have falls back to C, so this is safe to run anywhere.
+for loc in C en_US.UTF-8; do
+    out=$(printf '%s' '{"session_id":"sp-4l","cwd":"/x/payments_api","tool_name":"WebFetch"}' | LC_ALL=$loc sh "$S" PermissionRequest | sed -n 's/^      spoken as: //p')
+    ok "$out" "payments A P I, is waiting for your answer to use Web Fetch" "spoken form does not depend on the locale ($loc)"
+done
+out=$(printf '%s' '{"session_id":"sp-4","cwd":"/x/billing"}' | sh "$S" Stop | head -1)
+ok "$out" "SPEAK [Stop] billing done" "the logged/board line stays plain"
+sh "$S" set pronounce "Iriscale=eye riss scale, naro=nah row" >/dev/null
+out=$(spoken '{"session_id":"sp-1","cwd":"/x/iriscale-voice-4d"}' Stop)
+ok "$out" "eye riss scale voice 4 D, done" "pronounce: your word wins over the built-in list, any case, spaces around the pair"
+sh "$S" set pronounce "iriscale=x'y\$z\`w\\v" >/dev/null
+out=$(spoken '{"session_id":"sp-1","cwd":"/x/iriscale-voice-4d"}' Stop)
+case "$out" in *"'"*|*'`'*|*'$'*|*'\'*) fail=$((fail+1)); echo "FAIL pronounce value reached the speaker unscrubbed: $out" ;; *) pass=$((pass+1)) ;; esac
+sh "$S" unset pronounce >/dev/null
+out=$(printf '%s' '{"session_id":"sp-5","message":"payments still needs your answer, 3 minutes"}' | sh "$S" Remind | head -1)
+ok "$out" "SPEAK [Remind] payments still needs your answer, 3 minutes" "a reminder line is spoken whole (no extra pause)"
+# voice names: macOS lists its clearer voices as "Eddy (English (US))"; those must reach say.
+VSHIM="$CLAUDE_CONFIG_DIR/vshim"; mkdir -p "$VSHIM"
+for spk in say spd-say espeak-ng espeak powershell.exe; do
+    printf '#!/bin/sh\nprintf "%%s\\n" "$*" > "%s/say.log"\n' "$VSHIM" > "$VSHIM/$spk"; chmod +x "$VSHIM/$spk"
+done
+say_args() { : > "$VSHIM/say.log"; IRISCALE_VOICE_DEBUG= PATH="$VSHIM:$PATH" sh "$S" say "$@" >/dev/null 2>&1; cat "$VSHIM/say.log"; }
+case "$(uname -s 2>/dev/null)" in
+    Linux) pass=$((pass+2)) ;;   # the voice key is ignored on Linux
+    *)  sh "$S" set voice "Eddy (English (US))" >/dev/null
+        case "$(say_args hello)" in *"Eddy (English (US))"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL a voice name with parentheses must reach the speaker: $(cat "$VSHIM/say.log")" ;; esac
+        sh "$S" set voice "Eddy's (US)" >/dev/null
+        case "$(say_args hello)" in *Eddy*) fail=$((fail+1)); echo "FAIL a voice name with a quote must be dropped: $(cat "$VSHIM/say.log")" ;; *) pass=$((pass+1)) ;; esac
+        sh "$S" unset voice >/dev/null ;;
+esac
+case "$(say_args "AskUserQuestion npx")" in *"Ask User Question N P X"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL say <text> is normalised too: $(cat "$VSHIM/say.log")" ;; esac
+PATH="$VSHIM:$PATH" sh "$S" speaker >/dev/null 2>&1;        ok $? 0 "speaker exits 0"
+# on Linux the voice belongs to speech-dispatcher/espeak, so the list says so instead
+case "$(uname -s 2>/dev/null)" in Linux) LISTHINT='spd-conf' ;; *) LISTHINT='iriscale-voice speaker' ;; esac
+PATH="$VSHIM:$PATH" sh "$S" speaker 2>/dev/null | grep -q "$LISTHINT"; ok $? 0 "the list tells you where the voice comes from"
+sh "$S" completions powershell | grep -q "'voices'";          ok $? 0 "completions keep the voices alias"
+# /iriscale-voice:speaker - list, set (and hear a sample), refuse junk, go back to default
+PATH="$VSHIM:$PATH" sh "$S" speaker 2>/dev/null | grep -q "$LISTHINT"; ok $? 0 "speaker with no argument lists the voices"
+PATH="$VSHIM:$PATH" sh "$S" voices 2>/dev/null | grep -q "$LISTHINT"; ok $? 0 "voices is the same list (the word people reach for)"
+: > "$VSHIM/say.log"
+IRISCALE_VOICE_DEBUG= PATH="$VSHIM:$PATH" sh "$S" speaker "Eddy (English (US))" >/dev/null 2>&1;  ok $? 0 "speaker <name> exit status"
+ok "$(sh "$S" config get voice)" "Eddy (English (US))" "speaker <name> stores the name (parentheses and all)"
+case "$(uname -s 2>/dev/null)" in Linux) pass=$((pass+1)) ;; *)
+    case "$(cat "$VSHIM/say.log")" in *"Eddy (English (US))"*"sounds like this"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL speaker <name> must speak a sample in that voice: $(cat "$VSHIM/say.log")" ;; esac ;;
+esac
+IRISCALE_VOICE_DEBUG= PATH="$VSHIM:$PATH" sh "$S" speaker "Eddy's" >/dev/null 2>&1;           ok $? 2 "speaker refuses a name with a quote"
+ok "$(sh "$S" config get voice)" "Eddy (English (US))" "a refused name leaves the setting alone"
+sh "$S" mute >/dev/null
+: > "$VSHIM/say.log"; IRISCALE_VOICE_DEBUG= PATH="$VSHIM:$PATH" sh "$S" speaker "Samantha" | grep -q muted; ok $? 0 "speaker <name> honours mute (no sample)"
+case "$(cat "$VSHIM/say.log")" in *"sounds like this"*) fail=$((fail+1)); echo "FAIL a muted speaker <name> must not speak the sample" ;; *) pass=$((pass+1)) ;; esac
+sh "$S" unmute >/dev/null
+sh "$S" speaker default >/dev/null;                           ok "$(sh "$S" config get voice)" "(unset - using default)" "speaker default restores the system voice"
+sh "$S" completions powershell | grep -q "'speaker'";         ok $? 0 "completions list speaker"
+# the default list is a shortlist: macOS installs ~40 English voices and most are toys.
+VLIST="$CLAUDE_CONFIG_DIR/vlist"; mkdir -p "$VLIST"
+cat > "$VLIST/say" <<'SAYEOF'
+#!/bin/sh
+[ "$1" = "-v" ] && [ "$2" = "?" ] || exit 0
+printf '%s\n' "Samantha            en_US    # Hello!" \
+               "Zarvox              en_US    # Hello!" \
+               "Aman (English (India)) en_IN    # Hello!" \
+               "Aman (English (India)) en_IN    # Hi, I am Siri!" \
+               "Anna                de_DE    # Hallo!"
+SAYEOF
+chmod +x "$VLIST/say"
+case "$(uname -s 2>/dev/null)" in
+    Darwin)
+        vout=$(PATH="$VLIST:$PATH" sh "$S" speaker 2>/dev/null)
+        case "$vout" in *Samantha*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL the shortlist must offer Samantha: $vout" ;; esac
+        printf '%s\n' "$vout" | grep -q '^  Zarvox'; [ $? = 1 ]; ok $? 0 "a novelty voice is not offered in the shortlist"
+        printf '%s\n' "$vout" | grep -q '^  Anna';   [ $? = 1 ]; ok $? 0 "a non-English voice is never listed"
+        ok "$(printf '%s\n' "$vout" | grep -c 'Aman')" "1" "a voice macOS lists twice (its Siri variant) is shown once"
+        case "$vout" in *"speaker --all"*"3 installed"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL the shortlist must say how to see the rest, and how many: $vout" ;; esac
+        vall=$(PATH="$VLIST:$PATH" sh "$S" speaker --all 2>/dev/null)
+        case "$vall" in *Zarvox*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL --all must list every voice: $vall" ;; esac
+        case "$(PATH="$VLIST:$PATH" sh "$S" voices --all 2>/dev/null)" in *Zarvox*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL voices --all must list every voice" ;; esac
+        # it is read in a terminal pane and pasted into chat windows that do not wrap
+        wide=$(printf '%s\n' "$vout" "$vall" | awk '{ if (length($0) > m) { m = length($0); l = $0 } } END { if (m > 80) print m ": " l }')
+        [ -z "$wide" ]; ok $? 0 "every line of the voice list fits 80 columns${wide:+ - $wide}" ;;
+    *)  pass=$((pass+8)) ;;
+esac
 
 # `test` (the CLI diagnostic) must honor mute, not just hook events (regression: it used
 # to call the speech backend unconditionally, so `mute` could not be trusted to mean
@@ -553,6 +654,44 @@ printf '%s' "$out" | grep -q 'migration.*NEEDS ACTION';       ok $? 0 "board: NE
 printf '%s' "$out" | grep -q 'needs your action';             ok $? 0 "board legend names the three verbs"
 [ "$(sh "$S" sessions --keys --plain | grep 'marks it reviewed' | awk '{print length}')" -le 80 ]; ok $? 0 "board note about keypresses fits 80 columns"
 sh "$S" events | grep -q '^  Remind';                         ok $? 0 "events table lists Remind"
+# 10. answering the dialog. A permission prompt / AskUserQuestion answer fires no
+# UserPromptSubmit; PostToolUse (our `resume`) is the signal that the tool you were asked
+# about has run. Regression: the 3-minute "still needs your answer" spoke over a turn
+# that had been answered within seconds and was simply still working.
+RS2='{"session_id":"lc-2","cwd":"/x/payments","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"git push"},"tool_response":{"stdout":"ok"}}'
+printf '%s' "$STAMP2" | sh "$S" stamp >/dev/null; printf '%s' "$LC2" | sh "$S" PermissionRequest >/dev/null
+grep -q '^status=blocked' "$SESSD/lc-2";                     ok $? 0 "answer: prompt -> needs your answer"
+now=$(date +%s); sed "s/^since=.*/since=$((now - 20))/" "$SESSD/lc-2" > "$SESSD/lc-2.tmp" && mv "$SESSD/lc-2.tmp" "$SESSD/lc-2"
+rm -f "$LCDIR/last_prompt"
+out=$(printf '%s' "$RS2" | sh "$S" resume)
+case "$out" in *"resume: lc-2 answered"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL resume on a blocked row must report it: $out" ;; esac
+grep -q '^status=working' "$SESSD/lc-2";                     ok $? 0 "answer: the tool ran -> working"
+[ "$(sed -n 's/^since=//p' "$SESSD/lc-2")" -ge "$now" ];     ok $? 0 "answer: since moves (the turn's reminder watcher exits)"
+grep -q '^remind_at=$' "$SESSD/lc-2";                        ok $? 0 "answer: the answer reminders are cancelled"
+grep -q '^reminded=0' "$SESSD/lc-2";                         ok $? 0 "answer: the reminder counter is reset"
+grep -q '^note=$' "$SESSD/lc-2";                             ok $? 0 "answer: the waiting note is cleared"
+[ "$(cat "$LCDIR/last_prompt" 2>/dev/null)" -ge "$now" ];    ok $? 0 "answer: counts as you being present (remind_pause)"
+out=$(sh "$S" tick lc-2); case "$out" in *SPEAK*) fail=$((fail+1)); echo "FAIL no reminder may follow an answered prompt: $out" ;; *) pass=$((pass+1)) ;; esac
+sh "$S" sessions --plain | grep 'payments' | grep -q 'NEEDS ANSWER' && { fail=$((fail+1)); echo "FAIL board still shows NEEDS ANSWER after the answer"; } || pass=$((pass+1))
+# a second prompt in the same turn starts its own 3-minute clock (since used to be inherited)
+sed "s/^since=.*/since=$((now - 60))/" "$SESSD/lc-2" > "$SESSD/lc-2.tmp" && mv "$SESSD/lc-2.tmp" "$SESSD/lc-2"
+printf '%s' "$LC2" | sh "$S" PermissionRequest >/dev/null
+ra=$(sed -n 's/^remind_at=//p' "$SESSD/lc-2"); since=$(sed -n 's/^since=//p' "$SESSD/lc-2")
+[ "$since" -ge "$now" ] && [ "$ra" = "$((since + 180))" ];   ok $? 0 "answer: a second prompt in the same turn re-arms from its own time"
+printf '%s' "$RS2" | sh "$S" resume >/dev/null
+# not blocked -> untouched: a READY row keeps its review lifecycle, a working row stays as it is
+printf '%s' "$STAMP1" | sh "$S" stamp >/dev/null; printf '%s' "$LC1" | sh "$S" Stop >/dev/null
+cp "$SESSD/lc-1" "$SESSD/lc-1.before"
+out=$(printf '%s' '{"session_id":"lc-1","cwd":"/x/billing","hook_event_name":"PostToolUse","tool_name":"Read"}' | sh "$S" resume)
+[ -z "$out" ] && cmp -s "$SESSD/lc-1" "$SESSD/lc-1.before";  ok $? 0 "resume leaves a READY row alone (review lifecycle untouched)"
+rm -f "$SESSD/lc-1.before"
+out=$(printf '%s' '{"session_id":"lc-none","cwd":"/x/new","hook_event_name":"PostToolUse","tool_name":"Read"}' | sh "$S" resume)
+[ -z "$out" ] && [ ! -e "$SESSD/lc-none" ];                  ok $? 0 "resume never creates a row"
+out=$(printf '%s' '{"hook_event_name":"PostToolUse","tool_name":"Read"}' | sh "$S" resume)
+[ "$?" = 0 ] && [ -z "$out" ];                               ok $? 0 "resume without a session id exits quietly"
+grep -q '"PostToolUse"' "$here/../hooks/hooks.json" && grep '"PostToolUse"' -A1 "$here/../hooks/hooks.json" | grep -q 'iriscale-voice\\" resume'
+ok $? 0 "hooks.json wires PostToolUse to resume"
+sh "$S" events | grep -q '^  resume';                         ok $? 0 "events table lists resume"
 rm -f "$LCDIR/last_prompt"; sh "$S" set repeat_cooldown 0 >/dev/null
 
 echo "passed: $pass  failed: $fail"
