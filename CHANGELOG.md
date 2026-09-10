@@ -5,6 +5,70 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+### Added
+- **`/iriscale-voice:speaker`** (CLI: `iriscale-voice speaker`) — who does the talking.
+  Without an argument it shows the voices worth using and where clearer ones come from
+  (macOS: Manage Voices downloads an *Enhanced*/*Premium* variant; Windows: Speech
+  settings) — macOS installs about forty English voices and most are novelty toys (Boing,
+  Bubbles, Zarvox) or 1980s formant voices (Albert, Fred), so the default output is a
+  shortlist of the natural ones actually installed and `speaker --all` prints every one.
+  A voice macOS lists twice (the plain entry and its Siri variant) is shown once. With a
+  name it sets the voice and speaks a sample so you hear the change at once; on macOS a
+  name `say` does not know is refused instead of failing silently later. `speaker default`
+  restores the system voice, and `voices` is an alias for the list. Every line of the
+  list fits 80 columns, and its slash command answers in prose rather than pasting the
+  block: column-aligned terminal text does not wrap in a chat pane, so it scrolled
+  sideways and lost the ends of its longest lines (one ran to 106 characters). It closes
+  by writing the command out — `/iriscale-voice:speaker "Samantha"` — rather than
+  describing it.
+- **`install claude` respells the commands it writes.** Slash commands are authored in the
+  plugin's namespaced form, but outside the plugin they are flat files invoked with a
+  hyphen, so a command telling you to run `/iriscale-voice:speaker` was pointing at
+  something that does not exist in that install. Command bodies are now rewritten to
+  `/iriscale-voice-…` as they are copied, next to the existing `${CLAUDE_PLUGIN_ROOT}`
+  substitution.
+- **`pronounce`** setting: `word=spoken` pairs for anything the synthesizer mangles —
+  `pronounce=iriscale=eye riss scale,naro=nah row`. Whole-word, any case, wins over the
+  built-in list, and still passes through `clean()` so a value can never reach the shell.
+
+### Changed
+- **Announcements are easier to understand.** The synthesizer now gets a version of each
+  line tuned for the ear while the log, board and repeat guard keep the plain text: a
+  short pause after the session name (*"payments api, done"* instead of one run-on
+  phrase), CamelCase tool names split (*Ask User Question*, *Web Fetch*), the two-character
+  hash Claude Code appends to auto-named sessions spelled out (*iriscale voice 4 D* rather
+  than "fourd"; real words such as *cafe* are left alone), and common CLI names said the
+  way people say them (*N P X*, *E S lint*, *kube control*, *P S Q L*, *and then* for
+  `&&`). `IRISCALE_VOICE_DEBUG=1` now prints both the plain line and the spoken form.
+
+### Fixed
+- **A renamed or dropped slash command lingered forever.** `install claude` only ever
+  wrote the commands it ships and never took back one it had shipped before, so a command
+  that changed name stayed in the picker calling a subcommand the script no longer has
+  (and `uninstall claude` left it behind too). Both now sweep every `iriscale-voice-*.md`
+  in `~/.claude/commands` whose body points at our script; a file of your own that happens
+  to share the prefix is left alone.
+- **Voice names with parentheses were silently ignored.** macOS lists its clearer voices
+  as `Eddy (English (US))` and downloaded ones as `Samantha (Enhanced)`, but the `voice`
+  setting rejected any name containing `(`/`)` and fell back to the system default without
+  a word. Parentheses are now allowed (they are inert inside the quoted `say` argument and
+  the single-quoted PowerShell string; quotes, backslashes, backticks and `$` are still
+  refused).
+- **"still needs your answer" spoken after you had already answered.** Answering a
+  permission prompt or an `AskUserQuestion` fires no `UserPromptSubmit`, so nothing told
+  the plugin the dialog was gone: the session stayed *needs your answer* until the turn
+  ended, and if Claude worked on for more than three minutes the reminder watcher spoke
+  *"… still needs your answer, 3 minutes"* over a session that was busy, not blocked. A
+  new `PostToolUse` hook (`resume`, the eighth hook) marks the session *working* the
+  moment the tool you were asked about runs: it moves `since`, which ends that turn's
+  watcher, clears the reminder schedule, and counts as you being present for
+  `remind_pause`. It fires on every tool call, so it is builtins-only and touches nothing
+  unless the session was actually blocked - a `ready`/`review` row keeps its review
+  lifecycle. A second prompt in the same turn now also restarts the 3/10-minute clock
+  instead of inheriting the first one's. Codex has no post-tool hook, so a Codex row
+  still clears on your next prompt or the turn's end. Plugin users get the hook on
+  update; `install claude --apply` users re-run the installer.
+
 ## [0.1.24] — 2026-09-09
 
 ### Added

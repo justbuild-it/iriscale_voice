@@ -20,7 +20,7 @@
   on your PATH, and edit the configuration of the agent you named:
   - `install codex` — `~/.codex/config.toml` (the single top-level `notify`),
     `~/.codex/hooks.json` (two events), `~/.codex/skills/iriscale-voice/`.
-  - `install claude` — `~/.claude/settings.json` (seven hook events, **appended** to
+  - `install claude` — `~/.claude/settings.json` (eight hook events, **appended** to
     whatever is already there), `~/.claude/skills/iriscale-voice/`, and
     `~/.claude/commands/iriscale-voice-*.md`.
   - The Windows `install.ps1` additionally edits your PowerShell `$PROFILE`.

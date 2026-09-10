@@ -174,7 +174,7 @@ function forgetAgent (L, agent) {
 // ours and removed. Every entry we write ends with one of the event arguments below;
 // nothing a person would write by hand does.
 const OUR_ARGS = new Set([
-  'stamp', 'notify', 'Stop', 'StopFailure', 'PermissionRequest', 'idle_prompt',
+  'stamp', 'resume', 'notify', 'Stop', 'StopFailure', 'PermissionRequest', 'idle_prompt',
   'agent_completed', 'SubagentStop', 'SessionEnd', 'StepDone', 'Scheduled',
   'Remind', 'WelcomeBack'
 ])

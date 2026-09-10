@@ -41,7 +41,8 @@ The file is created the first time a setting is written (`config set`, a preset 
 | `command_detail` | `redacted` | what a permission prompt says about the command. `redacted`: up to 60 characters with credential-looking words scrubbed — *"…to run git push origin main --force"*, *"…to run curl -H Authorization: Bearer [redacted]"*. `program`: the program and its first word only (*"…to run git push"*) — for shared offices and calls. `full`: verbatim, no scrubbing. The same text goes to the log |
 | `mute_sessions` | *(none)* | comma-separated session names to never announce |
 | `only_sessions` | *(none = all)* | comma-separated; if set, announce ONLY these |
-| `voice` | OS default | Windows: `Microsoft Zira Desktop`; macOS: any from `say -v ?`; Linux: ignored |
+| `voice` | OS default | `/iriscale-voice:speaker` shows the voices worth using — macOS installs about forty English ones and most are novelty toys (Boing, Zarvox), so the default list is a shortlist and `speaker --all` prints every one. `/iriscale-voice:speaker "<name>"` sets one and speaks a sample, `/iriscale-voice:speaker default` goes back. macOS lists its clearer voices as `Eddy (English (US))`, `Flo (English (UK))`, and downloaded ones as `Samantha (Enhanced)` — quote the name: `set voice "Samantha (Enhanced)"`. Windows: a SAPI voice such as `Microsoft Zira Desktop`. Linux: ignored |
+| `pronounce` | *(none)* | how to say words the synthesizer gets wrong: `word=spoken` pairs, comma-separated, whole word, any case — `pronounce=iriscale=eye riss scale,naro=nah row`. Applied before the built-in fixes below |
 | `rate` | `0` | speaking speed, -10 (slow) to 10 (fast) |
 | `volume` | `100` | 0–100 (Windows only; others use system volume) |
 | `serialize` | `true` | queue announcements so concurrent sessions never talk over each other |
@@ -91,8 +92,21 @@ window means a key was pressed, so the row becomes *reviewed*; the notice arrivi
 nobody touched it, so it becomes *needs your review* and the reminders start. **Clicking
 into the session or giving it focus does not count; press a key.** The window is Claude
 Code's `messageIdleNotifThresholdMs` (default 60000) plus 30 s. Codex has no idle notice,
-so Codex sessions stay *ready* until your next prompt there. Reminders and the
-welcome-back summary are the `remind_*` and `welcome_back` keys above. A small window off to the side, on Windows Terminal:
+so Codex sessions stay *ready* until your next prompt there. **Needs your answer clears
+the moment you answer:** the tool you were asked about runs, Claude Code's `PostToolUse`
+hook fires, and the row goes back to *working* with its reminders cancelled (Codex has no
+such hook, so there the row clears on your next prompt or the turn's end). Reminders and the
+welcome-back summary are the `remind_*` and `welcome_back` keys above.
+
+**What the speaker hears.** The log keeps the plain line; the synthesizer gets a version
+tuned to be understood: a short pause after the session name (*"payments api, done"*),
+CamelCase tool names split (*Ask User Question*), the two-character hash Claude Code
+appends to auto-named sessions spelled out (*iriscale voice 4 D*, not "fourd"), and
+common CLI names said the way people say them (*N P X*, *E S lint*, *kube control*,
+*and then* for `&&`). `IRISCALE_VOICE_DEBUG=1` prints both forms; `pronounce` above adds
+your own words and wins over the built-in list.
+
+A small window off to the side, on Windows Terminal:
 
 ```
 wt -w iriscale --size 64,18 --pos 1180,80 --title sessions iriscale-voice board

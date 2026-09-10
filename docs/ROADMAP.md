@@ -14,7 +14,7 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.0 | Plugin, presets, slash command, Win/mac/Linux speakers, tests | shipped 2026-08-15 |
 | 0.1.1 | Repeat guard, "sub agent" pronunciation | shipped 2026-08-16 |
 | 0.1.2 | Standard CLI (`--help`, `config list/get/set/unset/path`, `events`, `presets`, `--version`); command renamed `iriscale-voice`; patch-per-release policy; version-consistency test | shipped 2026-08-16 |
-| 0.1.3 | Fix: slash command renamed `/voice` → `/iriscale-voice` (`/voice` is a Claude Code built-in) | shipped 2026-08-17 |
+| 0.1.3 | Fix: the bare slash command `voice` renamed to `/iriscale-voice` (Claude Code's built-in dictation toggle of the same name shadowed it) | shipped 2026-08-17 |
 | 0.1.4 | Fix: one command file per subcommand → `/iriscale-voice:status` etc.; upgrade/restart note | shipped 2026-08-17 |
 | 0.1.5 | Perf: builtins-only hook path (Windows 1479 → 283 ms per event; suite 82 → 26 s); spawn-count guard | shipped 2026-08-17 |
 | 0.1.6 | Codex CLI (notify + optional hooks, /rename support) + alias layers | shipped 2026-08-18 |

@@ -160,6 +160,95 @@ clean() {
     done
     printf '%s' "$_o"
 }
+# lc_to VAR <text>: lowercase with builtins (no tr - sayable also runs on the debug path)
+lc_to() {
+    _ls=$2; _lr=""
+    while [ -n "$_ls" ]; do
+        _lc=${_ls%"${_ls#?}"}; _ls=${_ls#?}
+        case $_lc in A) _lc=a;; B) _lc=b;; C) _lc=c;; D) _lc=d;; E) _lc=e;; F) _lc=f;; G) _lc=g;; H) _lc=h;; I) _lc=i;; J) _lc=j;; K) _lc=k;; L) _lc=l;; M) _lc=m;; N) _lc=n;; O) _lc=o;; P) _lc=p;; Q) _lc=q;; R) _lc=r;; S) _lc=s;; T) _lc=t;; U) _lc=u;; V) _lc=v;; W) _lc=w;; X) _lc=x;; Y) _lc=y;; Z) _lc=z;; esac
+        _lr="$_lr$_lc"
+    done
+    eval "$1=\$_lr"
+}
+# sayable <text>: rewrite code-ish words so a synthesizer says them the way you would.
+# Left alone they come out mangled: "AskUserQuestion" as one smeared word, "4d" as
+# "fourd", "npx" as "nix". Word by word, first match wins:
+#   1. your `pronounce` setting  (pronounce=iriscale=eye riss scale,naro=nah row)
+#   2. well-known CLI names       (npx -> N P X, kubectl -> kube control, eslint -> E S lint)
+#   3. short hex-ish tokens       (4d -> 4 D, 0f -> 0 F, aa -> A A: auto session-name suffixes)
+#   4. CamelCase                  (AskUserQuestion -> Ask User Question)
+# Runs in the detached speaker (and once on the debug path), builtins only. Output still
+# goes through clean(), so a pronounce value can never smuggle a quote to the shell.
+sayable() {
+    cfgv _pr pronounce ""
+    _sout=""; _oifs=$IFS; IFS=' '; set -f
+    for _w in $1; do
+        _tp=""   # trailing punctuation stays attached, outside the match
+        while case $_w in ?*[.,:\;!?\)]) true ;; *) false ;; esac; do _tp="${_w#"${_w%?}"}$_tp"; _w=${_w%?}; done
+        _sw=""; lc_to _lw "$_w"
+        if [ -n "$_pr" ]; then
+            _prest="$_pr,"
+            while [ -n "$_prest" ]; do
+                _pair=${_prest%%,*}; _prest=${_prest#*,}
+                case $_pair in *=*) ;; *) continue ;; esac
+                _pk=${_pair%%=*}; _pv=${_pair#*=}
+                while case $_pk in ' '*) true ;; *) false ;; esac; do _pk=${_pk#?}; done
+                while case $_pk in *' ') true ;; *) false ;; esac; do _pk=${_pk%?}; done
+                lc_to _pk "$_pk"
+                [ "$_pk" = "$_lw" ] && { _sw=$_pv; break; }
+            done
+        fi
+        if [ -z "$_sw" ]; then
+            case $_lw in
+                npm) _sw="N P M" ;; npx) _sw="N P X" ;; pnpm) _sw="P N P M" ;; nvm) _sw="N V M" ;;
+                gh) _sw="G H" ;; ls) _sw="L S" ;; cd) _sw="C D" ;; rm) _sw="R M" ;; cp) _sw="C P" ;;
+                mv) _sw="M V" ;; ln) _sw="L N" ;; ssh) _sw="S S H" ;; scp) _sw="S C P" ;;
+                tsc) _sw="T S C" ;; tsx) _sw="T S X" ;; psql) _sw="P S Q L" ;; sql) _sw="S Q L" ;;
+                mysql) _sw="my S Q L" ;; cli) _sw="C L I" ;; api) _sw="A P I" ;; url) _sw="U R L" ;;
+                mcp) _sw="M C P" ;; ci) _sw="C I" ;; pr) _sw="P R" ;; db) _sw="D B" ;;
+                eslint) _sw="E S lint" ;; kubectl) _sw="kube control" ;; k8s) _sw="kubernetes" ;;
+                chmod) _sw="C H mod" ;; chown) _sw="C H own" ;; mkdir) _sw="make dir" ;;
+                aws) _sw="A W S" ;; gcloud) _sw="G cloud" ;; sh) _sw="S H" ;; zsh) _sw="Z S H" ;;
+                js) _sw="J S" ;; ts) _sw="T S" ;; vscode) _sw="V S code" ;; ide) _sw="I D E" ;;
+                ui) _sw="U I" ;; iriscale) _sw="iris scale" ;; '&&') _sw="and then" ;;
+            esac
+        fi
+        if [ -z "$_sw" ]; then
+            case $_lw in
+                *[!0-9a-f]*|'') ;;                       # not hex-shaped
+                *) _hd=0; case $_lw in *[0-9]*) _hd=1 ;; esac
+                   _hl=0; case $_lw in *[a-f]*) _hl=1 ;; esac
+                   _spell=0
+                   if [ "$_hd" = 1 ] && [ "$_hl" = 1 ] && [ ${#_lw} -le 4 ]; then _spell=1
+                   elif [ "$_hd" = 0 ] && [ ${#_lw} = 2 ]; then case $_lw in be|de|ad|ab|fa) ;; *) _spell=1 ;; esac; fi
+                   if [ "$_spell" = 1 ]; then
+                       _hs=$_lw
+                       while [ -n "$_hs" ]; do
+                           _hc=${_hs%"${_hs#?}"}; _hs=${_hs#?}
+                           case $_hc in a) _hc=A ;; b) _hc=B ;; c) _hc=C ;; d) _hc=D ;; e) _hc=E ;; f) _hc=F ;; esac
+                           _sw="$_sw${_sw:+ }$_hc"
+                       done
+                   fi ;;
+            esac
+        fi
+        if [ -z "$_sw" ]; then
+            case $_w in
+                *[a-z]*[A-Z]*) case $_w in *[!A-Za-z]*) ;; *)      # CamelCase, letters only
+                    _cs=$_w; _pc=""; _cw=""
+                    while [ -n "$_cs" ]; do
+                        _cc=${_cs%"${_cs#?}"}; _cs=${_cs#?}
+                        case $_pc$_cc in [a-z][A-Z]) _cw="$_cw " ;; esac
+                        _cw="$_cw$_cc"; _pc=$_cc
+                    done
+                    _sw=$_cw ;; esac ;;
+            esac
+        fi
+        [ -n "$_sw" ] || _sw=$_w
+        _sout="$_sout${_sout:+ }$_sw$_tp"
+    done
+    set +f; IFS=$_oifs
+    printf '%s' "$_sout"
+}
 # empty output = clock unavailable (caller then skips quiet hours). Midnight "00" -> "0".
 hour_now() { h=$(date +%H 2>/dev/null); case $h in ??) h=${h#0} ;; esac; printf '%s' "$h"; }
 
@@ -177,12 +266,15 @@ preset_min_turn() { case "$1" in standard) echo 30 ;; *) echo 0 ;; esac; }
 
 # ---------- speaking backends -------------------------------------------------
 speak() {
-    text=$(clean "$1")
+    text=$(clean "$(sayable "$1")")
     cfgv vol volume 100; cfgv rate rate 0; cfgv voice voice ""
-    # config values are interpolated into the speech command: keep them boring
+    # config values are interpolated into the speech command: keep them boring. Voice
+    # names need ( ) too: macOS lists its clearer voices as "Eddy (English (US))" and
+    # downloaded ones as "Samantha (Enhanced)"; parentheses are inert inside the
+    # single-quoted PowerShell string and the quoted say argument.
     case $vol in ''|*[!0-9]*) vol=100 ;; esac
     case $rate in ''|-) rate=0 ;; -[0-9]*|[0-9]*) case ${rate#-} in *[!0-9]*) rate=0 ;; esac ;; *) rate=0 ;; esac
-    case $voice in *[!A-Za-z0-9\ ._-]*) voice="" ;; esac
+    case $voice in *[!A-Za-z0-9\ ._\(\)-]*) voice="" ;; esac
     case "$(os)" in
         win)
             ps="Add-Type -AssemblyName System.Speech; \$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; \$s.Volume=$vol; \$s.Rate=$rate;"
@@ -240,7 +332,8 @@ remind_pause|2|skip a reminder (it still counts) if you sent a prompt anywhere w
 welcome_back|10|after this many quiet minutes, your next prompt is preceded by "while you were away: ..."; 0 = off
 mute_sessions|(none)|comma-separated session names to never announce
 only_sessions|(none = all)|comma-separated; if set, announce ONLY these
-voice|(OS default)|Windows: e.g. Microsoft Zira Desktop; macOS: any from \`say -v ?\`; Linux: ignored
+voice|(OS default)|a name from \`iriscale-voice voices\` (macOS: say -v ?; Windows: SAPI); Linux: ignored
+pronounce|(none)|how to say words the synthesizer gets wrong: word=spoken pairs, comma-separated, whole word, any case (iriscale=eye riss scale,naro=nah row)
 rate|0|speaking speed, -10 slow .. 10 fast
 volume|100|0-100 (Windows only; others use system volume)
 serialize|true|queue announcements so concurrent sessions never overlap
@@ -266,6 +359,7 @@ SessionEnd|session closed|"<session> session ended"
 Remind|a session has needed you for a while (remind_answer / remind_review / remind_action)|"<session> still needs your answer, 10 minutes"
 WelcomeBack|your first prompt after welcome_back quiet minutes, if anything waits|"while you were away: payments needs your answer, billing ready for review"
 stamp|(internal) marks turn start for min_turn_seconds|—
+resume|(internal) a tool ran, so the dialog you were asked about is answered: clears "needs your answer" and its reminders|—
 EOF
 }
 usage() {
@@ -281,6 +375,9 @@ COMMANDS
   test [--fix]           speak a test phrase; on Windows also reads PowerShell's level in the
                          Volume Mixer (0% there = silent everywhere); --fix sets it to 100%
   say <text>             speak arbitrary text
+  speaker [<name>]       who talks: no argument shows the voices worth using (--all for
+                         every one), a name sets it and speaks a sample, \`default\` restores
+                         the system voice                         (alias: voices = the list)
   mute | unmute          silence / restore (sets enabled=false/true)
   config list            every setting: key, current value, default, meaning
   config get <key>       print one setting's current value
@@ -494,7 +591,7 @@ Register-ArgumentCompleter -Native -CommandName iriscale-voice -ScriptBlock {
   $argument = $elements.Count - 1
   if ($commandAst.Extent.Text -match '\s$') { $argument++ }
   if ($argument -le 1) {
-    $choices = 'status','sessions','board','focus','test','say','mute','unmute','config','install','doctor','presets','events','completions','update','uninstall','help'
+    $choices = 'status','sessions','board','focus','test','say','speaker','voices','mute','unmute','config','install','doctor','presets','events','completions','update','uninstall','help'
   } else {
     $choices = switch ($elements[1]) {
       'config' { 'list','get','set','unset','path','edit' }
@@ -558,6 +655,94 @@ mixer_verdict() {   # mixer_verdict "app=0 appmuted=False master=50 mastermuted=
     elif [ "$_mv" = 0 ]; then echo "  WARNING: the output device volume is 0"; fi
     return 0
 }
+# The voices worth suggesting. macOS installs about forty English ones, but most are
+# novelty toys (Bells, Boing, Bubbles, Jester, Zarvox...) or the 1980s formant voices
+# (Albert, Fred, Ralph, Kathy); listing all of them makes choosing harder, not easier. So
+# the default output is this shortlist filtered to what is actually installed, and
+# `speaker --all` still prints every one. Matched on the name before any " (English (…))".
+SPEAKER_PICKS="Samantha|Alex|Ava|Allison|Susan|Tom|Nicky|Daniel|Kate|Oliver|Serena|Fiona|Karen|Lee|Moira|Tessa|Rishi|Tara|Aman|Veena"
+
+# the voices this machine can name, and where clearer ones come from.
+cli_speaker_list() {
+    _all=0; case ${1:-} in --all|-a|all) _all=1 ;; esac
+    cfgv cur voice ""
+    echo "current voice: ${cur:-(system default)}"
+    case "$(os)" in
+        mac)
+            if [ "$_all" = 1 ]; then echo "every English voice installed (say -v ?):"
+            else echo "voices worth using (of the ones installed):"; fi
+            _vl=$(say -v '?' 2>/dev/null)
+            _seen="|"; _tot=0; _shown=0; _rest="$_vl$NL"
+            while [ -n "$_rest" ]; do
+                _line=${_rest%%"$NL"*}; _rest=${_rest#*"$NL"}
+                case $_line in *" en_"*) ;; *) continue ;; esac
+                _vn=${_line%% en_*}
+                while case $_vn in *' '|*"	") true ;; *) false ;; esac; do _vn=${_vn%?}; done
+                # macOS lists some voices twice (the plain one and its Siri variant)
+                case $_seen in *"|$_vn|"*) continue ;; esac
+                _seen="$_seen$_vn|"; _tot=$((_tot+1))
+                if [ "$_all" = 0 ]; then
+                    _base=${_vn%% (*}
+                    case "|$SPEAKER_PICKS|" in *"|$_base|"*) ;; *) continue ;; esac
+                fi
+                _vc=${_line#*" en_"}
+                _shown=$((_shown+1)); printf '  %-26s en_%s\n' "$_vn" "${_vc%%[ 	]*}"
+            done
+            [ "$_shown" -gt 0 ] || echo "  (none of the usual voices are installed - run: iriscale-voice speaker --all)"
+            # every line stays inside 80 columns: this is read in a terminal pane and
+            # pasted into chat windows that do not wrap. A test asserts it.
+            echo
+            echo "  set one:   iriscale-voice speaker \"Samantha\"   (quote if it has spaces)"
+            if [ "$_all" = 0 ] && [ "$_tot" -gt "$_shown" ]; then
+                echo "  every one: iriscale-voice speaker --all     ($_tot installed, most are toys)"
+            fi
+            echo "  clearer:   System Settings > Accessibility > Spoken Content >"
+            echo "             System Voice > Manage Voices, then download an (Enhanced)"
+            echo "             or (Premium) voice; it appears above under that name." ;;
+        win)
+            echo "SAPI voices installed:"
+            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \
+                "Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).GetInstalledVoices() | ForEach-Object { '  ' + \$_.VoiceInfo.Name + '   ' + \$_.VoiceInfo.Culture }" 2>/dev/null | tr -d '\r'
+            echo
+            echo "  set one:   iriscale-voice speaker \"Microsoft Zira Desktop\""
+            echo "  clearer:   Settings > Time & Language > Speech > Manage voices." ;;
+        *)
+            if command -v spd-say >/dev/null 2>&1; then echo "speech-dispatcher voices (spd-say -L):"; spd-say -L 2>/dev/null | sed 's/^/  /'
+            elif command -v espeak-ng >/dev/null 2>&1; then echo "espeak-ng English voices:"; espeak-ng --voices=en 2>/dev/null | sed 's/^/  /'
+            else echo "no speech backend found (install speech-dispatcher or espeak-ng)"; fi
+            echo
+            echo "  the voice is chosen in spd-conf / espeak-ng itself, not here." ;;
+    esac
+}
+
+# speaker [name|default]: who does the talking. No argument lists what you can pick; a
+# name sets it and speaks a sample so you hear the difference at once; `default` returns
+# to the system voice. (It sets the `voice` config key - the setting keeps its own name.)
+cli_speaker() {
+    [ $# -gt 0 ] || { cli_speaker_list; return 0; }
+    case $1 in --all|-a) cli_speaker_list --all; return 0 ;; esac
+    _vn=$*
+    case $_vn in
+        default|system|unset|off) cli_config unset voice; return $? ;;
+        *[!A-Za-z0-9\ ._\(\)-]*) echo "voice names may only contain letters, digits, spaces, . _ - ( )" >&2; return 2 ;;
+    esac
+    if [ "$(os)" = mac ]; then
+        # refuse a name say does not know - it would fail silently on every announcement
+        _vl=$(say -v '?' 2>/dev/null); _hit=""
+        if [ -n "$_vl" ]; then
+            _rest="$_vl$NL"
+            while [ -n "$_rest" ]; do _l=${_rest%%"$NL"*}; _rest=${_rest#*"$NL"}; case $_l in "$_vn "*) _hit=1; break ;; esac; done
+            [ -n "$_hit" ] || { echo "no voice called \"$_vn\" is installed - run: iriscale-voice speaker" >&2; return 2; }
+        fi
+    fi
+    cfg_set voice "$_vn" || return $?
+    echo "voice=$_vn"
+    cfgv enabled enabled true
+    if [ -n "$IRISCALE_VOICE_OFF" ] || [ "$enabled" != "true" ]; then echo "(muted - not speaking a sample)"; return 0; fi
+    speak "iriscale voice now sounds like this"
+    echo "spoke a sample; to go back: iriscale-voice speaker default"
+}
+
 cli_test() {
     fixarg=""; for _a in "$@"; do case $_a in --fix) fixarg=-Fix ;; esac; done
     # honour mute: `test` used to call the speech backend unconditionally (PR #25)
@@ -570,7 +755,7 @@ cli_test() {
     cfgv vol volume 100; cfgv rate rate 0; cfgv voice voice ""
     case $vol in ''|*[!0-9]*) vol=100 ;; esac
     case $rate in ''|-) rate=0 ;; -[0-9]*|[0-9]*) case ${rate#-} in *[!0-9]*) rate=0 ;; esac ;; *) rate=0 ;; esac
-    case $voice in *[!A-Za-z0-9\ ._-]*) voice="" ;; esac
+    case $voice in *[!A-Za-z0-9\ ._\(\)-]*) voice="" ;; esac
     [ -d "$STATE" ] || mkdir -p -m 700 "$STATE" 2>/dev/null
     cat > "$STATE/mixer.ps1" <<'EOF'
 param([string]$Phrase = 'iriscale voice is working', [int]$Volume = 100, [int]$Rate = 0, [string]$Voice = '', [switch]$Fix)
@@ -1154,6 +1339,8 @@ case "$EVENT" in
         printf '  %-18s %-46s %s\n' EVENT "WHEN IT FIRES" "WHAT IT SAYS"
         events_table | while IFS='|' read -r e w s; do printf '  %-18s %-46s %s\n' "$e" "$w" "$s"; done; exit 0 ;;
     say|speak) shift; speak "${*:-iriscale voice test}"; exit 0 ;;
+    speaker) shift; cli_speaker "$@"; exit $? ;;
+    voices)  shift; cli_speaker_list "$@"; exit $? ;;   # the list under the word people reach for
     test)    shift; cli_test "$@"; exit $? ;;
     mixer-verdict) mixer_verdict "$2"; exit 0 ;;   # (test suite) render one mixer report line
     -*)      echo "unknown option: $EVENT" >&2; usage >&2; exit 2 ;;
@@ -1201,6 +1388,38 @@ if [ -n "$sid" ]; then
     _s=$sid; sid=""
     while [ -n "$_s" ]; do _ch=${_s%"${_s#?}"}; _s=${_s#?}; case $_ch in [A-Za-z0-9._-]) sid="$sid$_ch" ;; *) sid="${sid}_" ;; esac; done
     case $sid in ..|.|"") sid="" ;; *..*) sid=$(printf '%s' "$sid" | tr '.' '_') ;; esac
+fi
+
+# resume: PostToolUse - a tool just ran, so the agent is working again. That fires on
+# EVERY tool call, so it does the least possible and exits: only a session marked
+# "needs your answer" is touched (the answered dialog is what let the tool run).
+# Answering a permission prompt or an AskUserQuestion fires no UserPromptSubmit, so
+# without this the session stayed blocked until the turn ended and the 3/10-minute
+# "still needs your answer" reminders spoke over a turn you had already unblocked.
+# Moving `since` ends that turn's reminder watcher; the answer also counts as you
+# being present (remind_pause). Builtins only, one file read, one write.
+if [ "$EVENT" = resume ]; then
+    _rf="$SESS/$sid"
+    if [ -n "$sid" ] && [ -f "$_rf" ]; then
+        _rs=""; _rout=""
+        while IFS= read -r _l || [ -n "$_l" ]; do
+            case $_l in
+                status=*)    _rs=${_l#status=}; _l="status=working" ;;
+                since=*)     _l="since=$NOW" ;;
+                updated=*)   _l="updated=$NOW" ;;
+                note=*)      _l="note=" ;;
+                remind_at=*) _l="remind_at=" ;;
+                reminded=*)  _l="reminded=0" ;;
+            esac
+            _rout="$_rout$_l$NL"
+        done < "$_rf"
+        if [ "$_rs" = blocked ]; then
+            printf '%s' "$_rout" > "$_rf" 2>/dev/null
+            [ "$NOW" -gt 0 ] && printf '%s\n' "$NOW" > "$STATE/last_prompt" 2>/dev/null
+            [ -n "$IRISCALE_VOICE_DEBUG" ] && echo "(resume: $sid answered, working again)"
+        fi
+    fi
+    exit 0
 fi
 
 # Background work. Claude Code (2.1+) sends background_tasks (running/pending subagents,
@@ -1445,7 +1664,11 @@ if [ "$EVENT" = "Stop" ] && [ -n "$elapsed" ] && [ "$elapsed" -ge 60 ] && [ "$sa
     m=$((elapsed / 60)); tail="$tail after $m minute$( [ "$m" -ne 1 ] && echo s)"
 fi
 line="$spoken_name $tail"
-case $EVENT in Remind|WelcomeBack) line=$(jget message "$payload") ;; esac   # whole line comes from tick / stamp
+# what the speaker gets: a comma after the name makes the synthesizer pause there, so
+# "payments api, done" is heard as a name and a verdict, not one run-on phrase. The
+# log, the board and the repeat guard keep the plain line.
+say_line="$spoken_name, $tail"
+case $EVENT in Remind|WelcomeBack) line=$(jget message "$payload"); say_line=$line ;; esac   # whole line comes from tick / stamp
 
 # repeat guard: the same announcement for the same session within repeat_cooldown
 # seconds is noise (a subagent looping, a hook double-firing) — say it once.
@@ -1489,7 +1712,7 @@ if [ -n "$IRISCALE_VOICE_DEBUG" ]; then
     # show exactly what the speaker would receive (after clean())
     line=$(clean "$line")
     if [ -n "$reason" ]; then echo "SKIP  [$EVENT] ($reason)  would say: $line"
-    else echo "SPEAK [$EVENT] $line"; fi
+    else echo "SPEAK [$EVENT] $line"; echo "      spoken as: $(clean "$(sayable "$say_line")")"; fi
     exit 0
 fi
 [ -n "$reason" ] && exit 0
@@ -1508,6 +1731,6 @@ fi
 # CONF_DATA and the serialize lock still queues concurrent sessions.
 cfgv serialize serialize true
 (
-    if [ "$serialize" = "true" ]; then with_lock speak "$line"; else speak "$line"; fi
+    if [ "$serialize" = "true" ]; then with_lock speak "$say_line"; else speak "$say_line"; fi
 ) </dev/null >/dev/null 2>&1 &
 exit 0

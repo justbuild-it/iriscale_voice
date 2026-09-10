@@ -1,4 +1,4 @@
-// Claude Code without the plugin system: the same seven hooks in settings.json, the
+// Claude Code without the plugin system: the same eight hooks in settings.json, the
 // skill, and the /iriscale-voice:* commands, all pointing at the stable script.
 //
 // The plugin remains the better route (it updates itself and needs no file edits). This
@@ -116,11 +116,35 @@ function commandFiles (L) {
     .map(f => ({ from: path.join(src, f), to: path.join(L.commandsDir, COMMAND_PREFIX + f) }))
 }
 
+// Every prefixed command file of ours that is currently on disk. Going by the prefix
+// rather than by what ships today is what lets install and uninstall clean up a command
+// that was renamed or dropped upstream - `keep` is the set this version still wants.
+// The body check keeps a user's own file that happens to share the prefix.
+function ourCommandsOnDisk (L, keep) {
+  const kept = new Set((keep || []).map(f => path.basename(f.to)))
+  let names = []
+  try { names = fs.readdirSync(L.commandsDir) } catch { return [] }
+  return names
+    .filter(n => n.startsWith(COMMAND_PREFIX) && n.endsWith('.md') && !kept.has(n))
+    .map(n => path.join(L.commandsDir, n))
+    .filter(p => { try { return U.readText(p).includes('iriscale-voice') } catch { return false } })
+}
+
 function copyCommands (L) {
   fs.mkdirSync(L.commandsDir, { recursive: true })
   const files = commandFiles(L)
   for (const { from, to } of files) {
-    U.writeText(to, U.readText(from).split('${CLAUDE_PLUGIN_ROOT}').join(shPath(L.root)))
+    // Commands are authored in the plugin's own spelling. Outside the plugin they are flat
+    // files invoked with a hyphen, so an example a command tells the user to run - and any
+    // command it points at - has to be respelled or it simply does not exist here.
+    U.writeText(to, U.readText(from)
+      .split('${CLAUDE_PLUGIN_ROOT}').join(shPath(L.root))
+      .split('/iriscale-voice:').join('/' + COMMAND_PREFIX))
+  }
+  // A command we shipped once and no longer do would otherwise sit in the picker forever,
+  // calling a subcommand this script no longer has.
+  for (const stale of ourCommandsOnDisk(L, files)) {
+    try { fs.unlinkSync(stale) } catch {}
   }
   return files.length
 }
@@ -130,6 +154,9 @@ function removeCommands (L) {
   for (const { to } of commandFiles(L)) {
     // only ours: the body must still point at our script
     try { if (U.readText(to).includes('iriscale-voice')) { fs.unlinkSync(to); n++ } } catch {}
+  }
+  for (const stale of ourCommandsOnDisk(L, commandFiles(L))) {   // ones we shipped in an older version
+    try { fs.unlinkSync(stale); n++ } catch {}
   }
   return n
 }
