@@ -5,6 +5,8 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.25] — 2026-09-10
+
 ### Added
 - **`/iriscale-voice:speaker`** (CLI: `iriscale-voice speaker`) — who does the talking.
   Without an argument it shows the voices worth using and where clearer ones come from
@@ -531,7 +533,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.24...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.25...HEAD
+[0.1.25]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.24...v0.1.25
 [0.1.24]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.23...v0.1.24
 [0.1.23]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.21...v0.1.22
