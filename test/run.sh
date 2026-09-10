@@ -343,6 +343,13 @@ out=$(spoken '{"session_id":"sp-3","cwd":"/x/bad-cafe-0f","tool_name":"WebFetch"
 ok "$out" "bad cafe 0 F, is waiting for your answer to use Web Fetch" "spoken: real hex-looking words stay words, 0f is spelled"
 out=$(spoken '{"session_id":"sp-4","cwd":"/x/billing"}' Stop)
 ok "$out" "billing, done" "spoken: an ordinary name is only given its pause"
+# a range like [a-z] is matched by the locale's COLLATION: in a UTF-8 locale [A-Z] also
+# matches lowercase letters, which spelled every word out ("pa y m e n t s"). A locale the
+# machine does not have falls back to C, so this is safe to run anywhere.
+for loc in C en_US.UTF-8; do
+    out=$(printf '%s' '{"session_id":"sp-4l","cwd":"/x/payments_api","tool_name":"WebFetch"}' | LC_ALL=$loc sh "$S" PermissionRequest | sed -n 's/^      spoken as: //p')
+    ok "$out" "payments A P I, is waiting for your answer to use Web Fetch" "spoken form does not depend on the locale ($loc)"
+done
 out=$(printf '%s' '{"session_id":"sp-4","cwd":"/x/billing"}' | sh "$S" Stop | head -1)
 ok "$out" "SPEAK [Stop] billing done" "the logged/board line stays plain"
 sh "$S" set pronounce "Iriscale=eye riss scale, naro=nah row" >/dev/null
@@ -370,11 +377,13 @@ case "$(uname -s 2>/dev/null)" in
 esac
 case "$(say_args "AskUserQuestion npx")" in *"Ask User Question N P X"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL say <text> is normalised too: $(cat "$VSHIM/say.log")" ;; esac
 PATH="$VSHIM:$PATH" sh "$S" speaker >/dev/null 2>&1;        ok $? 0 "speaker exits 0"
-PATH="$VSHIM:$PATH" sh "$S" speaker 2>/dev/null | grep -q 'iriscale-voice speaker'; ok $? 0 "the list tells you how to set one"
+# on Linux the voice belongs to speech-dispatcher/espeak, so the list says so instead
+case "$(uname -s 2>/dev/null)" in Linux) LISTHINT='spd-conf' ;; *) LISTHINT='iriscale-voice speaker' ;; esac
+PATH="$VSHIM:$PATH" sh "$S" speaker 2>/dev/null | grep -q "$LISTHINT"; ok $? 0 "the list tells you where the voice comes from"
 sh "$S" completions powershell | grep -q "'voices'";          ok $? 0 "completions keep the voices alias"
 # /iriscale-voice:speaker - list, set (and hear a sample), refuse junk, go back to default
-PATH="$VSHIM:$PATH" sh "$S" speaker 2>/dev/null | grep -q 'set one'; ok $? 0 "speaker with no argument lists the voices"
-PATH="$VSHIM:$PATH" sh "$S" voices 2>/dev/null | grep -q 'set one'; ok $? 0 "voices is the same list (the word people reach for)"
+PATH="$VSHIM:$PATH" sh "$S" speaker 2>/dev/null | grep -q "$LISTHINT"; ok $? 0 "speaker with no argument lists the voices"
+PATH="$VSHIM:$PATH" sh "$S" voices 2>/dev/null | grep -q "$LISTHINT"; ok $? 0 "voices is the same list (the word people reach for)"
 : > "$VSHIM/say.log"
 IRISCALE_VOICE_DEBUG= PATH="$VSHIM:$PATH" sh "$S" speaker "Eddy (English (US))" >/dev/null 2>&1;  ok $? 0 "speaker <name> exit status"
 ok "$(sh "$S" config get voice)" "Eddy (English (US))" "speaker <name> stores the name (parentheses and all)"

@@ -170,6 +170,15 @@ lc_to() {
     done
     eval "$1=\$_lr"
 }
+# PORTABILITY. A range like [a-z] is matched through the locale's COLLATION order, not
+# the byte order: in a UTF-8 locale the collation runs aAbBcC..., so [A-Z] also matches
+# every lowercase letter except "a", and [a-z] matches uppercase ones. That silently
+# turned "payments done" into "pa y m e n t s, d o n e" on any machine with a UTF-8
+# locale. Enumerate the letters wherever a range has to mean exactly one case.
+LOWER=abcdefghijklmnopqrstuvwxyz
+UPPER=ABCDEFGHIJKLMNOPQRSTUVWXYZ
+HEXLET=abcdef
+
 # sayable <text>: rewrite code-ish words so a synthesizer says them the way you would.
 # Left alone they come out mangled: "AskUserQuestion" as one smeared word, "4d" as
 # "fourd", "npx" as "nix". Word by word, first match wins:
@@ -215,9 +224,9 @@ sayable() {
         fi
         if [ -z "$_sw" ]; then
             case $_lw in
-                *[!0-9a-f]*|'') ;;                       # not hex-shaped
+                *[!0-9$HEXLET]*|'') ;;                   # not hex-shaped
                 *) _hd=0; case $_lw in *[0-9]*) _hd=1 ;; esac
-                   _hl=0; case $_lw in *[a-f]*) _hl=1 ;; esac
+                   _hl=0; case $_lw in *[$HEXLET]*) _hl=1 ;; esac
                    _spell=0
                    if [ "$_hd" = 1 ] && [ "$_hl" = 1 ] && [ ${#_lw} -le 4 ]; then _spell=1
                    elif [ "$_hd" = 0 ] && [ ${#_lw} = 2 ]; then case $_lw in be|de|ad|ab|fa) ;; *) _spell=1 ;; esac; fi
@@ -233,11 +242,11 @@ sayable() {
         fi
         if [ -z "$_sw" ]; then
             case $_w in
-                *[a-z]*[A-Z]*) case $_w in *[!A-Za-z]*) ;; *)      # CamelCase, letters only
+                *[$LOWER]*[$UPPER]*) case $_w in *[!$LOWER$UPPER]*) ;; *)   # CamelCase, letters only
                     _cs=$_w; _pc=""; _cw=""
                     while [ -n "$_cs" ]; do
                         _cc=${_cs%"${_cs#?}"}; _cs=${_cs#?}
-                        case $_pc$_cc in [a-z][A-Z]) _cw="$_cw " ;; esac
+                        case $_pc$_cc in [$LOWER][$UPPER]) _cw="$_cw " ;; esac
                         _cw="$_cw$_cc"; _pc=$_cc
                     done
                     _sw=$_cw ;; esac ;;
