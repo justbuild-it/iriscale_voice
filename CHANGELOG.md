@@ -5,6 +5,11 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.29] - 2026-09-11
+
+Audit fixes: [#37](https://github.com/justbuild-it/iriscale_voice/pull/37).
+Codex dashboard fixes: [#38](https://github.com/justbuild-it/iriscale_voice/pull/38).
+
 ### Fixed
 - Preserve Windows Codex notification JSON through a native stdin bridge, so
   unnamed sessions show their project folder instead of a collapsed Windows path.
@@ -612,7 +617,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.28...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.29...HEAD
+[0.1.29]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.28...v0.1.29
 [0.1.28]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.27...v0.1.28
 [0.1.27]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.26...v0.1.27
 [0.1.26]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.25...v0.1.26

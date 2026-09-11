@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.28"
+VERSION="0.1.29"
 EVENT="${1:-Stop}"
 AGENT_HINT=""
 case $EVENT in codex-*) AGENT_HINT=codex; EVENT=${EVENT#codex-} ;; notify|notify-stdin) AGENT_HINT=codex ;; esac

@@ -23,7 +23,7 @@ script directly.
 Run in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.28/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.29/install.ps1 | iex
 ```
 
 The installer downloads Iriscale Voice to `%LOCALAPPDATA%\Programs\iriscale-voice`,
