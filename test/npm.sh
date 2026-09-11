@@ -211,6 +211,7 @@ EOF
 
 claude_cli install claude --apply --skip-path >/dev/null 2>&1
 ok $? 0 "install claude --apply exit status"
+has '"messageIdleNotifThresholdMs": 600000' "$CDIR/settings.json" "install claude sets the 10-minute review window"
 exists "$CSCRIPT"                              "the stable script for Claude Code"
 exists "$CDIR/skills/iriscale-voice/SKILL.md"  "the Claude Code skill"
 exists "$CDIR/commands/iriscale-voice-status.md" "the flat, prefixed slash commands"
@@ -473,11 +474,13 @@ has 'model = "gpt-5-codex"' "$NOT/config.toml" "with their other settings intact
 
 # --- uninstall keeps your preferences, and says so --------------------------------
 KEEPCFG="$SANDBOX/keepcfg"; mkdir -p "$KEEPCFG"
+printf '{ "messageIdleNotifThresholdMs": 30000 }\n' > "$KEEPCFG/settings.json"   # a value the user chose must survive
 CLAUDE_CONFIG_DIR="$KEEPCFG" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-keep/iriscale-voice" \
   $CLI install claude --apply --skip-path >/dev/null 2>&1
 CLAUDE_CONFIG_DIR="$KEEPCFG" sh "$root/bin/iriscale-voice" set preset verbose >/dev/null 2>&1
 out=$(CLAUDE_CONFIG_DIR="$KEEPCFG" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-keep/iriscale-voice" \
   $CLI uninstall claude --skip-path 2>&1)
+has '"messageIdleNotifThresholdMs": 30000' "$KEEPCFG/settings.json" "install claude never overrides a review window you chose"
 exists "$KEEPCFG/iriscale-voice.conf" "uninstall keeps your settings file"
 case $out in *"settings and session state are kept"*) pass=$((pass+1)) ;;
   *) fail=$((fail+1)); echo "FAIL uninstall says what it kept" ;; esac

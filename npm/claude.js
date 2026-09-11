@@ -62,6 +62,7 @@ function hookGroups (L) {
 // Append, never replace: a user's own Stop or Notification hooks must survive, and a
 // second install must not leave two copies of ours.
 function mergeHooks (L, done) {
+  let setWindow = false
   let doc = {}
   if (fs.existsSync(L.settings)) {
     doc = JSON.parse(U.readText(L.settings))   // pre-validated by preflight()
@@ -72,19 +73,35 @@ function mergeHooks (L, done) {
     const existing = Array.isArray(doc.hooks[event]) ? doc.hooks[event] : []
     doc.hooks[event] = existing.filter(g => !core.isOurGroup(g)).concat(groups)
   }
+  // The plugin's "reviewed" inference keys on Claude Code's idle notice, whose 60 s default
+  // is too short once a finished session sits. Ten minutes, only when the user has not chosen.
+  if (doc.messageIdleNotifThresholdMs === undefined) {
+    doc.messageIdleNotifThresholdMs = 600000
+    done.push('settings.json messageIdleNotifThresholdMs=600000 (10-minute review window)')
+    setWindow = true
+  }
   U.writeText(L.settings, JSON.stringify(doc, null, 2) + '\n')
   done.push('settings.json')
+  return setWindow
 }
 
-function unmergeHooks (L, ours) {
+function unmergeHooks (L, ours, record) {
   if (!fs.existsSync(L.settings)) return false
   let doc
   try { doc = JSON.parse(U.readText(L.settings)) } catch {
     console.error(`  skipped ${L.settings} (not valid JSON) - remove our hooks by hand`)
     return false
   }
-  if (!doc.hooks) return false
   let changed = false
+  // the review window we set at install goes too, unless the user changed it since
+  if (record && record.reviewWindowSet && doc.messageIdleNotifThresholdMs === record.reviewWindowSet) {
+    delete doc.messageIdleNotifThresholdMs
+    changed = true
+  }
+  if (!doc.hooks) {
+    if (changed) U.writeText(L.settings, JSON.stringify(doc, null, 2) + '\n')
+    return changed
+  }
   for (const [event, groups] of Object.entries(doc.hooks)) {
     if (!Array.isArray(groups)) continue
     const kept = groups.filter(g => !core.isOurGroup(g))
@@ -249,7 +266,8 @@ function install (argv) {
     const commands = copyCommands(L)
     const pathResult = argv.includes('--skip-path') ? { skipped: '--skip-path' } : core.linkOnPath(L)
     core.recordAgent(L, 'claude', { home: L.home, created, pathEntry: pathResult.added || null })
-    mergeHooks(L, done)
+    // remembered so uninstall can take the window back - only the value we set, only if unchanged
+    if (mergeHooks(L, done)) core.recordAgent(L, 'claude', { reviewWindowSet: 600000 })
 
     if (argv.includes('--quiet')) return 0
     core.report(LABEL, L, pathResult, [
@@ -303,7 +321,7 @@ function uninstall (argv) {
   const ours = new Set(record.created || [])
   const removed = []
 
-  if (unmergeHooks(L, ours)) removed.push('settings.json hooks')
+  if (unmergeHooks(L, ours, record)) removed.push('settings.json hooks')
   if (removeDirIfOurs(L, L.skillDir, path.join(L.skillDir, 'SKILL.md'))) removed.push('skill')
   const gone = removeCommands(L)
   if (gone) removed.push(`${gone} commands`)
@@ -391,6 +409,7 @@ function plan () {
   const lines = []
   lines.push(`# ${L.settings} - merge into the "hooks" key:`)
   lines.push(JSON.stringify({ hooks: hookGroups(L) }, null, 2))
+  lines.push('# also "messageIdleNotifThresholdMs": 600000 unless you already set one (the 10-minute review window)')
   lines.push('')
   lines.push(`# skill    -> ${L.skillDir}`)
   lines.push(`# commands -> ${L.commandsDir}/${COMMAND_PREFIX}*.md  (invoked as /${COMMAND_PREFIX}status, ...)`)

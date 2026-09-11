@@ -657,7 +657,7 @@ out=$(sh "$S" sessions --plain)
 printf '%s' "$out" | grep -q 'payments.*NEEDS ANSWER';        ok $? 0 "board: NEEDS ANSWER"
 printf '%s' "$out" | grep -q 'migration.*NEEDS ACTION';       ok $? 0 "board: NEEDS ACTION"
 printf '%s' "$out" | grep -q 'needs your action';             ok $? 0 "board legend names the three verbs"
-[ "$(sh "$S" sessions --keys --plain | grep 'marks it reviewed' | awk '{print length}')" -le 80 ]; ok $? 0 "board note about keypresses fits 80 columns"
+[ "$(sh "$S" sessions --keys --plain | grep 'reviewed = a key' | awk '{print length}')" -le 80 ]; ok $? 0 "board note about keypresses fits 80 columns"
 sh "$S" events | grep -q '^  Remind';                         ok $? 0 "events table lists Remind"
 # 10. answering the dialog. A permission prompt / AskUserQuestion answer fires no
 # UserPromptSubmit; PostToolUse (our `resume`) is the signal that the tool you were asked
@@ -698,6 +698,46 @@ grep -q '"PostToolUse"' "$here/../hooks/hooks.json" && grep '"PostToolUse"' -A1 
 ok $? 0 "hooks.json wires PostToolUse to resume"
 sh "$S" events | grep -q '^  resume';                         ok $? 0 "events table lists resume"
 rm -f "$LCDIR/last_prompt"; sh "$S" set repeat_cooldown 0 >/dev/null
+
+# 10. status names the review window; a welcome-back line reaches the speaker with its text
+sh "$S" status | grep -q 'review:.*marks it reviewed';         ok $? 0 "status explains the review window"
+sh "$S" sessions --keys --plain | grep -q 'within 60s of finishing'; ok $? 0 "board footer states the window"
+printf 'agent=claude\nname=wb_pending\nstatus=blocked\nsince=%s\nupdated=%s\npid=\ncwd=/x\nsaid=\nnote=\nreminded=0\nremind_at=\n' "$now" "$now" > "$SESSD/wb-1"
+printf '%s\n' "$((now - 700))" > "$LCDIR/last_prompt"
+: > "$CLAUDE_CONFIG_DIR/iriscale-voice.log"
+printf '%s' '{"session_id":"wb-2","cwd":"/x/docs","hook_event_name":"UserPromptSubmit","source":"user"}' | IRISCALE_VOICE_DEBUG= PATH="$SHIM:$PATH" sh "$S" stamp >/dev/null 2>&1
+i=0; while [ $i -lt 30 ] && ! grep -q 'WelcomeBack.while you were away' "$CLAUDE_CONFIG_DIR/iriscale-voice.log" 2>/dev/null; do sleep 1; i=$((i+1)); done   # detached; slow under load
+grep -q 'WelcomeBack.while you were away: .*wb pending needs your answer' "$CLAUDE_CONFIG_DIR/iriscale-voice.log"; ok $? 0 "welcome-back line carries its text (stdin was /dev/null before 0.1.27)"
+rm -f "$SESSD/wb-1" "$LCDIR/last_prompt"
+# 11. review-window: the plugin sets Claude Code's idle window for the user (no hand-editing JSON)
+RWS="$CLAUDE_CONFIG_DIR/settings.json"; rm -f "$RWS" "$RWS".iriscale-backup-*
+rwvalid() { if command -v node >/dev/null 2>&1; then S2="$1" node -e 'JSON.parse(require("fs").readFileSync(process.env.S2,"utf8"))' 2>/dev/null; else return 0; fi; }
+sh "$S" review-window 10 >/dev/null;                            ok $? 0 "review-window 10 with no settings.json"
+grep -q '"messageIdleNotifThresholdMs": 600000' "$RWS";          ok $? 0 "  creates settings.json with the value"
+sh "$S" sessions --keys --plain | grep -q 'within 10m of finishing'; ok $? 0 "  the board footer now says 10m"
+RWFIX='{\n  "model": "opus",\n  "hooks": { "Stop": [ { "hooks": [ { "type": "command", "command": "echo hi" } ] } ] },\n  "permissions": { "allow": [ "Bash(ls *)" ] }\n}\n'
+printf "$RWFIX" > "$RWS"
+sh "$S" review-window 10 >/dev/null;                            ok $? 0 "review-window 10 over an existing settings.json"
+grep -q '"messageIdleNotifThresholdMs": 600000' "$RWS";          ok $? 0 "  adds the key"
+grep -q '"model": "opus"' "$RWS";                                ok $? 0 "  keeps the other keys"
+grep -q '"Bash(ls \*)"' "$RWS";                                  ok $? 0 "  keeps nested values"
+[ "$(ls "$RWS".iriscale-backup-* 2>/dev/null | wc -l)" -ge 1 ];   ok $? 0 "  backs the file up first"
+rwvalid "$RWS";                                                  ok $? 0 "  result is valid JSON"
+sh "$S" review-window 5 >/dev/null; grep -q '"messageIdleNotifThresholdMs": 300000' "$RWS"; ok $? 0 "review-window 5 replaces the value"
+[ "$(grep -c messageIdleNotifThresholdMs "$RWS")" = 1 ];          ok $? 0 "  exactly one key"
+sh "$S" review-window default >/dev/null; grep -q '"messageIdleNotifThresholdMs": 60000' "$RWS"; ok $? 0 "review-window default -> 60000"
+sh "$S" review-window abc >/dev/null 2>&1;                       ok $? 2 "review-window rejects a non-number (exit 2)"
+sh "$S" review-window 0 >/dev/null 2>&1;                         ok $? 2 "review-window rejects 0"
+sh "$S" review-window | grep -q 'review-window 10';              ok $? 0 "review-window with no argument recommends 10 at the default"
+sh "$S" status | grep -q 'review-window 10';                     ok $? 0 "status recommends review-window 10 at the default"
+# the text-edit path (machines with neither node nor python3) must give the same, valid result
+printf "$RWFIX" > "$RWS"
+IRISCALE_VOICE_NO_JSON_TOOLS=1 sh "$S" review-window 10 >/dev/null; ok $? 0 "text edit: adds the key to a pretty file"
+grep -q '"messageIdleNotifThresholdMs": 600000' "$RWS" && grep -q '"model": "opus"' "$RWS" && rwvalid "$RWS"; ok $? 0 "  key added, others kept, valid JSON"
+IRISCALE_VOICE_NO_JSON_TOOLS=1 sh "$S" review-window 5 >/dev/null; grep -q '"messageIdleNotifThresholdMs": 300000' "$RWS" && [ "$(grep -c messageIdleNotifThresholdMs "$RWS")" = 1 ] && rwvalid "$RWS"; ok $? 0 "text edit: replaces an existing key"
+printf '{}\n' > "$RWS"; IRISCALE_VOICE_NO_JSON_TOOLS=1 sh "$S" review-window 10 >/dev/null; grep -q '"messageIdleNotifThresholdMs": 600000' "$RWS" && rwvalid "$RWS"; ok $? 0 "text edit: handles an empty object"
+printf '{"a":1}' > "$RWS"; IRISCALE_VOICE_NO_JSON_TOOLS=1 sh "$S" review-window 10 >/dev/null; rwvalid "$RWS"; ok $? 0 "text edit: handles a compact object"
+rm -f "$RWS" "$RWS".iriscale-backup-*
 
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]
