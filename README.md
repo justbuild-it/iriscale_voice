@@ -101,7 +101,7 @@ Windows without Node? The PowerShell installer does the same job, and additional
 up tab completion (Git for Windows is its only prerequisite):
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.28/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.29/install.ps1 | iex
 ```
 
 Prefer to read either installer first? [SECURITY.md](SECURITY.md) shows how.

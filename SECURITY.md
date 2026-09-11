@@ -41,7 +41,7 @@ The README's one-liner pipes a script from this repository into PowerShell. If y
 prefer to inspect first:
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.28/install.ps1 -OutFile install.ps1
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.29/install.ps1 -OutFile install.ps1
 # read it, then:
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
