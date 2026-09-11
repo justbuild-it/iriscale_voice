@@ -77,7 +77,7 @@ npx @iriscale/voice@latest install codex --apply
 > it finds the plugin enabled. `iriscale-voice doctor claude` checks all of it.
 > See [docs/install/npm.md](docs/install/npm.md).
 
-Restart Codex and your terminal, open `/hooks`, and trust the three hooks that show
+Restart Codex and your terminal, open `/hooks`, and trust the five lifecycle hooks that show
 `Installed 1`. It installs the script to a stable directory, adds `iriscale-voice` to
 your `PATH`, installs the `$iriscale-voice` Codex skill, and merges Codex configuration
 — backing up every file it touches and rewriting only its own lines. Reversed exactly by

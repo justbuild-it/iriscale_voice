@@ -1,4 +1,4 @@
-// Codex CLI: `notify` plus three hooks in ~/.codex, and the $iriscale-voice skill.
+// Codex CLI: lifecycle hooks in ~/.codex, and the $iriscale-voice skill.
 // The cross-platform equivalent of install.ps1.
 'use strict'
 
@@ -6,14 +6,16 @@ const fs = require('fs')
 const path = require('path')
 const U = require('./util')
 const core = require('./core')
-const { findTopLevelNotify } = require('./toml')
+const { findTopLevelNotify, isLegacyVoiceNotify } = require('./toml')
 
 const LABEL = 'Codex'
 
 const HOOK_EVENTS = [
   { event: 'UserPromptSubmit', arg: 'stamp', timeout: 10 },
   { event: 'PermissionRequest', arg: 'PermissionRequest', timeout: 30 },
-  { event: 'PostToolUse', arg: 'resume', timeout: 10 }
+  { event: 'PostToolUse', arg: 'resume', timeout: 10 },
+  { event: 'Stop', arg: 'Stop', timeout: 10 },
+  { event: 'SessionEnd', arg: 'SessionEnd', timeout: 3 }
 ]
 
 function paths () {
@@ -27,16 +29,6 @@ function paths () {
     skillsDir: path.join(home, 'skills'),
     skillDir: path.join(home, 'skills', 'iriscale-voice')
   }
-}
-
-// TOML basic string: forward slashes on Windows so no backslash needs escaping.
-function tomlPath (p) {
-  return JSON.stringify(U.isWindows ? p.replace(/\\/g, '/') : p).slice(1, -1)
-}
-
-function notifyLine (L) {
-  if (U.isWindows) return `notify = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${tomlPath(L.notifyBridge)}", "${tomlPath(U.gitBash())}"]`
-  return `notify = ["${tomlPath(L.launcher)}", "notify"]`
 }
 
 // On Windows both `command` and `commandWindows` carry the launcher: Codex 0.147
@@ -57,37 +49,6 @@ function hookEntry (L, arg, timeout) {
 // belongs to that table and is a different key entirely - overwriting it would destroy a
 // user's setting AND leave the real top-level notify unset, so voice would never fire.
 // The TOML scanner is shared with installer diagnostics in ./toml.
-
-// Codex supports exactly one top-level `notify`, so ours has to take the place of any
-// other. Returns the value it displaced (if it was somebody else's) so uninstall can put
-// it back rather than leaving the user to dig it out of the backup.
-function mergeNotify (L, done) {
-  let lines = []
-  let eol = U.isWindows ? '\r\n' : '\n'
-  let bom = false
-  if (fs.existsSync(L.config)) {
-    const text = U.readText(L.config)
-    eol = U.eolOf(text)
-    bom = U.hadBom(L.config)
-    U.backup(L.config)
-    lines = text.split(/\r?\n/)
-    if (lines.length && lines[lines.length - 1] === '') lines.pop()
-  }
-  const line = notifyLine(L)
-  const span = findTopLevelNotify(lines)
-  let displaced = null
-  if (span) {
-    const [from, to] = span
-    const old = lines.slice(from, to + 1)
-    if (!old.join('\n').includes('iriscale-voice')) displaced = old
-    lines.splice(from, to - from + 1, line)
-  } else {
-    lines = [line, ''].concat(lines)   // top-level key: must precede any [table]
-  }
-  U.writeText(L.config, (bom ? U.BOM : '') + lines.join(eol) + eol)
-  done.push('config.toml')
-  return displaced
-}
 
 // Append, never replace: a user's own UserPromptSubmit hook must survive, and a second
 // install must not leave two copies of ours.
@@ -145,21 +106,24 @@ function install (argv) {
     // Preserve the displaced notify when moving from the standalone Windows installer.
     let legacy = {}
     try { legacy = JSON.parse(U.readText(path.join(L.root, 'powershell-install.json'))) } catch {}
-    const displaced = mergeNotify(L, done)
+    const replaced = (previous.codex && previous.codex.replacedNotify) || legacy.replacedNotify || null
+    // Internal temporary requests disable lifecycle hooks but still emit notify.
+    if (unmergeNotify(L, new Set(), replaced)) done.push('config.toml')
+    if (!fs.existsSync(L.config)) U.writeText(L.config, '')
     mergeHooks(L, done)
     core.recordAgent(L, 'codex', {
       home: L.home,
       created,
       pathEntry: pathResult.added || null,
-      // a re-install displaces our own line, which is not the user's - keep the first one
-      replacedNotify: displaced || (previous.codex && previous.codex.replacedNotify) || legacy.replacedNotify || null
+      // Any previously displaced notifier has now been restored.
+      replacedNotify: null
     })
 
     if (argv.includes('--quiet')) return 0
     core.report(LABEL, L, pathResult, [
       ['Codex config:', L.config], ['Codex hooks:', L.hooks], ['Codex skill:', L.skillDir]
     ])
-    console.log('Restart Codex and your terminal, then open /hooks and trust the hooks showing Installed 1.')
+    console.log('Requires Codex 0.154.0+. Restart Codex and your terminal, then open /hooks and trust all five hooks.')
     core.pathAdvice(pathResult)
     return 0
   } catch (err) {
@@ -178,7 +142,7 @@ function unmergeNotify (L, ours, replacedNotify) {
   const bom = U.hadBom(L.config)
   const lines = text.split(/\r?\n/)
   const span = findTopLevelNotify(lines)
-  if (!span || !lines.slice(span[0], span[1] + 1).join('\n').includes('iriscale-voice')) return false
+  if (!span || !isLegacyVoiceNotify(lines.slice(span[0], span[1] + 1))) return false
   if (!ours.has(L.config)) U.backup(L.config)   // never back up a file we then delete
   // Put the user's own notify back where ours sat, rather than leaving them without one.
   const restored = replacedNotify ? (Array.isArray(replacedNotify) ? replacedNotify : [replacedNotify]) : []
@@ -260,8 +224,8 @@ function uninstall (argv) {
 function plan () {
   const L = paths()
   const lines = []
-  lines.push('# At the TOP of ~/.codex/config.toml (notify is a top-level key):')
-  lines.push(notifyLine(L))
+  lines.push('# Requires Codex 0.154.0+ with Stop and SessionEnd hooks.')
+  lines.push('# Remove an old iriscale-voice notify entry; keep unrelated notifiers.')
   lines.push('')
   lines.push('# ~/.codex/hooks.json - in /hooks verify Installed=1, then trust each:')
   const hooks = {}
@@ -278,9 +242,9 @@ function doctor () {
   try {
     const lines = U.readText(L.config).split(/\r?\n/)
     const span = findTopLevelNotify(lines)
-    if (!span || lines.slice(span[0], span[1] + 1).join('\n').trim() !== notifyLine(L)) {
-      bad('notify differs from this installation; reapply install codex --apply to restore its target')
-    } else console.log('  OK    completion notify points at this installation')
+    if (span && isLegacyVoiceNotify(lines.slice(span[0], span[1] + 1))) {
+      bad('legacy voice notify remains; reapply install codex --apply to migrate to lifecycle hooks')
+    } else console.log('  OK    no legacy voice notifier (completion uses Stop)')
   } catch (err) { bad(`cannot verify ${L.config}: ${err.message}`) }
   try {
     const doc = JSON.parse(U.readText(L.hooks))
@@ -297,7 +261,6 @@ function doctor () {
   for (const target of new Set([L.script, L.launcher])) {
     try { fs.accessSync(target, fs.constants.X_OK) } catch { bad(`missing or non-executable hook target: ${target}`) }
   }
-  if (U.isWindows && !fs.existsSync(L.notifyBridge)) bad(`missing notify bridge: ${L.notifyBridge}`)
   const stale = core.driftWarning()
   if (stale) bad(stale)
   console.log('  CHECK Restart Codex; open /hooks and confirm these handlers are installed and trusted.')

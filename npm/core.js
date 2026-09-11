@@ -178,7 +178,7 @@ function forgetAgent (L, agent) {
 const OUR_ARGS = new Set([
   'stamp', 'resume', 'notify', 'Stop', 'StopFailure', 'PermissionRequest', 'idle_prompt',
   'agent_completed', 'SubagentStop', 'SessionEnd', 'StepDone', 'Scheduled',
-  'Remind', 'WelcomeBack', 'codex-stamp', 'codex-resume', 'codex-PermissionRequest'
+  'Remind', 'WelcomeBack', 'codex-stamp', 'codex-resume', 'codex-PermissionRequest', 'codex-Stop', 'codex-SessionEnd'
 ])
 
 function isOurCommand (command) {

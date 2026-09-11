@@ -51,8 +51,8 @@ first, and it rewrites only its own lines — your model, theme, and other hooks
 | what | where |
 |---|---|
 | the script | `~/.local/share/iriscale-voice/bin/iriscale-voice` (macOS/Linux, honours `XDG_DATA_HOME`) · `%LOCALAPPDATA%\Programs\iriscale-voice\bin\` (Windows, plus a `.cmd` launcher over Git Bash) |
-| `notify` | first line of `~/.codex/config.toml` — it is a top-level key, so it must precede any `[table]`. Codex allows only one, so a `notify` of your own is displaced and **given back on uninstall** |
-| three hooks | `UserPromptSubmit`, `PermissionRequest`, and `PostToolUse` in `~/.codex/hooks.json` |
+| legacy `notify` | removes only the old Voice notifier and restores any unrelated notifier displaced by an earlier install; completion now uses `Stop` |
+| five lifecycle hooks | `UserPromptSubmit`, `PermissionRequest`, `PostToolUse`, `Stop`, and `SessionEnd` in `~/.codex/hooks.json` (Codex 0.154.0+) |
 | the skill | `~/.codex/skills/iriscale-voice/` — invoke it in Codex as `$iriscale-voice` |
 | PATH | a symlink in `~/.local/bin`, or the install dir added to your Windows user PATH — **skipped entirely** if `iriscale-voice` already resolves durably (as it does after `npm install -g`; npx's own temporary shim does not count) |
 

@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+### Fixed
+- Use Codex `Stop` and `SessionEnd` lifecycle hooks for completion and cleanup,
+  excluding temporary internal requests from alerts and the board. Remove the old
+  voice notifier while restoring unrelated notifier settings. Reapply installation
+  and review all five hooks after restarting Codex (0.154.0 or newer).
+
 ## [0.1.29] - 2026-09-11
 
 Audit fixes: [#37](https://github.com/justbuild-it/iriscale_voice/pull/37).

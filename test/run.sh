@@ -202,7 +202,7 @@ sh "$S" config list | grep '^repeat_cooldown' >/dev/null;  ok $? 0 "config list 
 sh "$S" events | grep 'PermissionRequest' >/dev/null;      ok $? 0 "events lists PermissionRequest"
 sh "$S" presets | grep '^  verbose' >/dev/null;            ok $? 0 "presets lists verbose"
 install_out=$(sh "$S" install codex)
-printf '%s' "$install_out" | grep '^notify = ' >/dev/null;  ok $? 0 "install codex prints notify config"
+printf '%s' "$install_out" | grep '"SessionEnd"' >/dev/null;  ok $? 0 "install codex prints lifecycle cleanup"
 printf '%s' "$install_out" | grep 'UserPromptSubmit' >/dev/null; ok $? 0 "install codex prints full hooks"
 printf '%s' "$install_out" | grep '"async"' >/dev/null; ok $? 1 "install codex prints synchronous hooks"
 printf '%s' "$install_out" | grep "$here/../bin/iriscale-voice" >/dev/null; ok $? 1 "install codex normalizes script path"
@@ -272,14 +272,14 @@ if command -v powershell.exe >/dev/null 2>&1 && command -v cygpath >/dev/null 2>
     grep 'keep-me' "$PSCODEX/config.toml" >/dev/null && grep 'OtherEvent' "$PSCODEX/hooks.json" >/dev/null
     ok $? 0 "installer preserves unrelated Codex configuration"
     grep 'PermissionRequest' "$PSCODEX/hooks.json" >/dev/null && ! grep '"async"' "$PSCODEX/hooks.json" >/dev/null && \
-        [ "$(grep -o '"command"[[:space:]]*:' "$PSCODEX/hooks.json" | wc -l | tr -d '[:space:]')" -eq 3 ]
+        [ "$(grep -o '"command"[[:space:]]*:' "$PSCODEX/hooks.json" | wc -l | tr -d '[:space:]')" -eq 5 ]
     ok $? 0 "installer writes synchronous hooks with required command fields"
     grep 'name: iriscale-voice' "$PSCODEX/skills/iriscale-voice/SKILL.md" >/dev/null
     ok $? 0 "installer makes the Codex skill discoverable"
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$here/../install.ps1")" \
         -InstallRoot "$(cygpath -w "$PSROOT")" -CodexHome "$(cygpath -w "$PSCODEX")" \
         -SourcePath "$(cygpath -w "$here/..")" -SkipPath -SkipProfile >/dev/null
-    [ "$(grep -c '^notify = ' "$PSCODEX/config.toml")" -eq 1 ]; ok $? 0 "installer is idempotent"
+    [ "$(grep -c '^notify = ' "$PSCODEX/config.toml")" -eq 0 ]; ok $? 0 "installer is idempotent"
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$here/../install.ps1")" \
         -InstallRoot "$(cygpath -w "$PSROOT")" -CodexHome "$(cygpath -w "$PSCODEX")" \
         -Uninstall -SkipPath -SkipProfile >/dev/null
