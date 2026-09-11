@@ -53,6 +53,10 @@ try {
     last_assistant_message: 'Quotes " and apostrophes \' and $() remain data' })
   const state = () => fs.readFileSync(stateFile, 'utf8')
   const internal = JSON.stringify({ type: 'agent-turn-complete', 'thread-id': 'internal-temporary', cwd })
+  for (const event of ['UserPromptSubmit', 'PermissionRequest', 'PostToolUse']) {
+    assert.equal(invokeHook(event, { session_id: 'probe', hook_event_name: event, cwd }), '',
+      `${event} must leave stdout empty even in debug mode`)
+  }
   assert.equal(run(shell, [script, 'notify', internal]), '')
   assert.equal(run(shell, [script, 'notify-stdin'], internal), '')
   assert.equal(fs.existsSync(path.join(env.CLAUDE_CONFIG_DIR, 'iriscale-voice-sessions/internal-temporary')), false)

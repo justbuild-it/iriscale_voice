@@ -16,6 +16,8 @@ EVENT="${1:-Stop}"
 case $EVENT in notify|notify-stdin) exit 0 ;; esac
 AGENT_HINT=""
 case $EVENT in codex-*) AGENT_HINT=codex; EVENT=${EVENT#codex-} ;; notify|notify-stdin) AGENT_HINT=codex ;; esac
+# Codex expects JSON or empty stdout from lifecycle hooks, including early exits.
+if [ "$AGENT_HINT" = codex ] && [ -n "$IRISCALE_VOICE_DEBUG" ]; then exec 1>&2; fi
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
 # Runtime files live under the user's config directory, never a shared /tmp name.
@@ -1941,8 +1943,6 @@ fi
 # ---------- act ---------------------------------------------------------------
 if [ -n "$IRISCALE_VOICE_DEBUG" ]; then
     # show exactly what the speaker would receive (after clean())
-    # Codex expects JSON or empty stdout from lifecycle hooks, even in debug mode.
-    [ "$AGENT_HINT" != codex ] || exec 1>&2
     line=$(clean "$line")
     if [ -n "$reason" ]; then echo "SKIP  [$EVENT] ($reason)  would say: $line"
     else echo "SPEAK [$EVENT] $line"; echo "      spoken as: $(clean "$(sayable "$say_line")")"; fi
