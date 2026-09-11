@@ -45,6 +45,8 @@ The file is created the first time a setting is written (`config set`, a preset 
 | `pronounce` | *(none)* | how to say words the synthesizer gets wrong: `word=spoken` pairs, comma-separated, whole word, any case — `pronounce=iriscale=eye riss scale,naro=nah row`. Applied before the built-in fixes below |
 | `rate` | `0` | speaking speed, -10 (slow) to 10 (fast) |
 | `volume` | `100` | 0–100 (Windows only; others use system volume) |
+| `mic_aware` | `true` | Windows: hold an announcement while any app has the microphone open (Wispr Flow, voice typing, a call) so it cannot land in your dictation; if the mic opens mid-sentence, stop and say the line again once it closes. Uses the per-app record Windows keeps for its privacy indicator. macOS/Linux: planned |
+| `mic_wait` | `30` | seconds to wait for the microphone to close before speaking anyway |
 | `serialize` | `true` | queue announcements so concurrent sessions never talk over each other |
 | `repeat_cooldown` | `60` | seconds; the *same* announcement for the *same* session inside this window is said once. Guards against a looping subagent or a double-firing hook. `0` disables |
 | `remind_answer` | `3,10` | minutes after a permission prompt to say "still needs your answer" (comma list); `off` = never. Presets: standard `3,10`, verbose `3,10,20`, basic never |

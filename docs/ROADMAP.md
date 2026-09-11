@@ -39,13 +39,15 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.25 | `/iriscale-voice:speaker` picks the voice; `pronounce`; announcements tuned for the ear (pause after the name, CamelCase split, hashes spelled out); "still needs your answer" no longer spoken after you answered (PostToolUse `resume`, the eighth hook); `install claude` sweeps stale commands (PR #30) | shipped 2026-09-10 |
 | 0.1.26 | Test suite isolates `$TMPDIR` state from live sessions | shipped 2026-09-10 |
 | 0.1.27 | `review-window` sets Claude Code's idle window (npm installer too); welcome-back lines spoken (stdin fix); window shown in `status` and the board | shipped 2026-09-10 |
-| 0.1.28 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
-| 0.1.29 | Speak a one-line summary of what was done (from `transcript_path`) (`last_assistant_message` is on the Stop payload) | planned |
-| 0.1.30 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
-| 0.1.31 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
-| 0.1.32 | Per-session voice signatures; stamp housekeeping | planned |
-| 0.1.33 | Windows-without-Git-Bash PowerShell fallback | planned |
-| 0.1.34 | Windsurf, Cline, Aider (done-only) | planned |
+| 0.1.28 | Idle notice ignored while background agents run; microphone awareness on Windows (`mic_aware`, `mic_wait`) | shipped 2026-09-10 |
+| 0.1.29 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
+| 0.1.30 | Microphone awareness on macOS (CoreAudio) and Linux (PulseAudio/PipeWire) | planned |
+| 0.1.31 | Speak a one-line summary of what was done (from `transcript_path`) (`last_assistant_message` is on the Stop payload) | planned |
+| 0.1.32 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
+| 0.1.33 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
+| 0.1.34 | Per-session voice signatures; stamp housekeeping | planned |
+| 0.1.35 | Windows-without-Git-Bash PowerShell fallback | planned |
+| 0.1.36 | Windsurf, Cline, Aider (done-only) | planned |
 | later | macOS/Linux bar plugins; Windows tray (opt-in); macOS/Linux live verification as users report | |
 | out of scope | **Selecting the terminal tab inside an IDE.** Real setups run several IDE windows across screens, each with several terminal tabs; IDE tabs are not addressable from outside. The board raises the correct window and names the tab. Windows Terminal tabs via UI Automation remains a possible opt-in if sessions run there. | decided 2026-08-28 |
 
