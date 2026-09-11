@@ -32,7 +32,93 @@ $skillDir = Join-Path $CodexHome 'skills\iriscale-voice'
 
 function Backup-File([string]$Path) {
     if (Test-Path -LiteralPath $Path) {
-        Copy-Item -LiteralPath $Path -Destination "$Path.iriscale-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        Copy-Item -LiteralPath $Path -Destination "$Path.iriscale-backup-$([guid]::NewGuid().ToString('N'))"
+    }
+}
+
+# Same lexical boundary rules as npm/toml.js, covered by test/audit-installer.js.
+# Never consume unrelated settings because a bracket appears inside a string/comment.
+function Get-NotifySpan([string[]]$Lines) {
+    $found = $null
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($Lines[$i] -match '^\s*(#.*)?$') { continue }
+        if ($Lines[$i] -match '^\s*\[') { break }
+        if ($Lines[$i] -notmatch '^\s*([^=]+?)\s*=') { throw "Cannot safely edit config.toml: expected assignment at line $($i+1)" }
+        $key = $Matches[1].Trim(); $offset = $Matches[0].Length; $start = $i
+        if ($key.StartsWith('"')) {
+            $encodedKey = [regex]::Replace($key, '\\U([0-9a-fA-F]{8})', {
+                param($m)
+                $json = ConvertTo-Json -Compress -InputObject ([char]::ConvertFromUtf32([Convert]::ToInt32($m.Groups[1].Value, 16)))
+                $json.Substring(1, $json.Length-2)
+            })
+            $key = ConvertFrom-Json -InputObject $encodedKey
+        } elseif ($key.StartsWith("'")) { $key = $key.Substring(1, $key.Length-2) }
+        $quote = ''; $triple = $false; $escaped = $false; $stack = ''; $value = $false; $complete = $false
+        for (; $i -lt $Lines.Count; $i++) {
+            $line = $Lines[$i]
+            $c = if ($i -eq $start) { $offset } else { 0 }
+            for (; $c -lt $line.Length; $c++) {
+                $ch = [string]$line[$c]
+                if ($quote) {
+                    if ($escaped) { $escaped = $false; continue }
+                    if ($quote -eq '"' -and $ch -eq '\') { $escaped = $true; continue }
+                    if ($ch -eq $quote) {
+                        if (-not $triple) { $quote = '' }
+                        elseif ($c + 2 -lt $line.Length -and $line.Substring($c,3) -eq ($quote * 3)) {
+                            $n = 3
+                            while ($n -lt 5 -and $c + $n -lt $line.Length -and [string]$line[$c+$n] -eq $quote) { $n++ }
+                            $c += $n - 1; $quote = ''
+                        }
+                    }
+                    continue
+                }
+                if ($ch -eq '#') { break }
+                if ($ch -match '\s') { continue }
+                $value = $true
+                if ($ch -eq '"' -or $ch -eq "'") {
+                    $quote = $ch; $triple = $c + 2 -lt $line.Length -and $line.Substring($c,3) -eq ($ch * 3)
+                    if ($triple) { $c += 2 }
+                } elseif ($ch -eq '[' -or $ch -eq '{') { $stack += $ch }
+                elseif ($ch -eq ']' -or $ch -eq '}') {
+                    $opening = if ($ch -eq ']') { '[' } else { '{' }
+                    if (-not $stack -or [string]$stack[$stack.Length-1] -ne $opening) { throw 'Cannot safely edit config.toml: unbalanced value' }
+                    $stack = $stack.Substring(0, $stack.Length-1)
+                }
+            }
+            if ($quote -and -not $triple) { throw 'Cannot safely edit config.toml: unfinished string' }
+            $escaped = $false
+            if (-not $quote -and -not $stack) { $complete = $value; break }
+        }
+        if (-not $complete) { throw 'Cannot safely edit config.toml: unfinished value' }
+        if ($key -ceq 'notify') {
+            if ($null -ne $found) { throw 'Cannot safely edit config.toml: duplicate notify' }
+            $found = @($start, $i)
+        }
+    }
+    if ($null -ne $found) { return ,$found }
+}
+
+function Replace-NotifyText([string]$Content, [string[]]$Replacement) {
+    $eol = if ($Content.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $lines = New-Object 'System.Collections.Generic.List[string]'
+    $lines.AddRange([string[]]($Content -split '\r?\n'))
+    $span = Get-NotifySpan $lines.ToArray()
+    if ($null -ne $span) {
+        $lines.RemoveRange($span[0], $span[1] - $span[0] + 1)
+        $lines.InsertRange($span[0], [string[]]@($Replacement))
+    } elseif ($Replacement.Count) { $lines.InsertRange(0, $Replacement) }
+    return $lines -join $eol
+}
+
+function Test-OurCommand($Command) {
+    return $Command -is [string] -and $Command -match 'iriscale-voice' -and
+        $Command -match '\s(stamp|PermissionRequest|resume)\s*$'
+}
+function Remove-OurHooks($Groups) {
+    foreach ($group in $Groups) {
+        $kept = @($group.hooks | Where-Object { -not ((Test-OurCommand $_.command) -or (Test-OurCommand $_.commandWindows)) })
+        if ($kept.Count -eq @($group.hooks).Count) { $group; continue }
+        if ($kept.Count) { $group.hooks = $kept; $group }
     }
 }
 
@@ -54,21 +140,28 @@ function Replace-File([string]$Staged, [string]$Target) {
 function Remove-InstallerConfiguration {
     $configPath = Join-Path $CodexHome 'config.toml'
     if (Test-Path -LiteralPath $configPath) {
-        $lines = @(Get-Content -LiteralPath $configPath)
-        $kept = @($lines | Where-Object { $_ -notmatch '^\s*notify\s*=.*iriscale-voice' })
-        if ($kept.Count -ne $lines.Count) {
+        $content = [IO.File]::ReadAllText($configPath)
+        $lines = $content -split '\r?\n'
+        $span = Get-NotifySpan $lines
+        if ($null -ne $span -and ($lines[$span[0]..$span[1]] -join "`n") -match 'iriscale-voice') {
+            $restore = @()
+            $recordPath = Join-Path $InstallRoot 'powershell-install.json'
+            if (Test-Path -LiteralPath $recordPath) { $restore = @((Get-Content -Raw -Encoding UTF8 -LiteralPath $recordPath | ConvertFrom-Json).replacedNotify) | Where-Object { $null -ne $_ } }
             Backup-File $configPath
-            Write-Utf8NoBom $configPath (($kept -join [Environment]::NewLine) + [Environment]::NewLine)
+            Write-Utf8NoBom $configPath (Replace-NotifyText $content @($restore))
         }
     }
     $hooksPath = Join-Path $CodexHome 'hooks.json'
     if (Test-Path -LiteralPath $hooksPath) {
-        $doc = Get-Content -Raw -LiteralPath $hooksPath | ConvertFrom-Json
+        $doc = Get-Content -Raw -Encoding UTF8 -LiteralPath $hooksPath | ConvertFrom-Json
         $changed = $false
-        foreach ($event in @('UserPromptSubmit', 'PermissionRequest')) {
+        foreach ($event in @('UserPromptSubmit', 'PermissionRequest', 'PostToolUse')) {
             $property = $doc.hooks.PSObject.Properties[$event]
-            if ($property -and (($property.Value | ConvertTo-Json -Depth 20) -match 'iriscale-voice')) {
-                $doc.hooks.PSObject.Properties.Remove($event)
+            if ($property) {
+                $before = $property.Value | ConvertTo-Json -Depth 20 -Compress
+                $kept = @(Remove-OurHooks $property.Value)
+                if (($kept | ConvertTo-Json -Depth 20 -Compress) -eq $before) { continue }
+                if ($kept.Count) { $property.Value = $kept } else { $doc.hooks.PSObject.Properties.Remove($event) }
                 $changed = $true
             }
         }
@@ -79,6 +172,9 @@ function Remove-InstallerConfiguration {
     }
 }
 
+if ((Test-Path -LiteralPath (Join-Path $InstallRoot 'install.json'))) {
+    throw 'This installation is managed by npm. Use npx @iriscale/voice@latest update or uninstall codex.'
+}
 if ($Uninstall) {
     Remove-InstallerConfiguration
     $skillFile = Join-Path $skillDir 'SKILL.md'
@@ -121,9 +217,17 @@ if ($Uninstall) {
 # PATH/profile/config half-modified. Any later failure prints what was already changed.
 $hooksPathPre = Join-Path $CodexHome 'hooks.json'
 if (Test-Path -LiteralPath $hooksPathPre) {
-    try { $null = Get-Content -Raw -LiteralPath $hooksPathPre | ConvertFrom-Json }
+    try {
+        $preDoc = Get-Content -Raw -Encoding UTF8 -LiteralPath $hooksPathPre | ConvertFrom-Json
+        if ($preDoc -isnot [pscustomobject]) { throw 'expected an object' }
+    }
     catch { throw "$hooksPathPre is not valid JSON; fix or move it aside, then re-run. Nothing was changed." }
 }
+$configPath = Join-Path $CodexHome 'config.toml'
+$configContent = if (Test-Path -LiteralPath $configPath) { [IO.File]::ReadAllText($configPath) } else { '' }
+$null = Get-NotifySpan ($configContent -split '\r?\n')
+# The npm install may be shared with Claude; only npm can safely update/remove it.
+if (Test-Path -LiteralPath (Join-Path $InstallRoot 'install.json')) { throw 'This installation is managed by npm. Run: npx @iriscale/voice@latest update' }
 $script:done = New-Object System.Collections.ArrayList
 trap {
     if ($script:done.Count -gt 0) {
@@ -171,7 +275,7 @@ if ($SourcePath) {
 # --login costs ~550 ms per hook event AND sources the user's .bash_profile -
 # anything it echoes would corrupt captured output (measured: profile noise
 # became line 1 of the generated completion file, breaking the PS profile).
-$launcher = "@echo off`r`n`"$gitBash`" `"$scriptPath`" %*`r`n"
+$launcher = "@echo off`r`n`"$gitBash`" `"%~dp0iriscale-voice`" %*`r`n"
 Set-Content -LiteralPath $launcherPath -Value $launcher -Encoding ASCII -NoNewline
 
 $completion = @(& $launcherPath completions powershell) -join [Environment]::NewLine
@@ -192,7 +296,9 @@ if (-not $SkipProfile) {
     if (-not (Test-Path -LiteralPath $PROFILE) -or
         -not (Select-String -Quiet -LiteralPath $PROFILE -Pattern $profileMarker -SimpleMatch)) {
         $profileContent = $(if (Test-Path -LiteralPath $PROFILE) { Get-Content -Raw -LiteralPath $PROFILE } else { '' })
-        Write-Utf8NoBom $PROFILE ($profileContent.TrimEnd() + "`n`n$profileMarker`n. '$completionPath'`n")
+        Backup-File $PROFILE
+        $quotedCompletion = $completionPath.Replace("'", "''")
+        Write-Utf8NoBom $PROFILE ($profileContent.TrimEnd() + "`n`n$profileMarker`n. '$quotedCompletion'`n")
     }
     [void]$script:done.Add('PowerShell profile')
 }
@@ -200,23 +306,24 @@ if (-not $SkipProfile) {
 $configPath = Join-Path $CodexHome 'config.toml'
 $tomlLauncher = $launcherPath.Replace('\', '/')
 $notify = 'notify = ["' + $tomlLauncher.Replace('"', '\"') + '", "notify"]'
-if (Test-Path -LiteralPath $configPath) {
-    Backup-File $configPath
-    $lines = @(Get-Content -LiteralPath $configPath)
-    if ($lines -match '^\s*notify\s*=') {
-        $lines = @($lines | ForEach-Object { if ($_ -match '^\s*notify\s*=') { $notify } else { $_ } })
-    } else { $lines = @($notify, '') + $lines }
-    Write-Utf8NoBom $configPath (($lines -join [Environment]::NewLine) + [Environment]::NewLine)
-} else { Write-Utf8NoBom $configPath ($notify + [Environment]::NewLine) }
+$recordPath = Join-Path $InstallRoot 'powershell-install.json'
+$replaced = @()
+if (Test-Path -LiteralPath $recordPath) { $replaced = @((Get-Content -Raw -Encoding UTF8 -LiteralPath $recordPath | ConvertFrom-Json).replacedNotify) }
+$lines = $configContent -split '\r?\n'; $span = Get-NotifySpan $lines
+if ($null -ne $span -and ($lines[$span[0]..$span[1]] -join "`n") -notmatch 'iriscale-voice') { $replaced = @($lines[$span[0]..$span[1]]) }
+# Record recovery data before displacing anything; reinstall keeps the original value.
+Write-Utf8NoBom $recordPath (([pscustomobject]@{ replacedNotify = $replaced; home = $CodexHome } | ConvertTo-Json -Depth 20) + "`n")
+Backup-File $configPath
+Write-Utf8NoBom $configPath (Replace-NotifyText $configContent @($notify))
 [void]$script:done.Add('config.toml')
 
 $hooksPath = Join-Path $CodexHome 'hooks.json'
 if (Test-Path -LiteralPath $hooksPath) {
     Backup-File $hooksPath
-    $hooksDoc = Get-Content -Raw -LiteralPath $hooksPath | ConvertFrom-Json
+    $hooksDoc = Get-Content -Raw -Encoding UTF8 -LiteralPath $hooksPath | ConvertFrom-Json
 } else { $hooksDoc = [pscustomobject]@{ hooks = [pscustomobject]@{} } }
-if (-not $hooksDoc.hooks) { $hooksDoc | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) -Force }
-foreach ($definition in @(@('UserPromptSubmit','stamp',10), @('PermissionRequest','PermissionRequest',30))) {
+if ($hooksDoc.hooks -isnot [pscustomobject]) { $hooksDoc | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) -Force }
+foreach ($definition in @(@('UserPromptSubmit','stamp',10), @('PermissionRequest','PermissionRequest',30), @('PostToolUse','resume',10))) {
     $event, $argument, $timeout = $definition
     $commandWindows = '"' + $launcherPath + '" ' + $argument
     # Codex requires the portable command field even when commandWindows is
@@ -227,7 +334,10 @@ foreach ($definition in @(@('UserPromptSubmit','stamp',10), @('PermissionRequest
         commandWindows=$commandWindows
         timeout=$timeout
     }) })
-    $hooksDoc.hooks | Add-Member -NotePropertyName $event -NotePropertyValue $hook -Force
+    $existing = @()
+    $property = $hooksDoc.hooks.PSObject.Properties[$event]
+    if ($property) { $existing = @(Remove-OurHooks $property.Value) }
+    $hooksDoc.hooks | Add-Member -NotePropertyName $event -NotePropertyValue @($existing + $hook) -Force
 }
 Write-Utf8NoBom $hooksPath (($hooksDoc | ConvertTo-Json -Depth 20) + [Environment]::NewLine)
 [void]$script:done.Add('hooks.json')

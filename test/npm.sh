@@ -92,7 +92,7 @@ has '"UserPromptSubmit"' "$HOOKS" "UserPromptSubmit hook written"
 has '"PermissionRequest"' "$HOOKS" "PermissionRequest hook written"
 has '"SessionStart"' "$HOOKS" "unrelated hooks survive"
 hasnt '"async"' "$HOOKS" "no async hooks (Codex 0.147 skips them)"
-ok "$(grep -c '"command":' "$HOOKS")" "3" "each hook has a command field"
+ok "$(grep -c '"command":' "$HOOKS")" "4" "each hook has a command field"
 # 2>&1, not 2>/dev/null: a swallowed error here says only "got 1 wanted 0", which is
 # the one thing a JSON failure must never be. Show what node actually objected to.
 jsonerr=$(node -e 'JSON.parse(require("fs").readFileSync(require("path").join(process.env.CODEX_HOME,"hooks.json"),"utf8"))' 2>&1); jsonst=$?

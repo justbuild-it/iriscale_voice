@@ -8,12 +8,9 @@ S="$here/../bin/iriscale-voice"
 export IRISCALE_VOICE_DEBUG=1
 export CLAUDE_CONFIG_DIR="${TMPDIR:-/tmp}/iriscale-voice-test-$$"
 mkdir -p "$CLAUDE_CONFIG_DIR"
-# The script keeps locks, turn clocks, last_prompt and the board pid under $TMPDIR/iriscale-voice.
-# Point that at the sandbox too, so the suite never reads your live sessions' state (a
-# 10-minute-old last_prompt made `stamp` print a welcome-back line and broke a capture)
-# and never leaves its evil.start / brd-*.last files in yours.
+# Runtime state is under CLAUDE_CONFIG_DIR; keep temporary fixtures isolated as well.
 export TMPDIR="$CLAUDE_CONFIG_DIR/tmp"; mkdir -p "$TMPDIR"
-trap 'rm -rf "$CLAUDE_CONFIG_DIR" "${TMPDIR:-/tmp}/iriscale-voice/test-"*' EXIT
+trap 'rm -rf "$CLAUDE_CONFIG_DIR"' EXIT
 fail=0; pass=0
 P='{"session_id":"test-sess","cwd":"/home/dev/my_service"}'
 
@@ -65,7 +62,7 @@ out=$(printf '%s' "$SECRETCMD" | sh "$S" PermissionRequest)
 case "$out" in *sk-live-abc123*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL full mode must be verbatim: $out" ;; esac
 sh "$S" config unset command_detail >/dev/null
 # SECURITY: session ids become file names - traversal must be neutralised
-out=$(printf '%s' '{"session_id":"../../evil","cwd":"/x/api"}' | sh "$S" stamp >/dev/null; ls "${TMPDIR:-/tmp}/iriscale-voice/" | grep -c 'evil')
+out=$(printf '%s' '{"session_id":"../../evil","cwd":"/x/api"}' | sh "$S" stamp >/dev/null; ls "$CLAUDE_CONFIG_DIR/iriscale-voice-runtime/" | grep -c 'evil')
 [ "$out" -ge 1 ] && [ ! -e "${TMPDIR:-/tmp}/evil.start" ]; ok $? 0 "traversal in session_id is neutralised"
 # SECURITY: clean() must never admit quote/backslash/backtick/dollar (PowerShell single-quoted string)
 out=$(printf '%s' '{"session_id":"q","cwd":"/x/a'"'"');calc;('"'"'b"}' | sh "$S" Stop)
@@ -161,24 +158,24 @@ sh "$S" board --once --plain >/dev/null 2>&1;             ok $? 0 "board --once 
 # board autostart: off by default -> no attempt; on + board alive (pid file = this shell) -> no attempt; on + no board -> attempt
 out=$(printf '%s' "$B1" | sh "$S" Stop); case "$out" in *board_autostart*) fail=$((fail+1)); echo "FAIL autostart fired while off: $out" ;; *) pass=$((pass+1)) ;; esac
 sh "$S" config set board_autostart true >/dev/null
-printf '%s\n' "$$" > "${TMPDIR:-/tmp}/iriscale-voice/board.pid"
+printf '%s\n' "$$" > "$CLAUDE_CONFIG_DIR/iriscale-voice-runtime/board.pid"
 out=$(printf '%s' "$B1" | sh "$S" Stop); case "$out" in *board_autostart*) fail=$((fail+1)); echo "FAIL autostart fired while a board is alive: $out" ;; *) pass=$((pass+1)) ;; esac
-rm -f "${TMPDIR:-/tmp}/iriscale-voice/board.pid"
+rm -f "$CLAUDE_CONFIG_DIR/iriscale-voice-runtime/board.pid"
 out=$(printf '%s' "$B1" | sh "$S" Stop); case "$out" in *"would open the board"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL autostart did not fire with no board: $out" ;; esac
 sh "$S" config unset board_autostart >/dev/null
 sh "$S" --help | grep -- '--open' >/dev/null;              ok $? 0 "help mentions board --open"
 # click-to-focus: numbered rows, a rows map, and `focus` resolution
 kout=$(sh "$S" sessions --keys --plain)
-printf '%s' "$kout" | grep -q '^1 .*payments_api';        ok $? 0 "keys mode numbers the top row"
-printf '%s' "$kout" | grep -q 'click a row or press';     ok $? 0 "keys mode explains the keys"
-[ -f "${TMPDIR:-/tmp}/iriscale-voice/board.rows" ];       ok $? 0 "keys mode writes the rows map"
+printf '%s' "$kout" | grep -q '^1 .*payments_api';        ok $? 1 "rows without a pid have no focus shortcut"
+printf '%s' "$kout" | grep -q 'q quits';                 ok $? 0 "keys mode explains the keys"
+[ -f "$CLAUDE_CONFIG_DIR/iriscale-voice-runtime/board.rows" ];       ok $? 0 "keys mode writes the rows map"
 sh "$S" focus no_such_session >/dev/null 2>&1;            ok $? 1 "focus unknown session exits 1"
 sh "$S" focus >/dev/null 2>&1;                            ok $? 2 "focus without target exits 2"
 sh "$S" focus payments_api >/dev/null 2>&1;               ok $? 1 "focus session without pid exits 1 (codex: no pid yet)"
 sh "$S" --help | grep 'focus <n|name|pid>' >/dev/null;    ok $? 0 "help lists focus"
 sh "$S" sessions --plain | sed -n 1p | grep "v$(sh "$S" --version)" >/dev/null; ok $? 0 "board header shows the version"
 sh "$S" sessions --plain | sed -n 1p | grep 'updated [0-9][0-9]:[0-9][0-9]:[0-9][0-9]' >/dev/null; ok $? 0 "board header labels the clock as 'updated'"
-[ "$(sh "$S" sessions --keys --plain | grep 'bring it to the front' | awk '{print length}')" -le 80 ]; ok $? 0 "board footer fits 80 columns"
+[ "$(sh "$S" sessions --keys --plain | grep 'q quits' | awk '{print length}')" -le 80 ]; ok $? 0 "board footer fits 80 columns"
 
 # repeat guard: same line twice inside the cooldown -> second is SKIP; a different line still SPEAKs
 sh "$S" set repeat_cooldown 60 >/dev/null; sh "$S" set preset verbose >/dev/null
@@ -217,7 +214,7 @@ EOF
 cat > "$CODEX_HOME/hooks.json" <<EOF
 {"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"voice stamp"}]}],"PermissionRequest":[{"hooks":[{"type":"command","command":"voice PermissionRequest"}]}]}}
 EOF
-sh "$S" doctor codex | grep 'READY' >/dev/null;             ok $? 0 "doctor codex accepts synchronous hooks"
+sh "$S" doctor codex >/dev/null 2>&1;                      ok $? 1 "doctor codex detects missing resume hook"
 cat > "$CODEX_HOME/hooks.json" <<EOF
 {"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","commandWindows":"voice stamp"}]}],"PermissionRequest":[{"hooks":[{"type":"command","commandWindows":"voice PermissionRequest"}]}]}}
 EOF
@@ -225,7 +222,7 @@ sh "$S" doctor codex >/dev/null 2>&1;                       ok $? 1 "doctor code
 cat > "$CODEX_HOME/hooks.json" <<EOF
 {"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"voice stamp"}]}],"PermissionRequest":[{"hooks":[{"type":"command","command":"voice PermissionRequest","async":true}]}]}}
 EOF
-sh "$S" doctor codex >/dev/null 2>&1;                       ok $? 1 "doctor codex rejects async hooks"
+sh "$S" doctor codex >/dev/null 2>&1;                       ok $? 1 "doctor codex still detects missing resume alongside async hooks"
 sh "$S" doctor unknown >/dev/null 2>&1;                     ok $? 2 "unknown doctor target exits 2"
 sh "$S" completions powershell | grep 'Register-ArgumentCompleter' >/dev/null; ok $? 0 "PowerShell completion is available"
 sh "$S" completions bash | grep 'complete -F' >/dev/null;   ok $? 0 "Bash completion is available"
@@ -275,7 +272,7 @@ if command -v powershell.exe >/dev/null 2>&1 && command -v cygpath >/dev/null 2>
     grep 'keep-me' "$PSCODEX/config.toml" >/dev/null && grep 'OtherEvent' "$PSCODEX/hooks.json" >/dev/null
     ok $? 0 "installer preserves unrelated Codex configuration"
     grep 'PermissionRequest' "$PSCODEX/hooks.json" >/dev/null && ! grep '"async"' "$PSCODEX/hooks.json" >/dev/null && \
-        [ "$(grep -o '"command"[[:space:]]*:' "$PSCODEX/hooks.json" | wc -l | tr -d '[:space:]')" -eq 2 ]
+        [ "$(grep -o '"command"[[:space:]]*:' "$PSCODEX/hooks.json" | wc -l | tr -d '[:space:]')" -eq 3 ]
     ok $? 0 "installer writes synchronous hooks with required command fields"
     grep 'name: iriscale-voice' "$PSCODEX/skills/iriscale-voice/SKILL.md" >/dev/null
     ok $? 0 "installer makes the Codex skill discoverable"
@@ -533,7 +530,7 @@ grep -q 'test $ARGUMENTS' "$here/../commands/test.md"; ok $? 0 "/iriscale-voice:
 # A Stop with work in flight is a pause (StepDone, verbose only), not "done"; the turn
 # clock survives Claude's own wake-ups so "done after N minutes" covers the whole job.
 sh "$S" set preset standard >/dev/null
-BGDIR="${TMPDIR:-/tmp}/iriscale-voice"
+BGDIR="$CLAUDE_CONFIG_DIR/iriscale-voice-runtime"
 BG1='{"session_id":"bg-1","cwd":"/x/repo_digest","hook_event_name":"Stop","background_tasks":[{"id":"a1","type":"subagent","status":"running","description":"Repo digest: engine pin selection methodology","agent_type":"general-purpose"}],"session_crons":[]}'
 BG2='{"session_id":"bg-1","cwd":"/x/repo_digest","hook_event_name":"Stop","background_tasks":[{"id":"a1","type":"subagent","status":"running","description":"Repo digest"},{"id":"s1","type":"shell","status":"running","description":"pnpm test","command":"pnpm test"}],"session_crons":[]}'
 BG0='{"session_id":"bg-1","cwd":"/x/repo_digest","hook_event_name":"Stop","background_tasks":[],"session_crons":[]}'
@@ -573,7 +570,7 @@ rm -f "$BGDIR/bg-1.start"
 
 # Passive review lifecycle (0.1.23). Driven through `tick` so nothing sleeps.
 sh "$S" set preset standard >/dev/null; sh "$S" set repeat_cooldown 0 >/dev/null
-LCDIR="${TMPDIR:-/tmp}/iriscale-voice"; rm -f "$LCDIR/last_prompt"
+LCDIR="$CLAUDE_CONFIG_DIR/iriscale-voice-runtime"; rm -f "$LCDIR/last_prompt"
 LC1='{"session_id":"lc-1","cwd":"/x/billing","hook_event_name":"Stop","background_tasks":[],"session_crons":[]}'
 LC2='{"session_id":"lc-2","cwd":"/x/payments","tool_name":"Bash","tool_input":{"command":"git push"}}'
 LC3='{"session_id":"lc-3","cwd":"/x/migration","reason":"rate_limit"}'
@@ -755,7 +752,7 @@ grep -q '^status=review' "$SESSD/bgi-1";                           ok $? 0 "  an
 
 # 13. microphone awareness (Windows): the speaker file watches the consent store
 if [ "$(sh "$S" status | sed -n "s/.*os: //p" | sed "s/ .*//")" = win ]; then
-    SPK="${TMPDIR:-/tmp}/iriscale-voice/speak.ps1"; rm -f "$SPK"
+    SPK="$CLAUDE_CONFIG_DIR/iriscale-voice-runtime/speak.ps1"; rm -f "$SPK"
     IRISCALE_VOICE_DEBUG= PATH="$SHIM:$PATH" sh "$S" say "mic probe" >/dev/null 2>&1; sleep 4   # stubbed powershell; the file is written first
     [ -f "$SPK" ];                                                  ok $? 0 "mic: speak.ps1 is written next to the state"
     grep -q 'SpeakAsyncCancelAll' "$SPK";                           ok $? 0 "mic: speech is cut when the mic opens mid-sentence"
@@ -769,7 +766,7 @@ if [ "$(sh "$S" status | sed -n "s/.*os: //p" | sed "s/ .*//")" = win ]; then
     t0=$(date +%s); powershell.exe -NoProfile -Command "Set-ItemProperty -Path '$FAKE' -Name LastUsedTimeStop -Value 0 -Type QWord" >/dev/null 2>&1
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SPK" -Text "" -MicAware -MicWait 2 -ConsentRoot 'HKCU:\Software\iriscale-voice-test\microphone' >/dev/null 2>&1   # empty text: exits before speaking
     powershell.exe -NoProfile -Command "Remove-Item -Path 'HKCU:\Software\iriscale-voice-test' -Recurse -Force" >/dev/null 2>&1
-    sh "$S" config list | grep -q '^mic_aware ';                    ok $? 0 "mic: mic_aware is a documented setting"
+    sh "$S" config list | grep '^mic_aware ' >/dev/null;             ok $? 0 "mic: mic_aware is a documented setting"
 fi
 
 echo "passed: $pass  failed: $fail"

@@ -7,7 +7,8 @@
 - **Writes** its config (`~/.claude/iriscale-voice.conf`), an activity log
   (`~/.claude/iriscale-voice.log`, rolled at 1 MB), one small state file per session
   (`~/.claude/iriscale-voice-sessions/`), and scratch files under
-  `$TMPDIR/iriscale-voice/` (created mode 700).
+  `~/.claude/iriscale-voice-runtime/` (mode 700; symlinks and other owners rejected).
+  `CLAUDE_CONFIG_DIR` relocates these files. Shared temporary directories are not reused.
 - **Speaks and logs what the agent asked permission for** - up to 60 characters of the
   command, because that is what lets you decide from across the room. Words that look
   like credentials (`Bearer …`, `sk-…`, `ghp_…`, `AKIA…`, `password=…`, `user:pass@host`)
@@ -19,7 +20,7 @@
   (`~/.local/share/iriscale-voice`, or `%LOCALAPPDATA%\Programs\iriscale-voice`), put that
   on your PATH, and edit the configuration of the agent you named:
   - `install codex` — `~/.codex/config.toml` (the single top-level `notify`),
-    `~/.codex/hooks.json` (two events), `~/.codex/skills/iriscale-voice/`.
+    `~/.codex/hooks.json` (three events), `~/.codex/skills/iriscale-voice/`.
   - `install claude` — `~/.claude/settings.json` (eight hook events, **appended** to
     whatever is already there), `~/.claude/skills/iriscale-voice/`, and
     `~/.claude/commands/iriscale-voice-*.md`.
@@ -52,9 +53,9 @@ tarball, read `package/npm/`, and pin to that exact version when you install —
 `X.Y.Z` with the release you reviewed:
 
 ```sh
-npm pack iriscale-voice@X.Y.Z && tar -xzf iriscale-voice-X.Y.Z.tgz   # read package/npm/
-npx iriscale-voice@X.Y.Z install codex           # prints its plan, writes nothing
-npx iriscale-voice@X.Y.Z install codex --apply
+npm pack @iriscale/voice@X.Y.Z && tar -xzf iriscale-voice-X.Y.Z.tgz   # read package/npm/
+npx @iriscale/voice@X.Y.Z install codex           # prints its plan, writes nothing
+npx @iriscale/voice@X.Y.Z install codex --apply
 ```
 
 `npm view @iriscale/voice versions` lists what has been published.

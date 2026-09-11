@@ -13,8 +13,16 @@ VERSION="0.1.28"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
-STATE="${TMPDIR:-/tmp}/iriscale-voice"
-[ -d "$STATE" ] || mkdir -p -m 700 "$STATE" 2>/dev/null   # private: /tmp may be shared
+# Runtime files live under the user's config directory, never a shared /tmp name.
+# -O is supported by all our target shells (dash, Bash and zsh); fail closed otherwise.
+STATE="$CLAUDE_DIR/iriscale-voice-runtime"
+umask 077
+if [ -L "$STATE" ]; then echo "unsafe runtime directory (symlink): $STATE" >&2; exit 1; fi
+[ -d "$STATE" ] || mkdir -p -m 700 "$STATE" 2>/dev/null
+if [ ! -d "$STATE" ] || [ ! -O "$STATE" ]; then echo "cannot use private runtime directory: $STATE" >&2; exit 1; fi
+# A raw shell launch may have no PATH; use the OS utility directly in that case.
+_chmod=chmod; command -v chmod >/dev/null 2>&1 || _chmod=/bin/chmod
+"$_chmod" 700 "$STATE" 2>/dev/null || { echo "cannot protect runtime directory: $STATE" >&2; exit 1; }
 SESS="$CLAUDE_DIR/iriscale-voice-sessions"     # one state file per live session (any agent)
 
 # ---------- tiny helpers ------------------------------------------------------
@@ -612,6 +620,12 @@ notify = ["$shell_path", "$script_path", "notify"]
         "command": "sh \"$script_path\" PermissionRequest",
         "commandWindows": "\"$shell_path\" \"$script_path\" PermissionRequest",
         "timeout": 30 } ] }
+    ],
+    "PostToolUse": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"$script_path\" resume",
+        "commandWindows": "\"$shell_path\" \"$script_path\" resume",
+        "timeout": 10 } ] }
     ]
   }
 }
@@ -633,6 +647,11 @@ notify = ["$script_path", "notify"]
       { "hooks": [ { "type": "command",
         "command": "sh \"$script_path\" PermissionRequest",
         "timeout": 30 } ] }
+    ],
+    "PostToolUse": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"$script_path\" resume",
+        "timeout": 10 } ] }
     ]
   }
 }
@@ -798,7 +817,7 @@ cli_speaker() {
     echo "voice=$_vn"
     cfgv enabled enabled true
     if [ -n "$IRISCALE_VOICE_OFF" ] || [ "$enabled" != "true" ]; then echo "(muted - not speaking a sample)"; return 0; fi
-    speak "iriscale voice now sounds like this"
+    speak "iriscale voice now sounds like this" || { echo "speech backend failed; check the selected voice and audio output" >&2; return 1; }
     echo "spoke a sample; to go back: iriscale-voice speaker default"
 }
 
@@ -810,7 +829,10 @@ cli_test() {
         echo "muted - not speaking. Run 'unmute' first, or 'say <text>' to force speech while muted."; return 0
     fi
     text="iriscale voice is working"
-    if [ "$(os)" != win ]; then speak "$text"; echo "spoke a test phrase via $(os) backend"; return 0; fi
+    if [ "$(os)" != win ]; then
+        speak "$text" || { echo "speech backend failed; check the selected voice and audio output" >&2; return 1; }
+        echo "spoke a test phrase via $(os) backend"; return 0
+    fi
     cfgv vol volume 100; cfgv rate rate 0; cfgv voice voice ""
     case $vol in ''|*[!0-9]*) vol=100 ;; esac
     case $rate in ''|-) rate=0 ;; -[0-9]*|[0-9]*) case ${rate#-} in *[!0-9]*) rate=0 ;; esac ;; *) rate=0 ;; esac
@@ -1158,6 +1180,7 @@ cli_forget() {
 # nothing is missing on first run. Sorted: needs you first, then ready, working, idle.
 cli_sessions() {
     plain=0; force=0; keys=0
+    _focus_os=$(os)
     for _a in "$@"; do case $_a in --plain) plain=1 ;; --color|--colour) force=1 ;; --keys) keys=1 ;; esac; done
     if [ "$plain" = 1 ] || { [ "$force" = 0 ] && [ ! -t 1 ]; }; then G=""; Y=""; R=""; M=""; D=""; B=""; N=""; EL=""
     else G="${ESC}[32m"; Y="${ESC}[33m"; R="${ESC}[31m"; M="${ESC}[35m"; D="${ESC}[2m"; B="${ESC}[1m"; N="${ESC}[0m"; EL="${ESC}[K"; fi
@@ -1209,14 +1232,17 @@ cli_sessions() {
         esac
         if [ "$keys" = 1 ]; then
             printf '%s|%s|%s|%s\n' "$idx" "$spid" "$n" "$a" >> "$STATE/board.rows"
-            k=$idx; [ "$idx" -gt 9 ] && k=" "
+            k=$idx; [ "$idx" -gt 9 ] || [ -z "$spid" ] || [ "$_focus_os" = mac ] && k=" "
             printf "${D}%s${N} %s  %-26.26s %-10s %-6s %-8s ${D}%.44s${N}${EL}\n" "$k" "$dot" "$n" "$label" "$(_ago "$age")" "$a" "$said"
         else
             printf "  %s  %-26.26s %-10s %-6s %-8s ${D}%.44s${N}${EL}\n" "$dot" "$n" "$label" "$(_ago "$age")" "$a" "$said"
         fi
     done
     printf "\n  ${R}*${N} needs your answer   ${M}*${N} needs your action   ${G}*${N} ready for review   ${Y}*${N} working   ${D}o${N} reviewed${EL}\n"
-    [ "$keys" = 1 ] && printf "  ${D}click a row or press its number to bring it to the front - q quits${N}${EL}\n"
+    if [ "$keys" = 1 ]; then
+        if [ "$_focus_os" = mac ]; then printf "  ${D}q quits - window focusing is unavailable on macOS${N}${EL}\n"
+        else printf "  ${D}click a numbered row or press its number to focus - q quits${N}${EL}\n"; fi
+    fi
     [ "$keys" = 1 ] && printf "  ${D}reviewed = a key pressed there within %s of finishing (not a click or focus)${N}${EL}\n" "$(idle_window_label)"
     return 0   # (a trailing failed [ ] test made `sessions` exit 1 - caught by CI)
 }
@@ -1312,7 +1338,13 @@ cli_board_open() {
             ( wt.exe -w iriscale-board --size "$geom" --pos "$pos" --title sessions "$_bash" "$_mew" board ) </dev/null >/dev/null 2>&1 &
             echo "opened the board in a new Windows Terminal window" ;;
         mac)
-            ( osascript -e "tell application \"Terminal\" to do script \"'$_me' board\"" ) </dev/null >/dev/null 2>&1 &
+            _me=$(CDPATH= cd -P "$(dirname "$_me")" && printf '%s/%s' "$PWD" "${_me##*/}") || return 1
+            # Pass data in argv, not AppleScript source; Terminal gets a shell-quoted path.
+            osascript - "$_me" <<'APPLESCRIPT' >/dev/null || { echo "could not open the board in Terminal" >&2; return 1; }
+on run argv
+    tell application "Terminal" to do script (quoted form of (item 1 of argv)) & " board"
+end run
+APPLESCRIPT
             echo "opened the board in a new Terminal window" ;;
         *)
             for _t in x-terminal-emulator gnome-terminal konsole xterm; do
@@ -1408,17 +1440,17 @@ cli_doctor() {
         echo "  MISSING permission hooks file: $codex_hooks"
         failed=1
     else
-        if grep '"async"[[:space:]]*:[[:space:]]*true' "$codex_hooks" >/dev/null 2>&1; then
-            echo "  ERROR hooks use async=true; Codex 0.147 skips asynchronous hooks"
-            failed=1
-        fi
+        json_validate "$codex_hooks"; _valid=$?
+        [ "$_valid" = 1 ] && { echo "  ERROR hooks.json is not valid JSON"; failed=1; }
         grep '"UserPromptSubmit"' "$codex_hooks" >/dev/null 2>&1 &&
             echo "  OK    UserPromptSubmit hook is defined" || { echo "  MISSING UserPromptSubmit hook"; failed=1; }
         grep '"PermissionRequest"' "$codex_hooks" >/dev/null 2>&1 &&
             echo "  OK    PermissionRequest hook is defined" || { echo "  MISSING PermissionRequest hook"; failed=1; }
+        grep '"PostToolUse"' "$codex_hooks" >/dev/null 2>&1 &&
+            echo "  OK    PostToolUse hook is defined" || { echo "  MISSING PostToolUse resume hook; reapply the installer"; failed=1; }
         command_count=$(grep -o '"command"[[:space:]]*:' "$codex_hooks" 2>/dev/null | wc -l | tr -d '[:space:]')
-        if [ "${command_count:-0}" -lt 2 ]; then
-            echo "  ERROR UserPromptSubmit and PermissionRequest hooks each require a command field"
+        if [ "${command_count:-0}" -lt 3 ]; then
+            echo "  ERROR all three hooks require a command field"
             failed=1
         else
             echo "  OK    hook command fields are defined"
@@ -1426,7 +1458,7 @@ cli_doctor() {
     fi
 
     echo "  CHECK Open /hooks: each event must show Installed 1 and Active 1."
-    [ "$failed" -eq 0 ] && echo "  READY Hook files look installable; confirm installation and trust in /hooks."
+    echo "  CHECK These are basic file checks only; target validation: npx @iriscale/voice@latest doctor codex"
     return "$failed"
 }
 
@@ -1649,6 +1681,9 @@ state_write() {   # state_write <status> [said] [note]   (note: what the session
     _said=${2:-$_osaid}
     printf 'agent=%s\nname=%s\nstatus=%s\nsince=%s\nupdated=%s\npid=%s\ncwd=%s\nsaid=%s\nnote=%s\n' \
         "$agent" "$name" "$1" "$_since" "$NOW" "$pid" "$cwd" "$_said" "${3:-}" > "$_sf" 2>/dev/null
+    if [ "$_os" = "$1" ]; then
+        printf 'reminded=%s\nremind_at=%s\n' "$_orem" "$_ora" >> "$_sf" 2>/dev/null
+    fi
 }
 if [ "$EVENT" = "stamp" ]; then
     state_write working
@@ -1760,17 +1795,28 @@ case "$EVENT" in
                                    for w in "$@"; do
                                        n=$((n+1)); [ "$n" -gt 12 ] && break
                                        if [ "$detail" != full ]; then
+                                           # Quotes are shell syntax, not part of a credential prefix.
+                                           while case $w in \"*|\'*) true ;; *) false ;; esac; do w=${w#?}; done
+                                           while case $w in *\"|*\') true ;; *) false ;; esac; do w=${w%?}; done
+                                           lc_to _credential "$w"
+                                           _previous=$prev; prev=$_credential
+                                           case $_credential in
+                                               *secret*=*|*password*=*|*passwd*=*|*token*=*|*key=*) w="${w%%=*}=[redacted]" ;;
+                                               *key:?*|*token:?*|*secret:?*) w="${w%%:*}:[redacted]" ;;
+                                           esac
                                            case $w in
-                                               *[Ss]ecret*=*|*[Pp]assword*=*|*[Pp]asswd*=*|*[Tt]oken*=*|*[Kk]ey=*|*[Kk]ey:*|*_KEY=*|*_SECRET=*) w="${w%%=*}=[redacted]" ;;
                                                sk-*|sk_*|ghp_*|gho_*|ghs_*|github_pat_*|AKIA*|xox[abp]-*|glpat-*|AIza*|eyJ*|npm_*|pypi-*) w="[redacted]" ;;
                                                *://*:*@*) w="${w%%://*}://[redacted]@${w#*@}" ;;   # user:pass@host in URLs
                                            esac
-                                           case $prev in [Bb]earer|[Bb]asic|--token|--password|--passwd|-p|--api-key|--key|--secret|--auth) w="[redacted]" ;; esac
+                                           case $_previous in bearer|basic|--token|--password|--passwd|-p|--api-key|--key|--secret|--auth|*key:|*token:|*secret:) w="[redacted]" ;; esac
                                        fi
-                                       prev=$w; out="$out $w"
+                                       out="$out $w"
                                    done
                                    cmd=$(printf '%.60s' "${out# }")
                                else
+                                   # Environment assignments are not program names (or safe to say).
+                                   while [ $# -gt 0 ]; do case $1 in *=*) shift ;; *) break ;; esac; done
+                                   [ $# -gt 0 ] || set -- command
                                    p1=${1##*/}; p2=${2:-}
                                    case $p1 in sudo|npx|pnpm|npm|yarn|git|gh|docker|kubectl|cargo|go|pip|pip3|python|python3|make|dotnet|az|aws|gcloud)
                                               case $p2 in ''|-*) cmd=$p1 ;; *) cmd="$p1 ${p2##*/}" ;; esac ;;

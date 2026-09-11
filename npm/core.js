@@ -190,12 +190,20 @@ function isOurGroup (group) {
   return hooks.some(h => h && (isOurCommand(h.command) || isOurCommand(h.commandWindows)))
 }
 
+function withoutOurHooks (groups) {
+  return groups.flatMap(group => {
+    if (!isOurGroup(group)) return [group]
+    const hooks = group.hooks.filter(h => !h || !(isOurCommand(h.command) || isOurCommand(h.commandWindows)))
+    return hooks.length ? [{ ...group, hooks }] : []
+  })
+}
+
 // Uninstall deliberately keeps your preferences - a reinstall should not forget your
 // preset or quiet hours - but silence about it would make "uninstalled" a lie. So name
 // what stayed and how to remove it.
 function leftovers () {
   const dir = process.env.CLAUDE_CONFIG_DIR || path.join(U.homeDir(), '.claude')
-  const state = path.join(process.env.TMPDIR || '/tmp', 'iriscale-voice')
+  const state = path.join(dir, 'iriscale-voice-runtime')
   return [
     path.join(dir, 'iriscale-voice.conf'),
     path.join(dir, 'iriscale-voice.log'),
@@ -251,6 +259,6 @@ function pathAdvice (pathResult) {
 
 module.exports = {
   layout, packagedScript, version, packageName, preflight, materialize, linkOnPath, unlinkFromPath,
-  isOurGroup, isOurCommand, reportLeftovers, driftWarning, installedScriptVersion,
+  isOurGroup, isOurCommand, withoutOurHooks, reportLeftovers, driftWarning, installedScriptVersion,
   readMarker, recordAgent, returnCreated, forgetAgent, report, pathAdvice
 }

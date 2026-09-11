@@ -1,6 +1,8 @@
 # Codex CLI
 
-Verified against Codex CLI 0.147.0 on Windows. Git for Windows is the only prerequisite.
+Completion and approval alerts were verified against Codex CLI 0.147.0 on Windows.
+The resume hook requires a Codex version exposing `PostToolUse` in `/hooks`; confirm
+installation and trust after updating. Windows also needs Git for Windows.
 
 ## Recommended: one command, any OS
 
@@ -11,7 +13,7 @@ npx @iriscale/voice@latest install codex --apply
 ```
 
 It installs the script to a stable directory, puts `iriscale-voice` on your `PATH`,
-installs the `$iriscale-voice` skill, and merges `notify` plus two hooks into your Codex
+installs the `$iriscale-voice` skill, and merges `notify` plus three hooks into your Codex
 files — backing up everything it edits. Full details, including what it writes and how
 to undo it: [npm.md](npm.md). Node is not needed afterwards; Codex calls the shell
 script directly.
@@ -26,12 +28,12 @@ irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.28/instal
 
 The installer downloads Iriscale Voice to `%LOCALAPPDATA%\Programs\iriscale-voice`,
 creates a stable launcher, adds it to your user `PATH`, registers PowerShell tab
-completion, installs the `$iriscale-voice` Codex skill, and merges `notify` plus two
+completion, installs the `$iriscale-voice` Codex skill, and merges `notify` plus three
 synchronous hooks into your Codex files. Existing files are backed up before changes
 and unrelated settings and hooks remain.
 
-Restart Codex and your terminal. In `/hooks`, confirm `UserPromptSubmit` and
-`PermissionRequest` each show `Installed 1`, open each event, and trust its hook so
+Restart Codex and your terminal. In `/hooks`, confirm `UserPromptSubmit`,
+`PermissionRequest`, and `PostToolUse` each show `Installed 1`, open each event, and trust its hook so
 `Active` becomes `1`. Then verify:
 
 ```powershell
@@ -79,7 +81,7 @@ the folder name.
 `iriscale-voice install codex` prints this snippet with your paths filled in.
 `iriscale-voice install codex --apply` performs the Windows installation.
 
-## Full (optional): permission prompts and elapsed time — two hooks
+## Full (optional): permission prompts, elapsed time, and resume — three hooks
 
 Codex hooks use the same JSON-on-stdin shape as Claude Code. Create
 `~/.codex/hooks.json`:
@@ -98,27 +100,35 @@ Codex hooks use the same JSON-on-stdin shape as Claude Code. Create
         "command": "sh \"/absolute/path/to/iriscale-voice\" PermissionRequest",
         "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" PermissionRequest",
         "timeout": 30 } ] }
+    ],
+    "PostToolUse": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"/absolute/path/to/iriscale-voice\" resume",
+        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" resume",
+        "timeout": 10 } ] }
     ]
   }
 }
 ```
 
-Keep these hooks synchronous: Codex 0.147 skips definitions containing `"async": true`,
-so they appear as `Installed 0` and cannot be trusted.
+These handlers return promptly and keep their definitions synchronous for compatibility.
+Current Codex supports asynchronous hooks too; unrelated asynchronous hooks can coexist.
 
-Restart Codex, run **`/hooks`**, and confirm both events show **Installed 1**. Only then
+Restart Codex, run **`/hooks`**, and confirm all three events show **Installed 1**. Only then
 open each event and trust its hook; **Active** should become **1**. Codex stores a hash
 in `config.toml`, so editing `hooks.json` prompts for trust again. This gives
 *"<session> is waiting for your answer to run git status"* before you answer a yes/no,
 and *"done after N minutes"* on long turns.
 
 Run `iriscale-voice doctor codex` for a read-only check of `config.toml` and
-`hooks.json`. It identifies missing definitions and the unsupported asynchronous form;
-the final Installed/Active check remains visible in `/hooks`.
+`hooks.json`. The shell command performs basic file checks; use
+`npx @iriscale/voice@latest doctor codex` for structural and target validation.
+The final Installed/Active check remains visible in `/hooks`.
 
 Why not more hooks? Every extra hook is another trust prompt. `Stop` is already
-covered by `notify`; `SubagentStop`/`SessionEnd` are verbose-only. Two is the minimum
-that adds real value.
+covered by `notify`. The third hook cancels stale permission reminders after the
+approved tool finishes. An approval click does not itself fire this hook, so a
+long-running tool can remain marked as waiting until its result arrives.
 
 ## What Codex has and hasn't
 
@@ -126,8 +136,12 @@ that adds real value.
 |---|---|---|
 | turn done | `notify` `agent-turn-complete` (or hook `Stop`) | "<session> done" |
 | needs approval | hook `PermissionRequest` (`tool_name`, `tool_input.command`) | "<session> is waiting for your answer to run …" |
-| turn failed | — (Codex has no failure event) | — |
-| idle, waiting for you | — (Codex has no idle notification) | — |
+| approved tool finished | `PostToolUse` | silent; clears the blocked state |
+| turn failed | not wired by this integration | — |
+| idle, waiting for you | not wired by this integration | — |
 
 Same config file, presets and quiet hours as Claude Code — one setup for every agent.
 Everything lands in `~/.claude/iriscale-voice.log`.
+
+Contracts: [Codex hooks](https://learn.chatgpt.com/docs/hooks) and
+[completion notify](https://learn.chatgpt.com/docs/config-file/config-advanced).

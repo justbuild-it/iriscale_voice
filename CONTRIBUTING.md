@@ -55,6 +55,26 @@ A release is its own small PR:
    ```
 Users get it with `/plugin marketplace update iriscale`, or `iriscale-voice update`.
 
+### Release verification
+
+Keep fixes under `[Unreleased]` until the separate release PR; recent combined
+fix/version PRs should not become a second release convention. Before tagging, require
+the release commit's CI matrix to pass, including the audit regression fixtures.
+Use an explicit `gh release create --target <verified-merge-sha>` and keep the tag,
+release target, package version, and pinned installer URLs in agreement.
+
+Puneet (`PuneetKandpal`) owns npm publication. After merge and tagging, hand off the
+exact tag and commit to him if the releasing maintainer cannot publish. Verify
+`npm view @iriscale/voice@<version> version dist.integrity` and unpack the published
+tarball to check its runtime version and installation fixtures before marking the
+release complete. A GitHub release alone does not update npm users.
+
+For changes touching macOS or Codex, record a short live smoke test: install into a
+disposable home, trust the hooks, finish a turn, approve a tool, mute/unmute, test a
+voice, open the board, update, and uninstall while preserving pre-existing settings.
+CI stubs validate command construction and failures; they do not prove audible output
+or native Terminal behavior. Track unavailable live verification in an assigned issue.
+
 ## Local iteration
 
 ```sh
