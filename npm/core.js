@@ -11,7 +11,8 @@ function layout () {
   const root = U.installRoot()
   const binDir = path.join(root, 'bin')
   const script = path.join(binDir, 'iriscale-voice')
-  return { root, binDir, script, launcher: U.isWindows ? path.join(binDir, 'iriscale-voice.cmd') : script }
+  return { root, binDir, script, notifyBridge: path.join(binDir, 'iriscale-voice-notify.ps1'),
+    launcher: U.isWindows ? path.join(binDir, 'iriscale-voice.cmd') : script }
 }
 
 function packagedScript () {
@@ -44,6 +45,7 @@ function materialize (L) {
   fs.copyFileSync(packagedScript(), L.script)
   fs.chmodSync(L.script, 0o755)      // Codex's `notify` execs it directly
   if (U.isWindows) {
+    fs.copyFileSync(path.join(U.packageRoot(), 'bin', 'iriscale-voice-notify.ps1'), L.notifyBridge)
     // No --login: Git's bin\bash.exe wrapper already fixes PATH, while --login costs
     // ~550 ms per hook event and sources .bash_profile, whose output corrupts captures.
     //
@@ -176,7 +178,7 @@ function forgetAgent (L, agent) {
 const OUR_ARGS = new Set([
   'stamp', 'resume', 'notify', 'Stop', 'StopFailure', 'PermissionRequest', 'idle_prompt',
   'agent_completed', 'SubagentStop', 'SessionEnd', 'StepDone', 'Scheduled',
-  'Remind', 'WelcomeBack'
+  'Remind', 'WelcomeBack', 'codex-stamp', 'codex-resume', 'codex-PermissionRequest'
 ])
 
 function isOurCommand (command) {

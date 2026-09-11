@@ -70,13 +70,24 @@ JSON as the last argument. Add this **at the top** of `~/.codex/config.toml`
 # macOS / Linux
 notify = ["/absolute/path/to/iriscale-voice", "notify"]
 
-# Windows (Git Bash's sh.exe; adjust the checkout path)
-notify = ["C:/Program Files/Git/bin/sh.exe", "C:/path/to/iriscale_voice/bin/iriscale-voice", "notify"]
+# Windows (keep the PowerShell bridge beside the shell script)
+notify = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "C:/path/to/iriscale_voice/bin/iriscale-voice-notify.ps1", "C:/Program Files/Git/bin/bash.exe"]
 ```
 
 Restart Codex. You'll hear *"<session> done"* after every turn — `<session>` is the
 name you gave with Codex's `/rename` (read from `~/.codex/session_index.jsonl`), or
 the folder name.
+
+The Windows bridge passes JSON to Git Bash through stdin, preserving backslashes
+in project paths. Both installers configure it automatically. After upgrading,
+reapply the Codex installation and restart Codex so the new command takes effect.
+Replacing only the shell script leaves the old notification command in place.
+
+The board reads the latest matching title in `session_index.jsonl` on each refresh,
+so `/rename` changes appear without another completed turn. If Codex has no title
+record for a session, the project folder is the fallback. Previously damaged
+unnamed rows are corrected by their next notification. Titles stored only by a
+different Codex home or application are not available to this lookup.
 
 `iriscale-voice install codex` prints this snippet with your paths filled in.
 `iriscale-voice install codex --apply` performs the Windows installation.
@@ -91,20 +102,20 @@ Codex hooks use the same JSON-on-stdin shape as Claude Code. Create
   "hooks": {
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command",
-        "command": "sh \"/absolute/path/to/iriscale-voice\" stamp",
-        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" stamp",
+        "command": "sh \"/absolute/path/to/iriscale-voice\" codex-stamp",
+        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" codex-stamp",
         "timeout": 10 } ] }
     ],
     "PermissionRequest": [
       { "hooks": [ { "type": "command",
-        "command": "sh \"/absolute/path/to/iriscale-voice\" PermissionRequest",
-        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" PermissionRequest",
+        "command": "sh \"/absolute/path/to/iriscale-voice\" codex-PermissionRequest",
+        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" codex-PermissionRequest",
         "timeout": 30 } ] }
     ],
     "PostToolUse": [
       { "hooks": [ { "type": "command",
-        "command": "sh \"/absolute/path/to/iriscale-voice\" resume",
-        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" resume",
+        "command": "sh \"/absolute/path/to/iriscale-voice\" codex-resume",
+        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" codex-resume",
         "timeout": 10 } ] }
     ]
   }

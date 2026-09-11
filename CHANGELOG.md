@@ -6,6 +6,10 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 ## [Unreleased]
 
 ### Fixed
+- Preserve Windows Codex notification JSON through a native stdin bridge, so
+  unnamed sessions show their project folder instead of a collapsed Windows path.
+  Use the latest Codex title record on board refresh and identify unnamed Codex
+  hooks correctly. Reapply the Codex installation and restart Codex after updating.
 - Preserve Codex TOML settings across quoted brackets, comments, multiline values,
   and quoted keys; reject uncertain boundaries before installing. Both npm and
   PowerShell installers preserve mixed hook groups and restore displaced notifications.
