@@ -96,7 +96,7 @@ Windows without Node? The PowerShell installer does the same job, and additional
 up tab completion (Git for Windows is its only prerequisite):
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.26/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.27/install.ps1 | iex
 ```
 
 Prefer to read either installer first? [SECURITY.md](SECURITY.md) shows how.
@@ -171,9 +171,12 @@ you: merged into one sentence when several do, skipped while you are typing else
 Answering a permission prompt or a question clears *needs your answer* the moment the
 tool runs, so no reminder follows a dialog you have already dealt with.
 
-**A session counts as reviewed when you press any key in it within a minute of it
-finishing. Clicking into it or giving it focus is not enough** — that is what Claude
-Code's own idle notice keys on, and the plugin reads that notice. Codex sessions stay
+**A session counts as reviewed when you press any key in it within the review window
+of it finishing. Clicking into it or giving it focus is not enough** — that is what Claude
+Code's own idle notice keys on, and the plugin reads that notice. The window is 60 seconds by
+default, which is too short if you let a finished session sit, so run
+`/iriscale-voice:review-window 10` once (the npm installer sets it for you) and restart
+Claude Code. `/iriscale-voice:status` shows the value in effect. Codex sessions stay
 *ready for review* until your next prompt there. The `standard` preset also
 stays silent on turns under 30 seconds so it isn't chatty while you're actively working
 in that session. Underscores and hyphens are spoken as spaces, so name sessions like

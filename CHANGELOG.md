@@ -5,6 +5,30 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.27] — 2026-09-10
+
+### Fixed
+- **Welcome-back summaries were silent.** The line was launched with its stdin pointed at
+  `/dev/null`, which discarded the message being piped in, so the log showed an empty
+  `WelcomeBack` and nothing was said. Now spoken with its text.
+
+### Added
+- **`/iriscale-voice:review-window 10`** (CLI: `iriscale-voice review-window [minutes|default]`) sets
+  Claude Code's idle window - the time after a turn ends during which a keypress in that
+  session still marks it reviewed - without anyone editing JSON. Backs `settings.json` up,
+  edits it with node or python3 when present and a careful text edit otherwise, validates the
+  result, restores the backup if it ever came out invalid. `status` recommends it while the
+  60 s default is in effect. `npx /voice install claude --apply` sets ten minutes
+  too, only when you have not chosen a value.
+
+### Changed
+- **The review window is visible and documented.** `status` says how long after a turn ends
+  a keypress still counts as reviewed, and the board footer states it (*reviewed = a key
+  pressed there within 60s of finishing*). It is Claude Code's `messageIdleNotifThresholdMs`;
+  the docs now recommend `600000` (ten minutes) because with the default a session you
+  return to after a couple of minutes can only be cleared by sending a prompt - Claude's
+  idle notice is one-shot, so typing later is invisible.
+
 ## [0.1.26] — 2026-09-10
 
 ### Fixed
@@ -544,7 +568,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.26...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.27...HEAD
+[0.1.27]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.26...v0.1.27
 [0.1.26]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.25...v0.1.26
 [0.1.25]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.24...v0.1.25
 [0.1.24]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.23...v0.1.24

@@ -91,7 +91,13 @@ no key was pressed in that session; the plugin listens for it. No notice inside 
 window means a key was pressed, so the row becomes *reviewed*; the notice arriving means
 nobody touched it, so it becomes *needs your review* and the reminders start. **Clicking
 into the session or giving it focus does not count; press a key.** The window is Claude
-Code's `messageIdleNotifThresholdMs` (default 60000) plus 30 s. Codex has no idle notice,
+Code's `messageIdleNotifThresholdMs` (default 60000) plus 30 s. **Run `iriscale-voice review-window 10`** (or
+`/iriscale-voice:review-window 10` in Claude Code) once and restart Claude Code: it sets that
+key to ten minutes, backing the file up first. With the default, a session you come back to
+after a couple of minutes can never become *reviewed* by typing (Claude's one-shot notice has
+already fired), only by sending a prompt. `npx /voice install claude --apply` sets it
+for you unless you chose a value. `review-window default` puts it back; `status` and the
+board footer show the window in effect. Codex has no idle notice,
 so Codex sessions stay *ready* until your next prompt there. **Needs your answer clears
 the moment you answer:** the tool you were asked about runs, Claude Code's `PostToolUse`
 hook fires, and the row goes back to *working* with its reminders cancelled (Codex has no
@@ -136,6 +142,7 @@ iriscale-voice sessions [--plain]  # every live session, one frame
 iriscale-voice board               # live board; click/number a row to raise it; q quits
 iriscale-voice focus <n|name|pid>  # raise a session's window (Windows; Linux with wmctrl)
 iriscale-voice forget <name|--all> # drop a row from the board now
+iriscale-voice review-window [N|default] # how long a keypress after a turn still marks it reviewed (sets Claude Code's idle window)
 iriscale-voice config list         # every key: current value, default, meaning
 iriscale-voice config get preset
 iriscale-voice config set preset basic

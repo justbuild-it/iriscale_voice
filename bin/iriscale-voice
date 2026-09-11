@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.26"
+VERSION="0.1.27"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -400,6 +400,8 @@ COMMANDS
                          (--once prints one frame; --open starts it in its own window)
   focus <n|name|pid>     bring a session's window (or its host IDE/terminal) to the front
   forget <name|--all>    drop a session from the board now (it returns on its next event)
+  review-window [N|default]  how long after a turn ends a keypress there still marks it reviewed
+                         (sets Claude Code's idle window in settings.json; 10 minutes recommended)
                          (Windows; Linux with wmctrl; not yet on macOS)
   install codex          print Codex config snippets with absolute paths
   install codex --apply  install script, PATH, skill, notify and hooks (Windows; on
@@ -435,6 +437,8 @@ cli_status() {
     echo "  config:   $CONF $( [ -f "$CONF" ] && echo '' || echo '(not created yet - using defaults)')"
     echo "  enabled:  $(cfg enabled true)   preset: $p   speaks on: $(preset_events "$p")"
     echo "  quiet:    $(cfg quiet_hours none)   min_turn: $(cfg min_turn_seconds "$(preset_min_turn "$p")")s   cooldown: $(cfg repeat_cooldown 60)s"
+    echo "  review:   a key pressed in a session within $(idle_window_label) of its turn ending marks it reviewed"
+    [ "$(idle_window_label)" = 60s ] && echo "            60 s is Claude Code's default and too short if you let a finished session sit: run /iriscale-voice:review-window 10"
     echo "  muted:    $(cfg mute_sessions none)   only: $(cfg only_sessions all)"
     echo "  voice:    $(cfg voice default)   volume: $(cfg volume 100)   rate: $(cfg rate 0)   os: $(os)"
     echo "  log:      $(cfg log "$CLAUDE_DIR/iriscale-voice.log")"
@@ -895,6 +899,10 @@ next_remind() {   # next_remind <kind> <since> <reminded-so-far> -> epoch of the
     case $_pick in ''|*[!0-9]*) return 0 ;; esac
     printf '%s' $(( $2 + _pick * 60 ))
 }
+idle_window_label() {   # the window as people read it: "60s", "10m"
+    _s=$(( $(idle_window) - 30 ))
+    if [ "$_s" -ge 120 ] && [ $(( _s % 60 )) -eq 0 ]; then printf "%sm" $(( _s / 60 )); else printf "%ss" "$_s"; fi
+}
 idle_window() {   # seconds after a turn end by which Claude's idle notice has fired, plus grace
     _w=60000
     if [ -f "$CLAUDE_DIR/settings.json" ]; then
@@ -986,6 +994,68 @@ cli_watch() {
         _d=$(( _next - _wnow )); [ "$_d" -gt 0 ] && sleep "$_d"
         cli_tick "$_wsid" >/dev/null 2>&1
     done
+}
+
+# ---------- review-window: set Claude Code's idle window for the user --------------
+# The review window is Claude Code's messageIdleNotifThresholdMs in ~/.claude/settings.json.
+# Its 60 s default is too short for this plugin's "reviewed" inference, and nobody should
+# have to hand-edit JSON to use a notifier. This edits the file for them: a backup first,
+# node or python3 for the JSON when present (they keep every other key exactly), and a
+# careful text edit of the top-level object otherwise, validated afterwards when any
+# validator exists. The plugin cannot ship this setting itself; the npm installer sets it
+# too (only when absent, never over a value you chose).
+json_validate() {   # json_validate <file>: 0 valid, 1 invalid, 2 no validator here
+    if command -v node >/dev/null 2>&1; then node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$1" >/dev/null 2>&1; return $?
+    elif command -v python3 >/dev/null 2>&1; then python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' "$1" >/dev/null 2>&1; return $?
+    fi
+    return 2
+}
+cli_review_window() {
+    _sf="$CLAUDE_DIR/settings.json"
+    case ${1:-} in
+        '')  echo "review window: a key pressed in a session within $(idle_window_label) of its turn ending marks it reviewed"
+             echo "  (Claude Code messageIdleNotifThresholdMs in $_sf)"
+             [ "$(idle_window_label)" = 60s ] && echo "  60 s is Claude Code's default and too short if you let a finished session sit; run: iriscale-voice review-window 10"
+             return 0 ;;
+        default) _ms=60000 ;;
+        *[!0-9]*) echo "usage: iriscale-voice review-window [minutes|default]   (1-120; Claude Code's default is 1)" >&2; return 2 ;;
+        *) [ "$1" -ge 1 ] && [ "$1" -le 120 ] || { echo "review-window: minutes must be 1-120" >&2; return 2; }; _ms=$(( $1 * 60000 )) ;;
+    esac
+    [ -d "$CLAUDE_DIR" ] || mkdir -p "$CLAUDE_DIR" 2>/dev/null
+    if [ -f "$_sf" ]; then
+        cp -p "$_sf" "$_sf.iriscale-backup-$(date +%Y%m%d-%H%M%S 2>/dev/null || echo bak)" 2>/dev/null
+        if [ -z "${IRISCALE_VOICE_NO_JSON_TOOLS:-}" ] && command -v node >/dev/null 2>&1; then
+            node -e 'const fs=require("fs"),f=process.argv[1],ms=+process.argv[2];const d=JSON.parse(fs.readFileSync(f,"utf8"));d.messageIdleNotifThresholdMs=ms;fs.writeFileSync(f,JSON.stringify(d,null,2)+"\n")' "$_sf" "$_ms" || { echo "review-window: $_sf is not valid JSON; fix it, then re-run" >&2; return 1; }
+        elif [ -z "${IRISCALE_VOICE_NO_JSON_TOOLS:-}" ] && command -v python3 >/dev/null 2>&1; then
+            python3 -c 'import json,sys; f=sys.argv[1]; d=json.load(open(f,encoding="utf-8")); d["messageIdleNotifThresholdMs"]=int(sys.argv[2]); open(f,"w",encoding="utf-8").write(json.dumps(d,indent=2)+"\n")' "$_sf" "$_ms" || { echo "review-window: $_sf is not valid JSON; fix it, then re-run" >&2; return 1; }
+        else
+            # text edit: replace the key if present, else insert it right after the opening brace
+            _c=""; while IFS= read -r _l || [ -n "$_l" ]; do _c="$_c$_l$NL"; done < "$_sf"
+            case $_c in
+                *'"messageIdleNotifThresholdMs"'*)
+                    _pre=${_c%%'"messageIdleNotifThresholdMs"'*}; _post=${_c#*'"messageIdleNotifThresholdMs"'}
+                    _post=${_post#*:}; while case $_post in ' '*) true ;; *) false ;; esac; do _post=${_post#?}; done
+                    while case $_post in [0-9]*) true ;; *) false ;; esac; do _post=${_post#?}; done
+                    printf '%s"messageIdleNotifThresholdMs": %s%s' "$_pre" "$_ms" "$_post" > "$_sf" ;;
+                *'{'*)
+                    _pre=${_c%%\{*}; _post=${_c#*\{}; _t=$_post
+                    while case $_t in [[:space:]]*) true ;; *) false ;; esac; do _t=${_t#?}; done
+                    case $_t in '}'*) printf '%s{\n  "messageIdleNotifThresholdMs": %s\n%s' "$_pre" "$_ms" "$_t" > "$_sf" ;;
+                              *)   printf '%s{\n  "messageIdleNotifThresholdMs": %s,%s' "$_pre" "$_ms" "$_post" > "$_sf" ;; esac ;;
+                *) echo "review-window: $_sf does not look like a JSON object; edit it by hand: \"messageIdleNotifThresholdMs\": $_ms" >&2; return 1 ;;
+            esac
+        fi
+    else
+        printf '{\n  "messageIdleNotifThresholdMs": %s\n}\n' "$_ms" > "$_sf"
+    fi
+    json_validate "$_sf"; _rc=$?
+    if [ "$_rc" = 1 ]; then
+        _b=$(ls -t "$_sf".iriscale-backup-* 2>/dev/null | sed -n 1p); [ -n "$_b" ] && cp -p "$_b" "$_sf"
+        echo "review-window: the edit did not produce valid JSON; $_sf was restored from its backup. Add by hand: \"messageIdleNotifThresholdMs\": $_ms" >&2; return 1
+    fi
+    echo "review window: a key pressed in a session within $(idle_window_label) of its turn ending marks it reviewed"
+    echo "  (messageIdleNotifThresholdMs=$_ms in $_sf). Restart Claude Code to apply."
+    return 0
 }
 
 # ---------- session board -----------------------------------------------------
@@ -1101,7 +1171,7 @@ cli_sessions() {
     done
     printf "\n  ${R}*${N} needs your answer   ${M}*${N} needs your action   ${G}*${N} ready for review   ${Y}*${N} working   ${D}o${N} reviewed${EL}\n"
     [ "$keys" = 1 ] && printf "  ${D}click a row or press its number to bring it to the front - q quits${N}${EL}\n"
-    [ "$keys" = 1 ] && printf "  ${D}any key in a session marks it reviewed - clicking or focusing it is not enough${N}${EL}\n"
+    [ "$keys" = 1 ] && printf "  ${D}reviewed = a key pressed there within %s of finishing (not a click or focus)${N}${EL}\n" "$(idle_window_label)"
     return 0   # (a trailing failed [ ] test made `sessions` exit 1 - caught by CI)
 }
 # _row agent name status since updated said pid -> "prio|agent|name|status|age|said|pid" (or nothing if hidden)
@@ -1322,6 +1392,7 @@ case "$EVENT" in
     board)   shift; cli_board "$@"; exit $? ;;
     focus)   shift; cli_focus "$@"; exit $? ;;
     forget)  shift; cli_forget "$@"; exit $? ;;
+    review-window) shift; cli_review_window "$@"; exit $? ;;
     tick)    shift; cli_tick "$@"; exit $? ;;      # (internal) apply the review lifecycle now
     watch)   shift; cli_watch "$@"; exit $? ;;     # (internal) follow one session-turn
     install) shift; cli_install "$@"; exit $? ;;
@@ -1547,7 +1618,7 @@ if [ "$EVENT" = "stamp" ]; then
                 if [ -n "$_sum" ]; then
                     _wl="while you were away: $_sum"
                     if [ -n "$IRISCALE_VOICE_DEBUG" ]; then echo "(welcome_back: would say: $_wl)"
-                    else printf '{"session_id":"%s","message":"%s"}' "$sid" "$(clean "$_wl")" | sh "$0" WelcomeBack </dev/null >/dev/null 2>&1 & fi
+                    else printf '{"session_id":"%s","message":"%s"}' "$sid" "$(clean "$_wl")" | sh "$0" WelcomeBack >/dev/null 2>&1 & fi
                 fi
             fi ;;
     esac
