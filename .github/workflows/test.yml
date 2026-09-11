@@ -69,9 +69,14 @@ jobs:
         run: sh test/npm.sh
       - name: installer preservation regression cases
         run: node test/audit-installer.js
+      - name: Codex notification and board regression cases
+        run: node test/codex-board.js
       - name: standalone PowerShell installer preservation
         if: runner.os == 'Windows' && matrix.node == '22'
         run: node test/audit-installer.js --powershell
+      - name: standalone PowerShell Codex notification
+        if: runner.os == 'Windows' && matrix.node == '22'
+        run: node test/codex-board.js --powershell
       - name: pack and install globally, then run the shim
         shell: bash
         run: |

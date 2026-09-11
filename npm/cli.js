@@ -36,7 +36,11 @@ function printPlan (agent) {
   console.log(`# ${AGENTS[agent].LABEL}: add --apply to write this for you (backing up every file it edits).`)
   console.log(`# The paths below live in ${L.root} - a fixed location, unlike an npx`)
   console.log('# cache or a global install under nvm, both of which move or vanish.')
-  if (!fs.existsSync(L.script)) {
+  if (U.isWindows) {
+    console.log('# Windows setup includes the shell script and .cmd launcher, plus the Codex JSON bridge:')
+    console.log(`#   ${L.notifyBridge}`)
+    console.log(`# Run iriscale-voice install ${agent} --apply to create these files and register the configuration.`)
+  } else if (!fs.existsSync(L.script)) {
     // Pasting the config is only half the job if nothing has been installed yet.
     console.log('#')
     console.log('# The script is NOT there yet. Put it there first (or just use --apply):')

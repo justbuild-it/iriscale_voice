@@ -26,6 +26,7 @@ $repo = "https://raw.githubusercontent.com/justbuild-it/iriscale_voice/$Ref"
 $binDir = Join-Path $InstallRoot 'bin'
 $scriptPath = Join-Path $binDir 'iriscale-voice'
 $launcherPath = Join-Path $binDir 'iriscale-voice.cmd'
+$notifyBridge = Join-Path $binDir 'iriscale-voice-notify.ps1'
 $completionPath = Join-Path $InstallRoot 'iriscale-voice-completion.ps1'
 $profileMarker = '# iriscale-voice completion'
 $skillDir = Join-Path $CodexHome 'skills\iriscale-voice'
@@ -112,7 +113,7 @@ function Replace-NotifyText([string]$Content, [string[]]$Replacement) {
 
 function Test-OurCommand($Command) {
     return $Command -is [string] -and $Command -match 'iriscale-voice' -and
-        $Command -match '\s(stamp|PermissionRequest|resume)\s*$'
+        $Command -match '\s(codex-)?(stamp|PermissionRequest|resume)\s*$'
 }
 function Remove-OurHooks($Groups) {
     foreach ($group in $Groups) {
@@ -249,6 +250,12 @@ if ($SourcePath) {
     Invoke-WebRequest "$repo/bin/iriscale-voice" -OutFile "$scriptPath.new"
 }
 Replace-File "$scriptPath.new" $scriptPath
+if ($SourcePath) {
+    Copy-Item -LiteralPath (Join-Path $SourcePath 'bin\iriscale-voice-notify.ps1') -Destination "$notifyBridge.new" -Force
+} else {
+    Invoke-WebRequest "$repo/bin/iriscale-voice-notify.ps1" -OutFile "$notifyBridge.new"
+}
+Replace-File "$notifyBridge.new" $notifyBridge
 $installedInstaller = Join-Path $InstallRoot 'install.ps1'
 if ($PSCommandPath) {
     if ((Resolve-Path -LiteralPath $PSCommandPath).Path -ne $installedInstaller) {
@@ -304,8 +311,7 @@ if (-not $SkipProfile) {
 }
 
 $configPath = Join-Path $CodexHome 'config.toml'
-$tomlLauncher = $launcherPath.Replace('\', '/')
-$notify = 'notify = ["' + $tomlLauncher.Replace('"', '\"') + '", "notify"]'
+$notify = 'notify = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "' + $notifyBridge.Replace('\', '/') + '", "' + $gitBash.Replace('\', '/') + '"]'
 $recordPath = Join-Path $InstallRoot 'powershell-install.json'
 $replaced = @()
 if (Test-Path -LiteralPath $recordPath) { $replaced = @((Get-Content -Raw -Encoding UTF8 -LiteralPath $recordPath | ConvertFrom-Json).replacedNotify) }
@@ -325,7 +331,7 @@ if (Test-Path -LiteralPath $hooksPath) {
 if ($hooksDoc.hooks -isnot [pscustomobject]) { $hooksDoc | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) -Force }
 foreach ($definition in @(@('UserPromptSubmit','stamp',10), @('PermissionRequest','PermissionRequest',30), @('PostToolUse','resume',10))) {
     $event, $argument, $timeout = $definition
-    $commandWindows = '"' + $launcherPath + '" ' + $argument
+    $commandWindows = '"' + $launcherPath + '" codex-' + $argument
     # Codex requires the portable command field even when commandWindows is
     # present. The Windows override alone is ignored and appears as Installed 0.
     $hook = @([pscustomobject]@{ hooks = @([pscustomobject]@{

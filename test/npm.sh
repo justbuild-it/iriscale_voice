@@ -56,7 +56,11 @@ gone "$SCRIPT" "install codex without --apply installed files"
 case $plan in *"$SCRIPT"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL the plan names the stable script path" ;; esac
 case $plan in *notify*)    pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL the plan prints the notify line" ;; esac
 # nothing is installed yet, so the plan has to say how to put the script there
-case $plan in *"chmod 755"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL the plan explains the manual copy" ;; esac
+if [ "$WINDOWS" = 1 ]; then
+    case $plan in *iriscale-voice-notify.ps1*"install codex --apply"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL the plan explains Windows bridge installation" ;; esac
+else
+    case $plan in *"chmod 755"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL the plan explains the manual copy" ;; esac
+fi
 
 # --- a Codex config that already has settings we must not lose -------------------
 cat > "$CONF" <<'EOF'

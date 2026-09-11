@@ -11,6 +11,8 @@
 
 VERSION="0.1.28"
 EVENT="${1:-Stop}"
+AGENT_HINT=""
+case $EVENT in codex-*) AGENT_HINT=codex; EVENT=${EVENT#codex-} ;; notify|notify-stdin) AGENT_HINT=codex ;; esac
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
 # Runtime files live under the user's config directory, never a shared /tmp name.
@@ -24,6 +26,7 @@ if [ ! -d "$STATE" ] || [ ! -O "$STATE" ]; then echo "cannot use private runtime
 _chmod=chmod; command -v chmod >/dev/null 2>&1 || _chmod=/bin/chmod
 "$_chmod" 700 "$STATE" 2>/dev/null || { echo "cannot protect runtime directory: $STATE" >&2; exit 1; }
 SESS="$CLAUDE_DIR/iriscale-voice-sessions"     # one state file per live session (any agent)
+CODEX_INDEX="${CODEX_HOME:-$HOME/.codex}/session_index.jsonl"
 
 # ---------- tiny helpers ------------------------------------------------------
 # PERFORMANCE NOTE. This script runs on every hook event, and on Windows/MSYS each
@@ -63,6 +66,25 @@ jget() {
         esac
     done
     printf '%s' "$_v"
+}
+
+# Codex appends rename records. Read the latest exact id match, accepting JSON
+# whitespace, and share this lookup between notifications and board refreshes.
+codex_name() {
+    _cn=""
+    if [ -f "$CODEX_INDEX" ]; then
+        while IFS= read -r _cj || [ -n "$_cj" ]; do
+            case $_cj in *"$1"*)
+                if [ "$(jget id "$_cj")" = "$1" ]; then _cn=$(jget thread_name "$_cj"); fi ;;
+            esac
+        done < "$CODEX_INDEX"
+    fi
+    printf '%s' "$_cn"
+}
+session_display_name() {  # agent, id, stored name
+    _dn=""
+    [ "$1" != codex ] || _dn=$(codex_name "$2")
+    printf '%s' "${_dn:-$3}"
 }
 
 # Unquoted number field: "pid":12345  (zero spawns)
@@ -604,27 +626,27 @@ cli_install() {
         esac
         cat <<EOF
 # Basic — add at the top of ~/.codex/config.toml
-notify = ["$shell_path", "$script_path", "notify"]
+notify = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${script_path%/*}/iriscale-voice-notify.ps1", "$shell_path"]
 
 # Full (optional) — save as ~/.codex/hooks.json; in /hooks verify Installed=1, then trust
 {
   "hooks": {
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command",
-        "command": "sh \"$script_path\" stamp",
-        "commandWindows": "\"$shell_path\" \"$script_path\" stamp",
+        "command": "sh \"$script_path\" codex-stamp",
+        "commandWindows": "\"$shell_path\" \"$script_path\" codex-stamp",
         "timeout": 10 } ] }
     ],
     "PermissionRequest": [
       { "hooks": [ { "type": "command",
-        "command": "sh \"$script_path\" PermissionRequest",
-        "commandWindows": "\"$shell_path\" \"$script_path\" PermissionRequest",
+        "command": "sh \"$script_path\" codex-PermissionRequest",
+        "commandWindows": "\"$shell_path\" \"$script_path\" codex-PermissionRequest",
         "timeout": 30 } ] }
     ],
     "PostToolUse": [
       { "hooks": [ { "type": "command",
-        "command": "sh \"$script_path\" resume",
-        "commandWindows": "\"$shell_path\" \"$script_path\" resume",
+        "command": "sh \"$script_path\" codex-resume",
+        "commandWindows": "\"$shell_path\" \"$script_path\" codex-resume",
         "timeout": 10 } ] }
     ]
   }
@@ -640,17 +662,17 @@ notify = ["$script_path", "notify"]
   "hooks": {
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command",
-        "command": "sh \"$script_path\" stamp",
+        "command": "sh \"$script_path\" codex-stamp",
         "timeout": 10 } ] }
     ],
     "PermissionRequest": [
       { "hooks": [ { "type": "command",
-        "command": "sh \"$script_path\" PermissionRequest",
+        "command": "sh \"$script_path\" codex-PermissionRequest",
         "timeout": 30 } ] }
     ],
     "PostToolUse": [
       { "hooks": [ { "type": "command",
-        "command": "sh \"$script_path\" resume",
+        "command": "sh \"$script_path\" codex-resume",
         "timeout": 10 } ] }
     ]
   }
@@ -1166,7 +1188,8 @@ cli_forget() {
     for _ff in "$SESS"/*; do
         [ -f "$_ff" ] || continue
         if [ "$1" != --all ]; then
-            _fn=""; while IFS= read -r _fl || [ -n "$_fl" ]; do case $_fl in name=*) _fn=${_fl#name=} ;; esac; done < "$_ff"
+            _fn=""; _fa=""; while IFS= read -r _fl || [ -n "$_fl" ]; do case $_fl in name=*) _fn=${_fl#name=} ;; agent=*) _fa=${_fl#agent=} ;; esac; done < "$_ff"
+            [ "$_fa" != codex ] || _fn=$(session_display_name "$_fa" "${_ff##*/}" "$_fn")
             [ "$_fn" = "$1" ] || continue
         fi
         rm -f "$_ff" 2>/dev/null && _fc=$((_fc+1))
@@ -1195,6 +1218,7 @@ cli_sessions() {
             case $l in agent=*) a=${l#agent=} ;; name=*) n=${l#name=} ;; status=*) st=${l#status=} ;;
                        since=*) since=${l#since=} ;; updated=*) upd=${l#updated=} ;; said=*) said=${l#said=} ;; pid=*) fp=${l#pid=} ;; note=*) snote=${l#note=} ;; esac
         done < "$sf"
+        [ "$a" != codex ] || n=$(session_display_name "$a" "${sf##*/}" "$n")
         seen="$seen ${sf##*/} "
         [ -n "$snote" ] && said=$snote   # what it is waiting on beats what it last said
         rows="$rows$(_row "$a" "$n" "$st" "${since:-0}" "${upd:-0}" "$said" "$fp")$NL"
@@ -1268,8 +1292,9 @@ cli_focus() {
     esac
     if [ -z "$fname" ]; then
         for sf in "$SESS"/*; do
-            [ -f "$sf" ] || continue; n=""; p=""
-            while IFS= read -r l || [ -n "$l" ]; do case $l in name=*) n=${l#name=} ;; pid=*) p=${l#pid=} ;; esac; done < "$sf"
+            [ -f "$sf" ] || continue; n=""; p=""; a=""
+            while IFS= read -r l || [ -n "$l" ]; do case $l in name=*) n=${l#name=} ;; pid=*) p=${l#pid=} ;; agent=*) a=${l#agent=} ;; esac; done < "$sf"
+            [ "$a" != codex ] || n=$(session_display_name "$a" "${sf##*/}" "$n")
             [ "$n" = "$target" ] && { fname=$n; fpid=$p; break; }
         done
     fi
@@ -1518,7 +1543,7 @@ case $EVENT in
     *)      while IFS= read -r _l || [ -n "$_l" ]; do payload="$payload$_l$NL"; done 2>/dev/null ;;
 esac
 case $EVENT in
-    notify|'{'*)
+    notify|notify-stdin|'{'*)
         _t=$(jget type "$payload"); [ -n "$_t" ] || _t=$(jget hook_event_name "$payload")
         case $_t in
             agent-turn-complete|"") EVENT=Stop ;;
@@ -1629,19 +1654,17 @@ fi
 # Codex CLI:   ~/.codex/session_index.jsonl, one {"id","thread_name"} per line.
 # Both scanned with builtins (no grep). Also records which agent this is and, for
 # Claude, its pid - both feed the session board.
-name=""; agent=""; pid=""
-if [ -n "$sid" ] && [ -d "$CLAUDE_DIR/sessions" ]; then
+name=""; agent="$AGENT_HINT"; pid=""
+if [ "$agent" != codex ] && [ -n "$sid" ] && [ -d "$CLAUDE_DIR/sessions" ]; then
     for f in "$CLAUDE_DIR"/sessions/*.json; do
         [ -f "$f" ] || continue
         IFS= read -r sj < "$f" || :
         case $sj in *"\"sessionId\":\"$sid\""*) name=$(jget name "$sj"); pid=$(jnum pid "$sj"); agent=claude; break ;; esac
     done
 fi
-CODEX_INDEX="${CODEX_HOME:-$HOME/.codex}/session_index.jsonl"
 if [ -z "$name" ] && [ -n "$sid" ] && [ -f "$CODEX_INDEX" ]; then
-    while IFS= read -r cj || [ -n "$cj" ]; do
-        case $cj in *"\"id\":\"$sid\""*) name=$(jget thread_name "$cj"); agent=codex; break ;; esac
-    done < "$CODEX_INDEX"
+    name=$(codex_name "$sid")
+    [ -z "$name" ] || agent=codex
 fi
 if [ -z "$agent" ]; then
     case $payload in

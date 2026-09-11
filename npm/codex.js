@@ -35,6 +35,7 @@ function tomlPath (p) {
 }
 
 function notifyLine (L) {
+  if (U.isWindows) return `notify = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${tomlPath(L.notifyBridge)}", "${tomlPath(U.gitBash())}"]`
   return `notify = ["${tomlPath(L.launcher)}", "notify"]`
 }
 
@@ -42,6 +43,7 @@ function notifyLine (L) {
 // requires the portable field even when the override is present, and shows
 // "Installed 0" without it.
 function hookCommand (L, arg) {
+  arg = `codex-${arg}`
   return U.isWindows ? `"${L.launcher}" ${arg}` : `sh '${L.script.replace(/'/g, "'\\''")}' ${arg}`
 }
 
@@ -295,6 +297,7 @@ function doctor () {
   for (const target of new Set([L.script, L.launcher])) {
     try { fs.accessSync(target, fs.constants.X_OK) } catch { bad(`missing or non-executable hook target: ${target}`) }
   }
+  if (U.isWindows && !fs.existsSync(L.notifyBridge)) bad(`missing notify bridge: ${L.notifyBridge}`)
   const stale = core.driftWarning()
   if (stale) bad(stale)
   console.log('  CHECK Restart Codex; open /hooks and confirm these handlers are installed and trusted.')
