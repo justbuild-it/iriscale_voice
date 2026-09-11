@@ -46,5 +46,6 @@ installation or user configuration.
 1. `iriscale-voice status` - is `enabled` true, is the event in the preset, quiet hours?
 2. `tail ~/.claude/iriscale-voice.log` - did the event arrive at all?
 3. Codex: `iriscale-voice doctor codex`, then `/hooks` in Codex must show `Installed 1`
-   and `Active 1` for `UserPromptSubmit` and `PermissionRequest`; restart Codex after
-   changing hooks.
+   and `Active 1` for `UserPromptSubmit`, `PermissionRequest`, and `PostToolUse`; restart
+   Codex after changing hooks. For target validation use `npx @iriscale/voice@latest doctor codex`.
+   `PostToolUse` clears an answered permission after the tool finishes, not on approval.

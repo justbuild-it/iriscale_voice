@@ -77,7 +77,7 @@ npx @iriscale/voice@latest install codex --apply
 > it finds the plugin enabled. `iriscale-voice doctor claude` checks all of it.
 > See [docs/install/npm.md](docs/install/npm.md).
 
-Restart Codex and your terminal, open `/hooks`, and trust the two hooks that show
+Restart Codex and your terminal, open `/hooks`, and trust the three hooks that show
 `Installed 1`. It installs the script to a stable directory, adds `iriscale-voice` to
 your `PATH`, installs the `$iriscale-voice` Codex skill, and merges Codex configuration
 — backing up every file it touches and rewriting only its own lines. Reversed exactly by
@@ -125,7 +125,7 @@ knob is in [docs/CONFIG.md](docs/CONFIG.md).
 
 The same thing exists as a normal command, **`iriscale-voice`**, for use outside Claude
 Code (`iriscale-voice --help`, `iriscale-voice config list`, …). `npm install -g
-iriscale-voice` puts it on your `PATH` on any OS (so does either Codex installer);
+@iriscale/voice` puts it on your `PATH` on any OS (so does either Codex installer);
 manual setup is in [docs/CONFIG.md → Command line](docs/CONFIG.md#command-line).
 
 ## See them all at once: the session board
@@ -173,8 +173,10 @@ Each first line is spoken **once**. Reminders follow only while a session still 
 you: merged into one sentence when several do, skipped while you are typing elsewhere
 (`remind_pause`), and capped by the schedule (`remind_answer` 3,10 · `remind_review` 15 ·
 `remind_action` 10 minutes; `basic` never reminds). Then silence; the board keeps the row.
-Answering a permission prompt or a question clears *needs your answer* the moment the
-tool runs, so no reminder follows a dialog you have already dealt with.
+The `PostToolUse` hook clears *needs your answer* after the approved tool finishes.
+Approval itself is not a prompt event, so a long-running tool can remain marked as
+waiting until its result arrives. Codex supports completion and approval alerts;
+this integration does not currently receive a Codex failure or idle event.
 
 **A session counts as reviewed when you press any key in it within the review window
 of it finishing. Clicking into it or giving it focus is not enough** — that is what Claude

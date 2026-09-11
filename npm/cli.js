@@ -71,25 +71,27 @@ function globalPackageDir () {
 // Upgrade the package, then re-apply every agent it is currently installed for, so the
 // stable copy and the configs never drift apart.
 function update () {
-  if (!globalPackageDir()) {
-    console.log('This copy is not a global npm install, so there is nothing to upgrade in place.')
-    console.log('Get the latest release and re-apply it with:')
-    console.log('  npx @iriscale/voice@latest install codex --apply     (or: install claude)')
-    return 0
-  }
   const marker = core.readMarker()
   const installed = Object.keys((marker && marker.agents) || {})
-  console.log('Fetching the latest release from npm...')
-  const r = spawnSync(U.npmBin, ['install', '-g', '@iriscale/voice@latest'], { stdio: 'inherit', ...npmOpts })
-  if (r.status !== 0) U.die('npm install -g @iriscale/voice@latest failed')
-  const dir = globalPackageDir()
-  if (!dir) U.die('the upgrade completed but the global package could not be located; re-run the installer by hand')
+  let dir = U.packageRoot()
+  if (globalPackageDir()) {
+    console.log('Fetching the latest release from npm...')
+    const r = spawnSync(U.npmBin, ['install', '-g', '@iriscale/voice@latest'], { stdio: 'inherit', ...npmOpts })
+    if (r.status !== 0) U.die('npm install -g @iriscale/voice@latest failed')
+    dir = globalPackageDir()
+    if (!dir) U.die('the upgrade completed but the global package could not be located; re-run the installer by hand')
+  } else console.log(`Applying package ${core.version()} to the recorded installations.`)
   if (!installed.length) {
     console.log('Upgraded. No agent is configured yet - run: iriscale-voice install codex --apply')
     return 0
   }
   for (const agent of installed) {
-    const re = spawnSync(process.execPath, [path.join(dir, 'npm', 'cli.js'), 'install', agent, '--apply'], { stdio: 'inherit' })
+    if (!AGENT_NAMES.includes(agent)) U.die(`unknown recorded agent: ${agent}`)
+    const home = marker.agents[agent].home
+    if (!home) U.die(`missing recorded home for ${agent}; re-run install ${agent} --apply`)
+    const env = { ...process.env, [agent === 'codex' ? 'CODEX_HOME' : 'CLAUDE_CONFIG_DIR']: home }
+    // Updating a runtime must not add a PATH entry that the original install skipped.
+    const re = spawnSync(process.execPath, [path.join(dir, 'npm', 'cli.js'), 'install', agent, '--apply', '--skip-path'], { stdio: 'inherit', env })
     if (re.status !== 0) U.die(`the new version installed but re-applying the ${agent} configuration failed`)
   }
   console.log('Restart your agents and your terminal.')
@@ -117,6 +119,7 @@ function main (argv) {
   // `doctor codex` lives in the shell script; `doctor claude` only makes sense for the
   // npx route, so it lives here. Everything else falls through untouched.
   if (cmd === 'doctor' && rest[0] === 'claude') return AGENTS.claude.doctor()
+  if (cmd === 'doctor' && rest[0] === 'codex') return AGENTS.codex.doctor()
   if (cmd === 'update' && !legacyPowerShellInstall()) return update()
 
   // `status` and `doctor codex` live in the shell script and cannot know the package

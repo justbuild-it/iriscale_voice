@@ -49,7 +49,7 @@ function hookGroups (L) {
   if (!doc.hooks) U.die(`${src} has no "hooks" key`)
   // Substitute into the parsed values, never the raw text: an install path containing a
   // backslash or a quote would otherwise turn valid JSON into invalid JSON.
-  const root = shPath(L.root)
+  const root = shPath(L.root).replace(/[\\"$`]/g, '\\$&')
   const subst = v => {
     if (typeof v === 'string') return v.split('${CLAUDE_PLUGIN_ROOT}').join(root)
     if (Array.isArray(v)) return v.map(subst)
@@ -71,7 +71,7 @@ function mergeHooks (L, done) {
   if (!doc.hooks || typeof doc.hooks !== 'object' || Array.isArray(doc.hooks)) doc.hooks = {}
   for (const [event, groups] of Object.entries(hookGroups(L))) {
     const existing = Array.isArray(doc.hooks[event]) ? doc.hooks[event] : []
-    doc.hooks[event] = existing.filter(g => !core.isOurGroup(g)).concat(groups)
+    doc.hooks[event] = core.withoutOurHooks(existing).concat(groups)
   }
   // The plugin's "reviewed" inference keys on Claude Code's idle notice, whose 60 s default
   // is too short once a finished session sits. Ten minutes, only when the user has not chosen.
@@ -104,8 +104,8 @@ function unmergeHooks (L, ours, record) {
   }
   for (const [event, groups] of Object.entries(doc.hooks)) {
     if (!Array.isArray(groups)) continue
-    const kept = groups.filter(g => !core.isOurGroup(g))
-    if (kept.length === groups.length) continue
+    const kept = core.withoutOurHooks(groups)
+    if (JSON.stringify(kept) === JSON.stringify(groups)) continue
     changed = true
     if (kept.length) doc.hooks[event] = kept
     else delete doc.hooks[event]              // leave no empty event behind

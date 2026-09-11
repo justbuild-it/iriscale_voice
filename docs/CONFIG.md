@@ -97,13 +97,13 @@ Code's `messageIdleNotifThresholdMs` (default 60000) plus 30 s. **Run `iriscale-
 `/iriscale-voice:review-window 10` in Claude Code) once and restart Claude Code: it sets that
 key to ten minutes, backing the file up first. With the default, a session you come back to
 after a couple of minutes can never become *reviewed* by typing (Claude's one-shot notice has
-already fired), only by sending a prompt. `npx /voice install claude --apply` sets it
+already fired), only by sending a prompt. `npx @iriscale/voice@latest install claude --apply` sets it
 for you unless you chose a value. `review-window default` puts it back; `status` and the
 board footer show the window in effect. Codex has no idle notice,
 so Codex sessions stay *ready* until your next prompt there. **Needs your answer clears
-the moment you answer:** the tool you were asked about runs, Claude Code's `PostToolUse`
-hook fires, and the row goes back to *working* with its reminders cancelled (Codex has no
-such hook, so there the row clears on your next prompt or the turn's end). Reminders and the
+after the approved tool finishes:** `PostToolUse` fires in Claude Code and Codex, and
+the row goes back to *working* with its reminders cancelled. A long-running tool may
+remain marked as waiting until its result arrives. Reminders and the
 welcome-back summary are the `remind_*` and `welcome_back` keys above.
 
 **What the speaker hears.** The log keeps the plain line; the synthesizer gets a version

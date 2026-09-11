@@ -1,4 +1,4 @@
-// Codex CLI: `notify` plus two hooks in ~/.codex, and the $iriscale-voice skill.
+// Codex CLI: `notify` plus three hooks in ~/.codex, and the $iriscale-voice skill.
 // The cross-platform equivalent of install.ps1.
 'use strict'
 
@@ -6,12 +6,14 @@ const fs = require('fs')
 const path = require('path')
 const U = require('./util')
 const core = require('./core')
+const { findTopLevelNotify } = require('./toml')
 
 const LABEL = 'Codex'
 
 const HOOK_EVENTS = [
   { event: 'UserPromptSubmit', arg: 'stamp', timeout: 10 },
-  { event: 'PermissionRequest', arg: 'PermissionRequest', timeout: 30 }
+  { event: 'PermissionRequest', arg: 'PermissionRequest', timeout: 30 },
+  { event: 'PostToolUse', arg: 'resume', timeout: 10 }
 ]
 
 function paths () {
@@ -29,7 +31,7 @@ function paths () {
 
 // TOML basic string: forward slashes on Windows so no backslash needs escaping.
 function tomlPath (p) {
-  return (U.isWindows ? p.replace(/\\/g, '/') : p).replace(/"/g, '\\"')
+  return JSON.stringify(U.isWindows ? p.replace(/\\/g, '/') : p).slice(1, -1)
 }
 
 function notifyLine (L) {
@@ -40,7 +42,7 @@ function notifyLine (L) {
 // requires the portable field even when the override is present, and shows
 // "Installed 0" without it.
 function hookCommand (L, arg) {
-  return U.isWindows ? `"${L.launcher}" ${arg}` : `sh "${L.script}" ${arg}`
+  return U.isWindows ? `"${L.launcher}" ${arg}` : `sh '${L.script.replace(/'/g, "'\\''")}' ${arg}`
 }
 
 function hookEntry (L, arg, timeout) {
@@ -52,21 +54,7 @@ function hookEntry (L, arg, timeout) {
 // Find the TOP-LEVEL `notify`, and only that. A `notify = ...` under a [table] header
 // belongs to that table and is a different key entirely - overwriting it would destroy a
 // user's setting AND leave the real top-level notify unset, so voice would never fire.
-// Returns [start, end] inclusive, spanning a multi-line array value, or null.
-function findTopLevelNotify (lines) {
-  for (let i = 0; i < lines.length; i++) {
-    if (/^\s*\[/.test(lines[i])) return null            // reached the first table: stop
-    if (!/^\s*notify\s*=/.test(lines[i])) continue
-    // A TOML array may span lines; consume until the brackets balance, or the value ends.
-    let depth = 0
-    for (let j = i; j < lines.length; j++) {
-      for (const ch of lines[j]) { if (ch === '[') depth++; else if (ch === ']') depth-- }
-      if (depth <= 0) return [i, j]
-    }
-    return [i, lines.length - 1]                          // unterminated: it is all ours
-  }
-  return null
-}
+// The TOML scanner is shared with installer diagnostics in ./toml.
 
 // Codex supports exactly one top-level `notify`, so ours has to take the place of any
 // other. Returns the value it displaced (if it was somebody else's) so uninstall can put
@@ -110,7 +98,7 @@ function mergeHooks (L, done) {
   if (!doc.hooks || typeof doc.hooks !== 'object' || Array.isArray(doc.hooks)) doc.hooks = {}
   for (const { event, arg, timeout } of HOOK_EVENTS) {
     const existing = Array.isArray(doc.hooks[event]) ? doc.hooks[event] : []
-    doc.hooks[event] = existing.filter(g => !core.isOurGroup(g)).concat(hookEntry(L, arg, timeout))
+    doc.hooks[event] = core.withoutOurHooks(existing).concat(hookEntry(L, arg, timeout))
   }
   U.writeText(L.hooks, JSON.stringify(doc, null, 2) + '\n')
   done.push('hooks.json')
@@ -125,6 +113,7 @@ function copySkill (L) {
 
 function preflight (L) {
   core.preflight()
+  if (fs.existsSync(L.config)) findTopLevelNotify(U.readText(L.config).split(/\r?\n/))
   if (fs.existsSync(L.hooks)) {
     let doc
     try { doc = JSON.parse(U.readText(L.hooks)) } catch {
@@ -151,6 +140,9 @@ function install (argv) {
     copySkill(L)
     const pathResult = argv.includes('--skip-path') ? { skipped: '--skip-path' } : core.linkOnPath(L)
     const previous = (core.readMarker() || {}).agents || {}
+    // Preserve the displaced notify when moving from the standalone Windows installer.
+    let legacy = {}
+    try { legacy = JSON.parse(U.readText(path.join(L.root, 'powershell-install.json'))) } catch {}
     const displaced = mergeNotify(L, done)
     mergeHooks(L, done)
     core.recordAgent(L, 'codex', {
@@ -158,7 +150,7 @@ function install (argv) {
       created,
       pathEntry: pathResult.added || null,
       // a re-install displaces our own line, which is not the user's - keep the first one
-      replacedNotify: displaced || (previous.codex && previous.codex.replacedNotify) || null
+      replacedNotify: displaced || (previous.codex && previous.codex.replacedNotify) || legacy.replacedNotify || null
     })
 
     if (argv.includes('--quiet')) return 0
@@ -205,8 +197,8 @@ function unmergeHooks (L, ours) {
   let changed = false
   for (const [event, groups] of Object.entries(doc.hooks)) {
     if (!Array.isArray(groups)) continue
-    const kept = groups.filter(g => !core.isOurGroup(g))
-    if (kept.length === groups.length) continue
+    const kept = core.withoutOurHooks(groups)
+    if (JSON.stringify(kept) === JSON.stringify(groups)) continue
     changed = true
     if (kept.length) doc.hooks[event] = kept
     else delete doc.hooks[event]              // leave no empty event behind
@@ -276,4 +268,39 @@ function plan () {
   return { layout: L, lines }
 }
 
-module.exports = { install, uninstall, plan, LABEL }
+function doctor () {
+  const L = paths()
+  let failed = false
+  const bad = message => { failed = true; console.log(`  ERROR ${message}`) }
+  console.log('Codex voice configuration')
+  try {
+    const lines = U.readText(L.config).split(/\r?\n/)
+    const span = findTopLevelNotify(lines)
+    if (!span || lines.slice(span[0], span[1] + 1).join('\n').trim() !== notifyLine(L)) {
+      bad('notify differs from this installation; reapply install codex --apply to restore its target')
+    } else console.log('  OK    completion notify points at this installation')
+  } catch (err) { bad(`cannot verify ${L.config}: ${err.message}`) }
+  try {
+    const doc = JSON.parse(U.readText(L.hooks))
+    for (const { event, arg } of HOOK_EVENTS) {
+      const groups = doc && doc.hooks && doc.hooks[event]
+      const handlers = Array.isArray(groups) ? groups.flatMap(g => g && Array.isArray(g.hooks) ? g.hooks : []) : []
+      const expected = hookCommand(L, arg)
+      const matches = handlers.filter(h => h && h.type === 'command' && h.command === expected &&
+        (!U.isWindows || !h.commandWindows || h.commandWindows === expected))
+      if (matches.length !== 1) bad(`${event}: expected exactly one handler pointing at ${L.launcher}`)
+      else console.log(`  OK    ${event} handler is configured`)
+    }
+  } catch (err) { bad(`cannot verify ${L.hooks}: ${err.message}`) }
+  for (const target of new Set([L.script, L.launcher])) {
+    try { fs.accessSync(target, fs.constants.X_OK) } catch { bad(`missing or non-executable hook target: ${target}`) }
+  }
+  const stale = core.driftWarning()
+  if (stale) bad(stale)
+  console.log('  CHECK Restart Codex; open /hooks and confirm these handlers are installed and trusted.')
+  console.log('  CHECK Run iriscale-voice test to check the speech backend; file checks cannot confirm audible output.')
+  console.log('  NOTE  PostToolUse clears an answered permission after the tool finishes; approval alone is not a prompt.')
+  return failed ? 1 : 0
+}
+
+module.exports = { install, uninstall, plan, doctor, LABEL }

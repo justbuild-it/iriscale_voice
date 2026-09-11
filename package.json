@@ -47,8 +47,8 @@
     "win32"
   ],
   "scripts": {
-    "test": "sh test/run.sh && sh test/npm.sh",
-    "prepublishOnly": "sh test/run.sh && sh test/npm.sh"
+    "test": "sh test/run.sh && sh test/npm.sh && sh test/audit-runtime.sh && node test/audit-installer.js",
+    "prepublishOnly": "npm test"
   },
   "publishConfig": {
     "access": "public"

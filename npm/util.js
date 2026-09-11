@@ -66,7 +66,7 @@ function backup (file) {
   const p = n => String(n).padStart(2, '0')
   const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-` +
                 `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
-  const dest = `${file}.iriscale-backup-${stamp}`
+  const dest = `${file}.iriscale-backup-${stamp}-${require('crypto').randomUUID()}`
   fs.copyFileSync(file, dest)
   return dest
 }

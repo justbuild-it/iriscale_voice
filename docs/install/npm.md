@@ -52,7 +52,7 @@ first, and it rewrites only its own lines — your model, theme, and other hooks
 |---|---|
 | the script | `~/.local/share/iriscale-voice/bin/iriscale-voice` (macOS/Linux, honours `XDG_DATA_HOME`) · `%LOCALAPPDATA%\Programs\iriscale-voice\bin\` (Windows, plus a `.cmd` launcher over Git Bash) |
 | `notify` | first line of `~/.codex/config.toml` — it is a top-level key, so it must precede any `[table]`. Codex allows only one, so a `notify` of your own is displaced and **given back on uninstall** |
-| two hooks | `UserPromptSubmit` and `PermissionRequest` in `~/.codex/hooks.json` |
+| three hooks | `UserPromptSubmit`, `PermissionRequest`, and `PostToolUse` in `~/.codex/hooks.json` |
 | the skill | `~/.codex/skills/iriscale-voice/` — invoke it in Codex as `$iriscale-voice` |
 | PATH | a symlink in `~/.local/bin`, or the install dir added to your Windows user PATH — **skipped entirely** if `iriscale-voice` already resolves durably (as it does after `npm install -g`; npx's own temporary shim does not count) |
 
@@ -80,10 +80,18 @@ on the old version. `update` does both — and `doctor` and `status` tell you wh
 have drifted apart (`STALE  your hooks run 0.1.23, but this package is 0.1.24`).
 
 ```sh
-npx @iriscale/voice@latest update    # npm upgrades, then re-applies every agent you
-                                    # have configured (codex, claude, or both)
-iriscale-voice update               # same, from a global install
+npx @iriscale/voice@latest update    # applies this latest package to recorded agent homes
+iriscale-voice update               # from a global install: upgrades npm, then reapplies
 ```
+
+Updating preserves the original PATH choice and recorded agent homes. Restart the
+agents and close/reopen the session board afterwards; an already running board keeps
+the code it started with. With the runtime-directory hardening update, old temporary
+turn clocks and cooldowns are deliberately not imported from shared temporary storage.
+
+`npx @iriscale/voice@latest doctor codex` validates the configured targets and hook
+structure. The shell-only `doctor codex` performs basic file checks and directs you
+to this deeper check; neither can confirm hook trust or that you heard the audio.
 
 ## Which `iriscale-voice` am I running?
 

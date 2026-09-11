@@ -5,6 +5,24 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+### Fixed
+- Preserve Codex TOML settings across quoted brackets, comments, multiline values,
+  and quoted keys; reject uncertain boundaries before installing. Both npm and
+  PowerShell installers preserve mixed hook groups and restore displaced notifications.
+- Scrub quoted credential prefixes and API-key header values before speech, logs,
+  and session state; skip environment assignments in program-only announcements.
+- Keep reminder schedules through duplicate events; install Codex's `PostToolUse`
+  resume hook to clear answered permissions after the tool finishes.
+- Make npx updates refresh the stable runtime at recorded agent homes. Protect
+  backup names against collisions and preserve Unicode Windows launcher paths.
+- Store scratch files in a private user configuration directory; reject symlinks and
+  directories owned by another user. Restart the board after upgrading.
+- Quote macOS Terminal launch paths, report speech/launch failures, and advertise
+  focus shortcuts only for supported rows. Add structural Codex installer diagnostics
+  without rejecting unrelated asynchronous hooks.
+- Correct package names and document Codex event limits. Add shared installer and
+  runtime regression coverage to CI and the prepublish checks.
+
 ## [0.1.28] — 2026-09-10
 
 ### Fixed

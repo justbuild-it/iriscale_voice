@@ -27,6 +27,9 @@ jobs:
         env:
           IRISCALE_VOICE_DEBUG: "1"
         run: ${{ matrix.shell }} test/run.sh
+      - name: runtime regression cases
+        shell: bash
+        run: ${{ matrix.shell }} test/audit-runtime.sh
       - name: help and status run
         shell: bash
         run: |
@@ -64,6 +67,11 @@ jobs:
       - name: installer suite
         shell: bash
         run: sh test/npm.sh
+      - name: installer preservation regression cases
+        run: node test/audit-installer.js
+      - name: standalone PowerShell installer preservation
+        if: runner.os == 'Windows' && matrix.node == '22'
+        run: node test/audit-installer.js --powershell
       - name: pack and install globally, then run the shim
         shell: bash
         run: |
