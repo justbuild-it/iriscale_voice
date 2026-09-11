@@ -2,6 +2,9 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 scratch=$(mktemp -d)
+# Git Bash may expose /tmp through a different physical path. The launcher
+# deliberately resolves its executable with pwd -P; compare the same form.
+scratch=$(CDPATH= cd -P -- "$scratch" && pwd -P)
 export CLAUDE_CONFIG_DIR="$scratch/config" TMPDIR="$scratch/tmp" CODEX_HOME="$scratch/codex"
 mkdir -p "$CLAUDE_CONFIG_DIR" "$TMPDIR" "$CODEX_HOME"
 trap 'rm -rf "$scratch"' EXIT
