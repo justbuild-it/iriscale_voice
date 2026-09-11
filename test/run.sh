@@ -739,5 +739,38 @@ printf '{}\n' > "$RWS"; IRISCALE_VOICE_NO_JSON_TOOLS=1 sh "$S" review-window 10 
 printf '{"a":1}' > "$RWS"; IRISCALE_VOICE_NO_JSON_TOOLS=1 sh "$S" review-window 10 >/dev/null; rwvalid "$RWS"; ok $? 0 "text edit: handles a compact object"
 rm -f "$RWS" "$RWS".iriscale-backup-*
 
+# 12. background work: Claude's idle notice is ignored while agents are still running (0.1.28)
+sh "$S" set preset standard >/dev/null
+BGI='{"session_id":"bgi-1","cwd":"/x/repo_digest","hook_event_name":"Stop","background_tasks":[{"id":"a1","type":"subagent","status":"running","description":"Reading check_z3 in audit.py"}],"session_crons":[]}'
+printf '%s' '{"session_id":"bgi-1","cwd":"/x/repo_digest","hook_event_name":"UserPromptSubmit","source":"user"}' | sh "$S" stamp >/dev/null
+printf '%s' "$BGI" | sh "$S" Stop >/dev/null
+out=$(printf '%s' '{"session_id":"bgi-1","cwd":"/x/repo_digest","hook_event_name":"Notification","notification_type":"idle_prompt"}' | sh "$S" idle_prompt)
+case "$out" in "SKIP  [idle_prompt] (background work still running"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL idle notice during background work must be ignored: $out" ;; esac
+grep -q '^status=working' "$SESSD/bgi-1";                          ok $? 0 "  the row stays working"
+grep -q '^note=waiting for 1 agent: Reading check z3' "$SESSD/bgi-1"; ok $? 0 "  and keeps its note (underscores are spoken as spaces)"
+printf '%s' '{"session_id":"bgi-1","cwd":"/x/repo_digest","hook_event_name":"Stop","background_tasks":[],"session_crons":[]}' | sh "$S" Stop >/dev/null
+out=$(printf '%s' '{"session_id":"bgi-1","cwd":"/x/repo_digest"}' | sh "$S" idle_prompt)
+case "$out" in "SPEAK [idle_prompt]"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL idle notice after the real finish must speak: $out" ;; esac
+grep -q '^status=review' "$SESSD/bgi-1";                           ok $? 0 "  and moves the row to needs your review"
+
+# 13. microphone awareness (Windows): the speaker file watches the consent store
+if [ "$(sh "$S" status | sed -n "s/.*os: //p" | sed "s/ .*//")" = win ]; then
+    SPK="${TMPDIR:-/tmp}/iriscale-voice/speak.ps1"; rm -f "$SPK"
+    IRISCALE_VOICE_DEBUG= PATH="$SHIM:$PATH" sh "$S" say "mic probe" >/dev/null 2>&1; sleep 4   # stubbed powershell; the file is written first
+    [ -f "$SPK" ];                                                  ok $? 0 "mic: speak.ps1 is written next to the state"
+    grep -q 'SpeakAsyncCancelAll' "$SPK";                           ok $? 0 "mic: speech is cut when the mic opens mid-sentence"
+    FAKE='HKCU:\Software\iriscale-voice-test\microphone\NonPackaged\fake.exe'
+    powershell.exe -NoProfile -Command "New-Item -Path '$FAKE' -Force | Out-Null; Set-ItemProperty -Path '$FAKE' -Name LastUsedTimeStart -Value 1 -Type QWord; Set-ItemProperty -Path '$FAKE' -Name LastUsedTimeStop -Value 0 -Type QWord" >/dev/null 2>&1
+    out=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SPK" -Probe -ConsentRoot 'HKCU:\Software\iriscale-voice-test\microphone' 2>/dev/null | tr -d '\r')
+    [ "$out" = "mic=inuse" ];                                       ok $? 0 "mic: an app with LastUsedTimeStop=0 counts as holding the mic"
+    powershell.exe -NoProfile -Command "Set-ItemProperty -Path '$FAKE' -Name LastUsedTimeStop -Value 2 -Type QWord" >/dev/null 2>&1
+    out=$(powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SPK" -Probe -ConsentRoot 'HKCU:\Software\iriscale-voice-test\microphone' 2>/dev/null | tr -d '\r')
+    [ "$out" = "mic=free" ];                                        ok $? 0 "mic: a closed session frees it"
+    t0=$(date +%s); powershell.exe -NoProfile -Command "Set-ItemProperty -Path '$FAKE' -Name LastUsedTimeStop -Value 0 -Type QWord" >/dev/null 2>&1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SPK" -Text "" -MicAware -MicWait 2 -ConsentRoot 'HKCU:\Software\iriscale-voice-test\microphone' >/dev/null 2>&1   # empty text: exits before speaking
+    powershell.exe -NoProfile -Command "Remove-Item -Path 'HKCU:\Software\iriscale-voice-test' -Recurse -Force" >/dev/null 2>&1
+    sh "$S" config list | grep -q '^mic_aware ';                    ok $? 0 "mic: mic_aware is a documented setting"
+fi
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

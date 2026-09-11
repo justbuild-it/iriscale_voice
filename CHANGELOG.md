@@ -5,6 +5,28 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.28] — 2026-09-10
+
+### Fixed
+- **No "waiting for you" while background agents are still running.** Claude Code's idle
+  timer does not look at background agents, so a minute after the main turn paused it
+  sent the idle notice and the plugin spoke it and moved the row to *needs your review*,
+  wiping the *waiting for 2 agents* note. The notice is now ignored while the row is
+  *working* (or *scheduled*) with work in flight; the row and its note stay put, and
+  "done" comes when the last agent lands and the real final turn ends. Permission
+  prompts and errors still speak.
+
+### Added
+- **Microphone awareness on Windows** (`mic_aware`, on; `mic_wait`, 30 s). Windows keeps
+  a per-app record of microphone use for its privacy indicator; while an app holds the
+  mic its stop time is zero. The speaker now waits while any app has the mic open
+  (dictation such as Wispr Flow or voice typing, a call) and, if the mic opens
+  mid-sentence, cancels the speech and says the line again once the mic closes - so the
+  plugin's words no longer land in your dictated prompt. Speech moved from an inline
+  PowerShell command to a small `speak.ps1` written next to the state; the hook path is
+  unchanged. macOS (CoreAudio) and Linux (PulseAudio/PipeWire) equivalents are on the
+  roadmap.
+
 ## [0.1.27] — 2026-09-10
 
 ### Fixed
@@ -568,7 +590,8 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.27...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.28...HEAD
+[0.1.28]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.27...v0.1.28
 [0.1.27]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.26...v0.1.27
 [0.1.26]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.25...v0.1.26
 [0.1.25]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.24...v0.1.25

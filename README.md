@@ -21,6 +21,11 @@ you're on and then switch. That's the whole product.
 - Speaks the **session name** (`/rename` it, or it uses the folder name)
 - **Done · stopped with an error · waiting for your answer to run `<command>`**
 - Presets from *"just tell me when it's done"* to *"tell me everything"*
+- **Dictating?** On Windows it waits while any app has the microphone open (Wispr Flow, voice
+  typing, a call) and, if the mic opens mid-sentence, stops and repeats itself afterwards —
+  its words stay out of your transcript. Off with `mic_aware=false`.
+- Waits for background agents: a turn that pauses while subagents run is *working*, not
+  "done", and Claude Code's own "waiting for you" is ignored until the job really ends
 - Concurrent sessions **queue** instead of talking over each other; the same line is never
   repeated inside a minute
 - Works for **Claude Code** and **Codex CLI** today, one config for both; more agents mapped
@@ -96,7 +101,7 @@ Windows without Node? The PowerShell installer does the same job, and additional
 up tab completion (Git for Windows is its only prerequisite):
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.27/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.28/install.ps1 | iex
 ```
 
 Prefer to read either installer first? [SECURITY.md](SECURITY.md) shows how.

@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.27"
+VERSION="0.1.28"
 EVENT="${1:-Stop}"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
@@ -286,10 +286,54 @@ speak() {
     case $voice in *[!A-Za-z0-9\ ._\(\)-]*) voice="" ;; esac
     case "$(os)" in
         win)
-            ps="Add-Type -AssemblyName System.Speech; \$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; \$s.Volume=$vol; \$s.Rate=$rate;"
-            [ -n "$voice" ] && ps="$ps try { \$s.SelectVoice('$voice') } catch {};"
-            ps="$ps \$s.Speak('$text')"
-            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ps" >/dev/null 2>&1 ;;
+            # Speech runs through a small PowerShell file so it can watch the microphone:
+            # Windows keeps a per-app record of mic use for its privacy indicator, and while
+            # an app holds the mic (dictation such as Wispr Flow or voice typing, a call)
+            # LastUsedTimeStop is 0. An announcement spoken then lands in the transcript, so
+            # with mic_aware the speaker waits up to mic_wait seconds for the mic to close,
+            # and if it opens mid-sentence it stops and says the line again afterwards.
+            # This runs in the detached speaker, never on the hook path.
+            cfgv mic_aware mic_aware true; cfgv mic_wait mic_wait 30
+            case $mic_wait in ''|*[!0-9]*) mic_wait=30 ;; esac
+            [ -d "$STATE" ] || mkdir -p -m 700 "$STATE" 2>/dev/null
+            cat > "$STATE/speak.ps1.$$" <<'EOF'
+# iriscale voice speaker (Windows) - rewritten by bin/iriscale-voice before each announcement.
+param([string]$Text = '', [int]$Volume = 100, [int]$Rate = 0, [string]$Voice = '', [int]$MicWait = 30,
+      [switch]$MicAware, [switch]$Probe,
+      [string]$ConsentRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone')
+function MicInUse {
+  try {
+    foreach ($k in (Get-ChildItem -Path $ConsentRoot -Recurse -ErrorAction SilentlyContinue)) {
+      $p = Get-ItemProperty -Path $k.PSPath -ErrorAction SilentlyContinue
+      if ($null -ne $p.LastUsedTimeStart -and $p.LastUsedTimeStart -gt 0 -and
+          ($p.LastUsedTimeStop -eq 0 -or $p.LastUsedTimeStart -gt $p.LastUsedTimeStop)) { return $true }
+    }
+  } catch {}
+  return $false
+}
+if ($Probe) { if (MicInUse) { 'mic=inuse' } else { 'mic=free' }; exit 0 }
+if ($Text -eq '') { exit 0 }
+function WaitMic { $w = 0; while ($MicAware -and (MicInUse) -and $w -lt $MicWait) { Start-Sleep -Seconds 1; $w++ } }
+Add-Type -AssemblyName System.Speech
+$s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$s.Volume = $Volume; $s.Rate = $Rate
+if ($Voice) { try { $s.SelectVoice($Voice) } catch {} }
+WaitMic
+$attempt = 0
+do {
+  $attempt++; $cut = $false
+  $prompt = $s.SpeakAsync($Text)
+  while (-not $prompt.IsCompleted) {
+    Start-Sleep -Milliseconds 500
+    if ($MicAware -and (MicInUse)) { $s.SpeakAsyncCancelAll(); $cut = $true; break }
+  }
+  if ($cut) { Start-Sleep -Seconds 1; WaitMic; Start-Sleep -Milliseconds 400 }
+} while ($cut -and $attempt -lt 3)
+$s.Dispose()
+EOF
+            mv -f "$STATE/speak.ps1.$$" "$STATE/speak.ps1" 2>/dev/null
+            _mic=""; [ "$mic_aware" = true ] && _mic=-MicAware
+            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$STATE/speak.ps1" -Voice "$voice" -Volume "$vol" -Rate "$rate" -MicWait "$mic_wait" $_mic -Text "$text" >/dev/null 2>&1 ;;
         mac)
             # say: rate is words/min (default ~175); map our -10..10 onto 120..300
             wpm=$((175 + rate * 12))
@@ -345,6 +389,8 @@ voice|(OS default)|a name from \`iriscale-voice voices\` (macOS: say -v ?; Windo
 pronounce|(none)|how to say words the synthesizer gets wrong: word=spoken pairs, comma-separated, whole word, any case (iriscale=eye riss scale,naro=nah row)
 rate|0|speaking speed, -10 slow .. 10 fast
 volume|100|0-100 (Windows only; others use system volume)
+mic_aware|true|Windows: hold an announcement while any app has the microphone open (dictation, a call); if it opens mid-sentence, stop and say the line again after
+mic_wait|30|seconds to wait for the microphone to close before speaking anyway
 serialize|true|queue announcements so concurrent sessions never overlap
 log|$CLAUDE_DIR/iriscale-voice.log|tab-separated activity log; \`none\` disables
 board_hide_hours|24|a session with no process and no event for this long is forgotten (Codex records no pid)
@@ -1629,7 +1675,11 @@ case $EVENT in
     StepDone)          st_new=working ;;
     Scheduled)         st_new=scheduled ;;
     PermissionRequest) st_new=blocked ;;
-    idle_prompt)       st_new=review; case $(st_get "$SESS/$sid" status) in blocked|error) st_new="" ;; esac ;;
+    idle_prompt)       st_new=review; _cs=""; _cn=""; bg_hold=""
+                       [ -n "$sid" ] && [ -f "$SESS/$sid" ] && while IFS= read -r _l || [ -n "$_l" ]; do case $_l in status=*) _cs=${_l#status=} ;; note=*) _cn=${_l#note=} ;; esac; done < "$SESS/$sid"
+                       case $_cs in blocked|error) st_new="" ;;
+                                  working|scheduled) [ -n "$_cn" ] && { st_new=""; bg_hold=1; } ;;   # Claude's idle timer ignores background agents; we do not
+                       esac ;;
     StopFailure)       st_new=error ;;
     SessionEnd)        st_new=""; [ -n "$sid" ] && rm -f "$SESS/$sid" 2>/dev/null ;;
     *)                 st_new="" ;;
@@ -1642,6 +1692,7 @@ while [ -n "$_n" ]; do _c=${_n%"${_n#?}"}; _n=${_n#?}; case $_c in _|-) _c=' ' ;
 reason=""
 cfgv preset preset standard
 [ -n "$IRISCALE_VOICE_OFF" ]            && reason="muted via IRISCALE_VOICE_OFF"
+[ -z "$reason" ] && [ "${bg_hold:-}" = 1 ] && reason="background work still running - Claude's idle notice ignored"
 cfgv enabled enabled true
 [ -z "$reason" ] && [ "$enabled" != "true" ] && reason="disabled (enabled=false)"
 
