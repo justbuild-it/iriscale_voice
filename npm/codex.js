@@ -36,7 +36,11 @@ function paths () {
 // "Installed 0" without it.
 function hookCommand (L, arg) {
   arg = `codex-${arg}`
-  return U.isWindows ? `"${L.launcher}" ${arg}` : `sh '${L.script.replace(/'/g, "'\\''")}' ${arg}`
+  if (!U.isWindows) return `sh '${L.script.replace(/'/g, "'\\''")}' ${arg}`
+  // Codex uses the session shell, which may be PowerShell or cmd. Encode the
+  // literal invocation so neither outer shell interprets the installed path.
+  const invocation = `& '${L.launcher.replace(/'/g, "''")}' ${arg}; exit $LASTEXITCODE`
+  return 'powershell.exe -NoProfile -NonInteractive -EncodedCommand ' + Buffer.from(invocation, 'utf16le').toString('base64')
 }
 
 function hookEntry (L, arg, timeout) {

@@ -74,6 +74,13 @@ restarting Codex.
 
 ## Why lifecycle hooks are required
 
+On Windows, Codex runs hooks through the session's shell. Voice generates an
+explicit PowerShell invocation that also works from cmd. The UTF-16 encoded
+command preserves literal installation paths across both shells; it decodes to
+the launcher path, one fixed event argument, and exit-code propagation. Reapply
+the installer and review the changed hooks if an older setup reports
+`Unexpected token 'codex-stamp'` or `hook exited with code 1` on prompt submission.
+
 Legacy Codex `notify` also runs for temporary internal requests. Those requests
 have no user-visible session name, so they produced misleading project-folder
 announcements and extra board rows. Lifecycle hooks are disabled for those internal

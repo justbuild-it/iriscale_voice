@@ -586,6 +586,14 @@ npm_only() {
     return 2
 }
 
+codex_windows_command() {
+    IRISCALE_HOOK_SHELL="$shell_path" IRISCALE_HOOK_SCRIPT="$script_path" IRISCALE_HOOK_EVENT="codex-$1" powershell.exe -NoProfile -NonInteractive -Command '
+        $q = [string][char]39
+        $invoke = "& " + $q + $env:IRISCALE_HOOK_SHELL.Replace($q, $q+$q) + $q + " " + $q + $env:IRISCALE_HOOK_SCRIPT.Replace($q, $q+$q) + $q + " " + $env:IRISCALE_HOOK_EVENT + "; exit " + [char]36 + "LASTEXITCODE"
+        "powershell.exe -NoProfile -NonInteractive -EncodedCommand " + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($invoke))
+    ' | tr -d '\r\n'
+}
+
 cli_install() {
     agent=$1
     [ "$agent" = claude ] && { npm_only install claude --apply; return $?; }
@@ -638,31 +646,31 @@ cli_install() {
     "Stop": [
       { "hooks": [ { "type": "command",
         "command": "sh \"$script_path\" codex-Stop",
-        "commandWindows": "\"$shell_path\" \"$script_path\" codex-Stop",
+        "commandWindows": "$(codex_windows_command Stop)",
         "timeout": 10 } ] }
     ],
     "SessionEnd": [
       { "hooks": [ { "type": "command",
         "command": "sh \"$script_path\" codex-SessionEnd",
-        "commandWindows": "\"$shell_path\" \"$script_path\" codex-SessionEnd",
+        "commandWindows": "$(codex_windows_command SessionEnd)",
         "timeout": 3 } ] }
     ],
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command",
         "command": "sh \"$script_path\" codex-stamp",
-        "commandWindows": "\"$shell_path\" \"$script_path\" codex-stamp",
+        "commandWindows": "$(codex_windows_command stamp)",
         "timeout": 10 } ] }
     ],
     "PermissionRequest": [
       { "hooks": [ { "type": "command",
         "command": "sh \"$script_path\" codex-PermissionRequest",
-        "commandWindows": "\"$shell_path\" \"$script_path\" codex-PermissionRequest",
+        "commandWindows": "$(codex_windows_command PermissionRequest)",
         "timeout": 30 } ] }
     ],
     "PostToolUse": [
       { "hooks": [ { "type": "command",
         "command": "sh \"$script_path\" codex-resume",
-        "commandWindows": "\"$shell_path\" \"$script_path\" codex-resume",
+        "commandWindows": "$(codex_windows_command resume)",
         "timeout": 10 } ] }
     ]
   }

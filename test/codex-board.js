@@ -39,14 +39,28 @@ try {
     const command = hooks[event][0].hooks[0]
     assert.ok(command, `missing ${event} handler`)
     if (U.isWindows) {
-      const r = spawnSync(process.env.COMSPEC || 'cmd.exe', ['/d', '/s', '/c', `"${command.commandWindows}"`],
-        { env, input: JSON.stringify(payload), encoding: 'utf8', windowsVerbatimArguments: true, timeout: 60000 })
+      const powerShell = process.argv.includes('--hook-powershell')
+      const r = spawnSync(powerShell ? 'powershell.exe' : (process.env.COMSPEC || 'cmd.exe'),
+        powerShell ? ['-NoProfile', '-NonInteractive', '-Command', command.commandWindows]
+          : ['/d', '/s', '/c', `"${command.commandWindows}"`],
+        { env, input: JSON.stringify(payload), encoding: 'utf8', windowsVerbatimArguments: !powerShell, timeout: 60000 })
       assert.equal(r.status, 0, r.stdout + r.stderr)
       return r.stdout
     }
     return run('sh', ['-c', command.command], JSON.stringify(payload))
   }
   const index = path.join(env.CODEX_HOME, 'session_index.jsonl')
+  if (U.isWindows && process.argv.includes('--hook-powershell')) {
+    const plan = run(shell, [script, 'install', 'codex'])
+    const manual = JSON.parse(plan.slice(plan.indexOf('{'), plan.lastIndexOf('}') + 1)).hooks
+    for (const event of ['UserPromptSubmit', 'SessionEnd']) {
+      const installed = hooks[event]
+      hooks[event] = manual[event]
+      assert.equal(invokeHook(event, { session_id: 'manual-probe', cwd: 'C:\\work', hook_event_name: event }), '')
+      hooks[event] = installed
+    }
+    console.log('ok: manual Windows hook plan executes through PowerShell')
+  }
   const stateFile = path.join(env.CLAUDE_CONFIG_DIR, 'iriscale-voice-sessions/probe')
   const cwd = 'C:\\Users\\deang\\projects\\iriscale_voice'
   const notify = () => invokeHook('Stop', { session_id: 'probe', hook_event_name: 'Stop', cwd,

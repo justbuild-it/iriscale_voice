@@ -6,6 +6,8 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 ## [Unreleased]
 
 ### Fixed
+- Launch Windows Codex hooks correctly from PowerShell as well as cmd, fixing
+  prompt-submit "Hook failed / hook exited with code 1" errors before the runtime starts.
 - Use Codex `Stop` and `SessionEnd` lifecycle hooks for completion and cleanup,
   excluding temporary internal requests from alerts and the board. Remove the old
   voice notifier while restoring unrelated notifier settings. Reapply installation

@@ -135,6 +135,11 @@ function Test-LegacyVoiceNotify([string[]]$Lines) {
 }
 
 function Test-OurCommand($Command) {
+    if ($Command -is [string] -and $Command -cmatch '^powershell\.exe -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$') {
+        try { $Command = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($Matches[1])) } catch { return $false }
+        if (-not $Command.StartsWith('& ') -or -not $Command.EndsWith('; exit $LASTEXITCODE')) { return $false }
+        $Command = $Command.Substring(0, $Command.Length - '; exit $LASTEXITCODE'.Length)
+    }
     return $Command -is [string] -and $Command -match 'iriscale-voice' -and
         $Command -match '\s(codex-)?(stamp|PermissionRequest|resume|Stop|SessionEnd)\s*$'
 }
@@ -354,7 +359,9 @@ if (Test-Path -LiteralPath $hooksPath) {
 if ($hooksDoc.hooks -isnot [pscustomobject]) { $hooksDoc | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) -Force }
 foreach ($definition in @(@('UserPromptSubmit','stamp',10), @('PermissionRequest','PermissionRequest',30), @('PostToolUse','resume',10), @('Stop','Stop',10), @('SessionEnd','SessionEnd',3))) {
     $event, $argument, $timeout = $definition
-    $commandWindows = '"' + $launcherPath + '" codex-' + $argument
+    # The session shell can be PowerShell or cmd. Neither may reinterpret paths.
+    $invocation = "& '" + $launcherPath.Replace("'", "''") + "' codex-" + $argument + '; exit $LASTEXITCODE'
+    $commandWindows = 'powershell.exe -NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($invocation))
     # Codex requires the portable command field even when commandWindows is
     # present. The Windows override alone is ignored and appears as Installed 0.
     $hook = @([pscustomobject]@{ hooks = @([pscustomobject]@{
