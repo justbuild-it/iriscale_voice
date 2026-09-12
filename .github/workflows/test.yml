@@ -77,6 +77,11 @@ jobs:
       - name: standalone PowerShell Codex notification
         if: runner.os == 'Windows' && matrix.node == '22'
         run: node test/codex-board.js --powershell
+      - name: Codex hooks through the PowerShell session shell
+        if: runner.os == 'Windows' && matrix.node == '22'
+        run: |
+          node test/codex-board.js --hook-powershell
+          node test/codex-board.js --powershell --hook-powershell
       - name: pack and install globally, then run the shim
         shell: bash
         run: |

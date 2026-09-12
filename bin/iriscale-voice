@@ -11,8 +11,13 @@
 
 VERSION="0.1.29"
 EVENT="${1:-Stop}"
+# Old Codex processes can retain notify configuration until restarted. Never
+# accept that unscoped stream: it includes Codex's internal temporary requests.
+case $EVENT in notify|notify-stdin) exit 0 ;; esac
 AGENT_HINT=""
 case $EVENT in codex-*) AGENT_HINT=codex; EVENT=${EVENT#codex-} ;; notify|notify-stdin) AGENT_HINT=codex ;; esac
+# Codex expects JSON or empty stdout from lifecycle hooks, including early exits.
+if [ "$AGENT_HINT" = codex ] && [ -n "$IRISCALE_VOICE_DEBUG" ]; then exec 1>&2; fi
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CONF="$CLAUDE_DIR/iriscale-voice.conf"
 # Runtime files live under the user's config directory, never a shared /tmp name.
@@ -480,11 +485,11 @@ COMMANDS
                          (sets Claude Code's idle window in settings.json; 10 minutes recommended)
                          (Windows; Linux with wmctrl; not yet on macOS)
   install codex          print Codex config snippets with absolute paths
-  install codex --apply  install script, PATH, skill, notify and hooks (Windows; on
+  install codex --apply  install script, PATH, skill and lifecycle hooks (Windows; on
                          macOS/Linux: npx @iriscale/voice@latest install codex --apply)
                          npm also installs Claude Code without the plugin:
                          npx @iriscale/voice@latest install claude --apply
-  doctor codex           diagnose Codex notify and hook configuration
+  doctor codex           diagnose Codex lifecycle hook configuration
                          (npm also: doctor claude)
   completions <shell>    print completion for powershell, bash, or zsh
   update                 install the latest release (Windows; npm installs own their own)
@@ -581,6 +586,14 @@ npm_only() {
     return 2
 }
 
+codex_windows_command() {
+    IRISCALE_HOOK_SHELL="$shell_path" IRISCALE_HOOK_SCRIPT="$script_path" IRISCALE_HOOK_EVENT="codex-$1" powershell.exe -NoProfile -NonInteractive -Command '
+        $q = [string][char]39
+        $invoke = "& " + $q + $env:IRISCALE_HOOK_SHELL.Replace($q, $q+$q) + $q + " " + $q + $env:IRISCALE_HOOK_SCRIPT.Replace($q, $q+$q) + $q + " " + $env:IRISCALE_HOOK_EVENT + "; exit " + [char]36 + "LASTEXITCODE"
+        "powershell.exe -NoProfile -NonInteractive -EncodedCommand " + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($invoke))
+    ' | tr -d '\r\n'
+}
+
 cli_install() {
     agent=$1
     [ "$agent" = claude ] && { npm_only install claude --apply; return $?; }
@@ -625,28 +638,39 @@ cli_install() {
                 [ -f "$wrapper" ] && shell_path=$wrapper ;;
         esac
         cat <<EOF
-# Basic — add at the top of ~/.codex/config.toml
-notify = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${script_path%/*}/iriscale-voice-notify.ps1", "$shell_path"]
+# Codex 0.154.0+: remove legacy iriscale-voice notify; keep unrelated notifiers.
 
-# Full (optional) — save as ~/.codex/hooks.json; in /hooks verify Installed=1, then trust
+# Save as ~/.codex/hooks.json; review and trust all five hooks in /hooks.
 {
   "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"$script_path\" codex-Stop",
+        "commandWindows": "$(codex_windows_command Stop)",
+        "timeout": 10 } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"$script_path\" codex-SessionEnd",
+        "commandWindows": "$(codex_windows_command SessionEnd)",
+        "timeout": 3 } ] }
+    ],
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command",
         "command": "sh \"$script_path\" codex-stamp",
-        "commandWindows": "\"$shell_path\" \"$script_path\" codex-stamp",
+        "commandWindows": "$(codex_windows_command stamp)",
         "timeout": 10 } ] }
     ],
     "PermissionRequest": [
       { "hooks": [ { "type": "command",
         "command": "sh \"$script_path\" codex-PermissionRequest",
-        "commandWindows": "\"$shell_path\" \"$script_path\" codex-PermissionRequest",
+        "commandWindows": "$(codex_windows_command PermissionRequest)",
         "timeout": 30 } ] }
     ],
     "PostToolUse": [
       { "hooks": [ { "type": "command",
         "command": "sh \"$script_path\" codex-resume",
-        "commandWindows": "\"$shell_path\" \"$script_path\" codex-resume",
+        "commandWindows": "$(codex_windows_command resume)",
         "timeout": 10 } ] }
     ]
   }
@@ -654,12 +678,21 @@ notify = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy",
 EOF
     else
         cat <<EOF
-# Basic — add at the top of ~/.codex/config.toml
-notify = ["$script_path", "notify"]
+# Codex 0.154.0+: remove legacy iriscale-voice notify; keep unrelated notifiers.
 
-# Full (optional) — save as ~/.codex/hooks.json; in /hooks verify Installed=1, then trust
+# Save as ~/.codex/hooks.json; review and trust all five hooks in /hooks.
 {
   "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"$script_path\" codex-Stop",
+        "timeout": 10 } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command",
+        "command": "sh \"$script_path\" codex-SessionEnd",
+        "timeout": 3 } ] }
+    ],
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command",
         "command": "sh \"$script_path\" codex-stamp",
@@ -1455,10 +1488,9 @@ cli_doctor() {
 
     echo "Codex voice configuration"
     if [ -f "$codex_config" ] && grep '^[[:space:]]*notify[[:space:]]*=' "$codex_config" | grep 'iriscale-voice' >/dev/null 2>&1; then
-        echo "  OK    completion notify is configured"
+        echo "  STALE legacy voice notify remains; reapply the Codex installation"; failed=1
     else
-        echo "  MISSING completion notify in $codex_config"
-        failed=1
+        echo "  OK    no legacy voice notify (completion uses Stop)"
     fi
 
     if [ ! -f "$codex_hooks" ]; then
@@ -1473,9 +1505,13 @@ cli_doctor() {
             echo "  OK    PermissionRequest hook is defined" || { echo "  MISSING PermissionRequest hook"; failed=1; }
         grep '"PostToolUse"' "$codex_hooks" >/dev/null 2>&1 &&
             echo "  OK    PostToolUse hook is defined" || { echo "  MISSING PostToolUse resume hook; reapply the installer"; failed=1; }
+        for event in Stop SessionEnd; do
+            grep "\"$event\"" "$codex_hooks" >/dev/null 2>&1 &&
+                echo "  OK    $event hook is defined" || { echo "  MISSING $event hook; reapply the installer"; failed=1; }
+        done
         command_count=$(grep -o '"command"[[:space:]]*:' "$codex_hooks" 2>/dev/null | wc -l | tr -d '[:space:]')
-        if [ "${command_count:-0}" -lt 3 ]; then
-            echo "  ERROR all three hooks require a command field"
+        if [ "${command_count:-0}" -lt 5 ]; then
+            echo "  ERROR all five hooks require a command field"
             failed=1
         else
             echo "  OK    hook command fields are defined"
@@ -1571,6 +1607,11 @@ if [ -n "$sid" ]; then
     _s=$sid; sid=""
     while [ -n "$_s" ]; do _ch=${_s%"${_s#?}"}; _s=${_s#?}; case $_ch in [A-Za-z0-9._-]) sid="$sid$_ch" ;; *) sid="${sid}_" ;; esac; done
     case $sid in ..|.|"") sid="" ;; *..*) sid=$(printf '%s' "$sid" | tr '.' '_') ;; esac
+fi
+
+if [ "$AGENT_HINT" = codex ] && [ "$EVENT" = SessionEnd ]; then
+    [ -z "$sid" ] || rm -f "$SESS/$sid" "$STATE/$sid.start" 2>/dev/null
+    exit 0
 fi
 
 # resume: PostToolUse - a tool just ran, so the agent is working again. That fires on

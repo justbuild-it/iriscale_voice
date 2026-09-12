@@ -65,4 +65,25 @@ function findTopLevelNotify (lines) {
   return found
 }
 
-module.exports = { findTopLevelNotify }
+// Recognize only command shapes emitted by our older installers. A comment or
+// message mentioning the product does not make somebody else's notifier ours.
+function isLegacyVoiceNotify (lines) {
+  try {
+    const assignment = lines.join('\n')
+    const rhs = assignment.slice(assignment.indexOf('=') + 1)
+      .replace(/"(?:[^"\\]|\\.)*"|#[^\r\n]*/g, token => token.startsWith('#') ? '' : token)
+      .trim().replace(/,\s*\]$/, ']')
+    const args = JSON.parse(rhs)
+    if (!Array.isArray(args) || !args.every(x => typeof x === 'string')) return false
+    const base = p => p.replace(/\\/g, '/').split('/').pop().toLowerCase()
+    const voice = p => ['iriscale-voice', 'iriscale-voice.cmd'].includes(base(p))
+    const shell = p => ['sh', 'sh.exe', 'bash', 'bash.exe'].includes(base(p))
+    if (args.length === 2) return voice(args[0]) && args[1] === 'notify'
+    if (args.length === 3) return shell(args[0]) && voice(args[1]) && args[2] === 'notify'
+    return args.length === 8 && ['powershell.exe', 'pwsh.exe'].includes(base(args[0])) &&
+      args.slice(1, 6).join(' ').toLowerCase() === '-noprofile -noninteractive -executionpolicy bypass -file' &&
+      base(args[6]) === 'iriscale-voice-notify.ps1' && shell(args[7])
+  } catch { return false }
+}
+
+module.exports = { findTopLevelNotify, isLegacyVoiceNotify }

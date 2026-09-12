@@ -45,6 +45,9 @@ function test (name, fn) {
 }
 
 const cases = [
+  'notify = ["notify-send", "iriscale-voice companion finished"]',
+  'notify = ["my-notifier", "keep"] # replaces iriscale-voice',
+  'notify = ["my-notifier", "/some/iriscale-voice-notify.ps1"]',
   'notify = ["echo", "["]',
   'notify = ["echo", "]"] # [',
   'notify = [\n  "echo", # [\n  "hello"\n]',
@@ -72,6 +75,25 @@ test('unfinished notify is refused before any write', () => {
   assert.notEqual(f.run().status, 0)
   assert.equal(fs.readFileSync(f.config, 'utf8'), original)
   assert.ok(!fs.existsSync(f.root), 'runtime was installed before validation')
+})
+
+test('migration restores a displaced notifier and does not displace it again', () => {
+  const f = fixture('legacy-notify')
+  f.success()
+  const original = 'notify = ["my-notifier", "keep"]'
+  const record = path.join(f.root, ps ? 'powershell-install.json' : 'install.json')
+  const data = JSON.parse(fs.readFileSync(record, 'utf8'))
+  if (ps) data.replacedNotify = [original]
+  else data.agents.codex.replacedNotify = [original]
+  fs.writeFileSync(record, JSON.stringify(data))
+  fs.writeFileSync(f.config, 'notify = ["/old/iriscale-voice", "notify"]\nmodel = "keep"\n')
+  f.success()
+  assert.equal(fs.readFileSync(f.config, 'utf8'), original + '\nmodel = "keep"\n')
+  const hooks = JSON.parse(fs.readFileSync(f.hooks, 'utf8')).hooks
+  assert.ok(hooks.Stop && hooks.SessionEnd)
+  f.success()
+  f.success('uninstall')
+  assert.equal(fs.readFileSync(f.config, 'utf8'), original + '\nmodel = "keep"\n')
 })
 test('mixed hook groups survive reinstall and uninstall', () => {
   const f = fixture('mixed')

@@ -86,17 +86,17 @@ esac
 
 # notify must be the FIRST line: it is a top-level key and TOML puts it inside the
 # preceding [table] otherwise - the bug that silently disables notify.
-ok "$(head -1 "$CONF" | cut -c1-6)" "notify" "notify is the first line of config.toml"
-has 'iriscale-voice' "$CONF" "notify points at iriscale-voice"
+ok "$(head -1 "$CONF" | cut -c1-6)" "model " "existing first line of config.toml is unchanged"
+hasnt 'iriscale-voice' "$CONF" "completion no longer uses legacy notify"
 has 'model = "gpt-5-codex"' "$CONF" "unrelated config.toml settings survive"
 has 'theme = "dark"' "$CONF" "unrelated config.toml tables survive"
-ok "$(grep -c '^notify' "$CONF")" "1" "exactly one notify line"
+ok "$(grep -c '^notify' "$CONF")" "0" "no legacy notify line"
 
 has '"UserPromptSubmit"' "$HOOKS" "UserPromptSubmit hook written"
 has '"PermissionRequest"' "$HOOKS" "PermissionRequest hook written"
 has '"SessionStart"' "$HOOKS" "unrelated hooks survive"
 hasnt '"async"' "$HOOKS" "no async hooks (Codex 0.147 skips them)"
-ok "$(grep -c '"command":' "$HOOKS")" "4" "each hook has a command field"
+ok "$(grep -c '"command":' "$HOOKS")" "6" "each hook has a command field"
 # 2>&1, not 2>/dev/null: a swallowed error here says only "got 1 wanted 0", which is
 # the one thing a JSON failure must never be. Show what node actually objected to.
 jsonerr=$(node -e 'JSON.parse(require("fs").readFileSync(require("path").join(process.env.CODEX_HOME,"hooks.json"),"utf8"))' 2>&1); jsonst=$?
@@ -109,9 +109,9 @@ ok $? 0 "doctor codex passes on the generated configuration"
 
 # --- idempotent: a second run must not duplicate anything -------------------------
 $CLI install codex --apply --skip-path >/dev/null 2>&1
-ok "$(grep -c '^notify' "$CONF")" "1" "re-install leaves exactly one notify line"
+ok "$(grep -c '^notify' "$CONF")" "0" "re-install leaves no legacy notifier"
 ok "$(grep -c '"UserPromptSubmit"' "$HOOKS")" "1" "re-install leaves one UserPromptSubmit hook"
-yes '[ -n "$(ls "$CODEX_HOME"/config.toml.iriscale-backup-* 2>/dev/null)" ]' "an edited file is backed up"
+yes '[ -n "$(ls "$CODEX_HOME"/hooks.json.iriscale-backup-* 2>/dev/null)" ]' "an edited file is backed up"
 
 # --- PATH: skipped when already installed, but NOT for npx's temporary shim -------
 # npx puts ~/.npm/_npx/<hash>/node_modules/.bin on PATH while it runs. Treating that as
@@ -370,7 +370,7 @@ ok "$(jq_node "const d=require('$PS/hooks.json');console.log(d.hooks.UserPromptS
    "npm over an install.ps1 install leaves one UserPromptSubmit entry"
 ok "$(jq_node "const d=require('$PS/hooks.json');console.log(d.hooks.PermissionRequest.length)")" "1" \
    "and one PermissionRequest entry"
-ok "$(grep -c '^notify' "$PS/config.toml")" "1" "and one notify line"
+ok "$(grep -c '^notify' "$PS/config.toml")" "0" "legacy notify removed on migration"
 has 'model = "gpt-5-codex"' "$PS/config.toml" "and keeps the user's settings"
 
 
@@ -464,7 +464,7 @@ NOT="$SANDBOX/notify"; mkdir -p "$NOT"
 printf 'notify = ["/usr/local/bin/my-notifier", "--json"]\nmodel = "gpt-5-codex"\n' > "$NOT/config.toml"
 CODEX_HOME="$NOT" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-notify/iriscale-voice" \
   $CLI install codex --apply --skip-path >/dev/null 2>&1
-has 'iriscale-voice' "$NOT/config.toml" "our notify takes the single notify slot"
+has 'my-notifier' "$NOT/config.toml" "unrelated notifier stays installed"
 ok "$(grep -c '^notify' "$NOT/config.toml")" "1" "and there is still exactly one"
 # a re-install displaces OUR line, which must not overwrite the memory of theirs
 CODEX_HOME="$NOT" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-notify/iriscale-voice" \
@@ -541,16 +541,16 @@ printf '[mcp_servers.thing]\ncommand = "srv"\nnotify = ["/their/hook"]\n' > "$TB
 CODEX_HOME="$TBL" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-tbl/iriscale-voice" \
   $CLI install codex --apply --skip-path >/dev/null 2>&1
 has '/their/hook' "$TBL/config.toml" "a notify inside a [table] is left alone"
-ok "$(head -1 "$TBL/config.toml" | cut -c1-6)" "notify" "and ours is added at the top level"
-ok "$(grep -c 'iriscale-voice' "$TBL/config.toml")" "1" "exactly once"
+ok "$(head -1 "$TBL/config.toml" | cut -c1-6)" "[mcp_s" "table stays at the top level"
+ok "$(grep -c 'iriscale-voice' "$TBL/config.toml")" "0" "no legacy notifier is inserted"
 
 # --- a multi-line notify array must be replaced whole, not sliced -------------------
 ML="$SANDBOX/multiline"; mkdir -p "$ML"
 printf 'notify = [\n  "/usr/local/bin/their-notifier",\n  "--flag"\n]\nmodel = "gpt-5-codex"\n' > "$ML/config.toml"
 CODEX_HOME="$ML" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-ml/iriscale-voice" \
   $CLI install codex --apply --skip-path >/dev/null 2>&1
-hasnt 'their-notifier' "$ML/config.toml" "the whole multi-line notify array is replaced"
-hasnt '\-\-flag' "$ML/config.toml" "leaving no orphaned array element behind"
+has 'their-notifier' "$ML/config.toml" "unrelated multiline notifier is preserved"
+has '\-\-flag' "$ML/config.toml" "preserving every notifier argument"
 has 'model = "gpt-5-codex"' "$ML/config.toml" "and the rest of the file survives"
 CODEX_HOME="$ML" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-ml/iriscale-voice" \
   $CLI uninstall codex --skip-path >/dev/null 2>&1
@@ -563,7 +563,7 @@ printf '\357\273\277model = "gpt-5-codex"\n' > "$BOMD/config.toml"
 CODEX_HOME="$BOMD" IRISCALE_VOICE_INSTALL_ROOT="$SANDBOX/opt-bom/iriscale-voice" \
   $CLI install codex --apply --skip-path >/dev/null 2>&1
 ok "$(head -c 3 "$BOMD/config.toml" | od -An -tx1 | tr -d ' ')" "efbbbf" "the BOM is still the first three bytes"
-ok "$(tail -c +4 "$BOMD/config.toml" | head -1 | cut -c1-6)" "notify" "and notify is the first real line"
+ok "$(tail -c +4 "$BOMD/config.toml" | head -1 | cut -c1-6)" "model " "existing setting remains the first real line"
 
 
 # --- a symlinked skill directory must never be followed by rm -rf -------------------

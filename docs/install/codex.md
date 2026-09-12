@@ -1,8 +1,7 @@
 # Codex CLI
 
-Completion and approval alerts were verified against Codex CLI 0.147.0 on Windows.
-The resume hook requires a Codex version exposing `PostToolUse` in `/hooks`; confirm
-installation and trust after updating. Windows also needs Git for Windows.
+Requires Codex CLI 0.154.0 or newer with `Stop` and `SessionEnd` lifecycle hooks.
+Review all five hooks in `/hooks` after installation. Windows also needs Git for Windows.
 
 ## Recommended: one command, any OS
 
@@ -13,7 +12,7 @@ npx @iriscale/voice@latest install codex --apply
 ```
 
 It installs the script to a stable directory, puts `iriscale-voice` on your `PATH`,
-installs the `$iriscale-voice` skill, and merges `notify` plus three hooks into your Codex
+installs the `$iriscale-voice` skill, and merges five lifecycle hooks into your Codex
 files — backing up everything it edits. Full details, including what it writes and how
 to undo it: [npm.md](npm.md). Node is not needed afterwards; Codex calls the shell
 script directly.
@@ -28,12 +27,12 @@ irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.29/instal
 
 The installer downloads Iriscale Voice to `%LOCALAPPDATA%\Programs\iriscale-voice`,
 creates a stable launcher, adds it to your user `PATH`, registers PowerShell tab
-completion, installs the `$iriscale-voice` Codex skill, and merges `notify` plus three
-synchronous hooks into your Codex files. Existing files are backed up before changes
+completion, installs the `$iriscale-voice` Codex skill, and merges five
+synchronous lifecycle hooks into your Codex files. Existing files are backed up before changes
 and unrelated settings and hooks remain.
 
 Restart Codex and your terminal. In `/hooks`, confirm `UserPromptSubmit`,
-`PermissionRequest`, and `PostToolUse` each show `Installed 1`, open each event, and trust its hook so
+`PermissionRequest`, `PostToolUse`, `Stop`, and `SessionEnd` each show `Installed 1`, open each event, and trust its hook so
 `Active` becomes `1`. Then verify:
 
 ```powershell
@@ -60,99 +59,61 @@ you which one you have, and names the exact line to run. See [npm.md](npm.md).
 The rest of this page documents the generated configuration for manual setups.
 `iriscale-voice install codex` (without `--apply`) prints it with your paths filled in.
 
-## Basic: one line, no trust prompts
+When migrating a standalone PowerShell installation from v0.1.29, run the fresh
+installer for the release containing this change. The old `update` command can
+download new files while finishing with its already-loaded, old three-hook setup.
+Do not rely on that command alone for this migration. For a reviewed development
+checkout, run this from its repository directory:
 
-Codex's `notify` setting runs a program when a turn completes and passes the turn's
-JSON as the last argument. Add this **at the top** of `~/.codex/config.toml`
-(`notify` is a top-level key — it must come before any `[table]` header):
-
-```toml
-# macOS / Linux
-notify = ["/absolute/path/to/iriscale-voice", "notify"]
-
-# Windows (keep the PowerShell bridge beside the shell script)
-notify = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "C:/path/to/iriscale_voice/bin/iriscale-voice-notify.ps1", "C:/Program Files/Git/bin/bash.exe"]
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -SourcePath . -SkipPath -SkipProfile
 ```
 
-Restart Codex. You'll hear *"<session> done"* after every turn — `<session>` is the
-name you gave with Codex's `/rename` (read from `~/.codex/session_index.jsonl`), or
-the folder name.
+Then verify all five hooks and the absence of the old Voice notifier before
+restarting Codex.
 
-The Windows bridge passes JSON to Git Bash through stdin, preserving backslashes
-in project paths. Both installers configure it automatically. After upgrading,
-reapply the Codex installation and restart Codex so the new command takes effect.
-Replacing only the shell script leaves the old notification command in place.
+## Why lifecycle hooks are required
 
-The board reads the latest matching title in `session_index.jsonl` on each refresh,
-so `/rename` changes appear without another completed turn. If Codex has no title
-record for a session, the project folder is the fallback. Previously damaged
-unnamed rows are corrected by their next notification. Titles stored only by a
-different Codex home or application are not available to this lookup.
+On Windows, Codex runs hooks through the session's shell. Voice generates an
+explicit PowerShell invocation that also works from cmd. The UTF-16 encoded
+command preserves literal installation paths across both shells; it decodes to
+the launcher path, one fixed event argument, and exit-code propagation. Reapply
+the installer and review the changed hooks if an older setup reports
+`Unexpected token 'codex-stamp'` or `hook exited with code 1` on prompt submission.
 
-`iriscale-voice install codex` prints this snippet with your paths filled in.
-`iriscale-voice install codex --apply` performs the Windows installation.
+Legacy Codex `notify` also runs for temporary internal requests. Those requests
+have no user-visible session name, so they produced misleading project-folder
+announcements and extra board rows. Lifecycle hooks are disabled for those internal
+requests. Voice now uses these five hooks:
 
-## Full (optional): permission prompts, elapsed time, and resume — three hooks
+| Hook | Purpose |
+| --- | --- |
+| UserPromptSubmit | Mark the user session working |
+| PermissionRequest | Mark it as waiting for an answer |
+| PostToolUse | Clear the waiting state after the approved tool finishes |
+| Stop | Announce completion and mark the session ready |
+| SessionEnd | Remove the ended session from the board |
 
-Codex hooks use the same JSON-on-stdin shape as Claude Code. Create
-`~/.codex/hooks.json`:
+Installers remove an old Iriscale Voice `notify` entry and restore any unrelated
+notifier they previously displaced. Existing unrelated notifier settings remain.
+The legacy Voice notification entry points ignore events from processes still
+using cached old configuration. Reapply the installer and restart Codex to receive
+completion through `Stop`; replacing only the runtime is insufficient.
 
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      { "hooks": [ { "type": "command",
-        "command": "sh \"/absolute/path/to/iriscale-voice\" codex-stamp",
-        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" codex-stamp",
-        "timeout": 10 } ] }
-    ],
-    "PermissionRequest": [
-      { "hooks": [ { "type": "command",
-        "command": "sh \"/absolute/path/to/iriscale-voice\" codex-PermissionRequest",
-        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" codex-PermissionRequest",
-        "timeout": 30 } ] }
-    ],
-    "PostToolUse": [
-      { "hooks": [ { "type": "command",
-        "command": "sh \"/absolute/path/to/iriscale-voice\" codex-resume",
-        "commandWindows": "\"C:/Program Files/Git/bin/sh.exe\" \"C:/path/to/iriscale_voice/bin/iriscale-voice\" codex-resume",
-        "timeout": 10 } ] }
-    ]
-  }
-}
-```
+Use `iriscale-voice install codex` to print the hook definitions for a manual
+setup. Review and trust changed hooks in `/hooks`. Automatic trust is not enabled.
 
-These handlers return promptly and keep their definitions synchronous for compatibility.
-Current Codex supports asynchronous hooks too; unrelated asynchronous hooks can coexist.
+The board reads the latest matching title in `session_index.jsonl` on refresh.
+A genuine unnamed user session falls back to its project folder. Two sessions in
+the same folder remain distinct. Old rows created before this migration cannot
+be identified safely by their folder name alone; forget only known stale rows.
 
-Restart Codex, run **`/hooks`**, and confirm all three events show **Installed 1**. Only then
-open each event and trust its hook; **Active** should become **1**. Codex stores a hash
-in `config.toml`, so editing `hooks.json` prompts for trust again. This gives
-*"<session> is waiting for your answer to run git status"* before you answer a yes/no,
-and *"done after N minutes"* on long turns.
+`SessionEnd` removes rows when Codex reports the session ended. Abrupt termination
+can skip that event, so a row is not proof of a currently open terminal. The
+24-hour inactivity fallback remains for sessions without a PID. Approval alone
+does not trigger `PostToolUse`: a long-running approved tool can remain marked as
+waiting until its result arrives.
 
-Run `iriscale-voice doctor codex` for a read-only check of `config.toml` and
-`hooks.json`. The shell command performs basic file checks; use
-`npx @iriscale/voice@latest doctor codex` for structural and target validation.
-The final Installed/Active check remains visible in `/hooks`.
-
-Why not more hooks? Every extra hook is another trust prompt. `Stop` is already
-covered by `notify`. The third hook cancels stale permission reminders after the
-approved tool finishes. An approval click does not itself fire this hook, so a
-long-running tool can remain marked as waiting until its result arrives.
-
-## What Codex has and hasn't
-
-| moment | Codex signal | you hear |
-|---|---|---|
-| turn done | `notify` `agent-turn-complete` (or hook `Stop`) | "<session> done" |
-| needs approval | hook `PermissionRequest` (`tool_name`, `tool_input.command`) | "<session> is waiting for your answer to run …" |
-| approved tool finished | `PostToolUse` | silent; clears the blocked state |
-| turn failed | not wired by this integration | — |
-| idle, waiting for you | not wired by this integration | — |
-
-Same config file, presets and quiet hours as Claude Code — one setup for every agent.
-Everything lands in `~/.claude/iriscale-voice.log`.
-
-Contracts: [Codex hooks](https://learn.chatgpt.com/docs/hooks) and
-[completion notify](https://learn.chatgpt.com/docs/config-file/config-advanced).
+The standalone shell `doctor codex` performs basic checks; the npm doctor
+structurally validates the installed command targets. Neither proves audible
+output or a trusted live hook. Test those in Codex after restarting.

@@ -178,10 +178,18 @@ function forgetAgent (L, agent) {
 const OUR_ARGS = new Set([
   'stamp', 'resume', 'notify', 'Stop', 'StopFailure', 'PermissionRequest', 'idle_prompt',
   'agent_completed', 'SubagentStop', 'SessionEnd', 'StepDone', 'Scheduled',
-  'Remind', 'WelcomeBack', 'codex-stamp', 'codex-resume', 'codex-PermissionRequest'
+  'Remind', 'WelcomeBack', 'codex-stamp', 'codex-resume', 'codex-PermissionRequest', 'codex-Stop', 'codex-SessionEnd'
 ])
 
 function isOurCommand (command) {
+  if (typeof command === 'string') {
+    const encoded = /^powershell\.exe -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$/.exec(command)
+    if (encoded) {
+      command = Buffer.from(encoded[1], 'base64').toString('utf16le')
+      if (!command.startsWith('& ') || !command.endsWith('; exit $LASTEXITCODE')) return false
+      command = command.slice(0, -'; exit $LASTEXITCODE'.length)
+    }
+  }
   if (typeof command !== 'string' || !command.includes('iriscale-voice')) return false
   const last = command.trim().split(/\s+/).pop().replace(/^["']|["']$/g, '')
   return OUR_ARGS.has(last)

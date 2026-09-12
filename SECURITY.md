@@ -19,8 +19,9 @@
 - **The installers** write a copy of the script to a fixed directory
   (`~/.local/share/iriscale-voice`, or `%LOCALAPPDATA%\Programs\iriscale-voice`), put that
   on your PATH, and edit the configuration of the agent you named:
-  - `install codex` — `~/.codex/config.toml` (the single top-level `notify`),
-    `~/.codex/hooks.json` (three events), `~/.codex/skills/iriscale-voice/`.
+  - `install codex` — `~/.codex/config.toml` (remove a recognized legacy Voice
+    notifier and restore any displaced notifier), `~/.codex/hooks.json` (five
+    lifecycle events), `~/.codex/skills/iriscale-voice/`.
   - `install claude` — `~/.claude/settings.json` (eight hook events, **appended** to
     whatever is already there), `~/.claude/skills/iriscale-voice/`, and
     `~/.claude/commands/iriscale-voice-*.md`.

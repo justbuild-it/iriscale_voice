@@ -111,9 +111,37 @@ function Replace-NotifyText([string]$Content, [string[]]$Replacement) {
     return $lines -join $eol
 }
 
+function Test-LegacyVoiceNotify([string[]]$Lines) {
+    try {
+        $assignment = $Lines -join "`n"
+        $rhs = $assignment.Substring($assignment.IndexOf('=') + 1)
+        $rhs = [regex]::Replace($rhs, '"(?:[^"\\]|\\.)*"|#[^\r\n]*', {
+            param($match)
+            if ($match.Value.StartsWith('#')) { '' } else { $match.Value }
+        }).Trim() -replace ',\s*\]$', ']'
+        if (-not $rhs.StartsWith('[')) { return $false }
+        $values = ConvertFrom-Json -InputObject $rhs
+        if ($values -isnot [array]) { return $false }
+        foreach ($value in $values) { if ($value -isnot [string]) { return $false } }
+        $names = @($values | ForEach-Object { ($_ -replace '^.*[\\/]', '').ToLowerInvariant() })
+        $voiceNames = @('iriscale-voice', 'iriscale-voice.cmd')
+        $shellNames = @('sh', 'sh.exe', 'bash', 'bash.exe')
+        if ($values.Count -eq 2) { return $names[0] -in $voiceNames -and $values[1] -ceq 'notify' }
+        if ($values.Count -eq 3) { return $names[0] -in $shellNames -and $names[1] -in $voiceNames -and $values[2] -ceq 'notify' }
+        return $values.Count -eq 8 -and $names[0] -in @('powershell.exe', 'pwsh.exe') -and
+            ($values[1..5] -join ' ') -ieq '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File' -and
+            $names[6] -eq 'iriscale-voice-notify.ps1' -and $names[7] -in $shellNames
+    } catch { return $false }
+}
+
 function Test-OurCommand($Command) {
+    if ($Command -is [string] -and $Command -cmatch '^powershell\.exe -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$') {
+        try { $Command = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($Matches[1])) } catch { return $false }
+        if (-not $Command.StartsWith('& ') -or -not $Command.EndsWith('; exit $LASTEXITCODE')) { return $false }
+        $Command = $Command.Substring(0, $Command.Length - '; exit $LASTEXITCODE'.Length)
+    }
     return $Command -is [string] -and $Command -match 'iriscale-voice' -and
-        $Command -match '\s(codex-)?(stamp|PermissionRequest|resume)\s*$'
+        $Command -match '\s(codex-)?(stamp|PermissionRequest|resume|Stop|SessionEnd)\s*$'
 }
 function Remove-OurHooks($Groups) {
     foreach ($group in $Groups) {
@@ -144,7 +172,7 @@ function Remove-InstallerConfiguration {
         $content = [IO.File]::ReadAllText($configPath)
         $lines = $content -split '\r?\n'
         $span = Get-NotifySpan $lines
-        if ($null -ne $span -and ($lines[$span[0]..$span[1]] -join "`n") -match 'iriscale-voice') {
+        if ($null -ne $span -and (Test-LegacyVoiceNotify @($lines[$span[0]..$span[1]]))) {
             $restore = @()
             $recordPath = Join-Path $InstallRoot 'powershell-install.json'
             if (Test-Path -LiteralPath $recordPath) { $restore = @((Get-Content -Raw -Encoding UTF8 -LiteralPath $recordPath | ConvertFrom-Json).replacedNotify) | Where-Object { $null -ne $_ } }
@@ -156,7 +184,7 @@ function Remove-InstallerConfiguration {
     if (Test-Path -LiteralPath $hooksPath) {
         $doc = Get-Content -Raw -Encoding UTF8 -LiteralPath $hooksPath | ConvertFrom-Json
         $changed = $false
-        foreach ($event in @('UserPromptSubmit', 'PermissionRequest', 'PostToolUse')) {
+        foreach ($event in @('UserPromptSubmit', 'PermissionRequest', 'PostToolUse', 'Stop', 'SessionEnd')) {
             $property = $doc.hooks.PSObject.Properties[$event]
             if ($property) {
                 $before = $property.Value | ConvertTo-Json -Depth 20 -Compress
@@ -311,17 +339,17 @@ if (-not $SkipProfile) {
 }
 
 $configPath = Join-Path $CodexHome 'config.toml'
-$notify = 'notify = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "' + $notifyBridge.Replace('\', '/') + '", "' + $gitBash.Replace('\', '/') + '"]'
+# Stop hooks replace the legacy notifier, which also fires for internal threads.
 $recordPath = Join-Path $InstallRoot 'powershell-install.json'
 $replaced = @()
-if (Test-Path -LiteralPath $recordPath) { $replaced = @((Get-Content -Raw -Encoding UTF8 -LiteralPath $recordPath | ConvertFrom-Json).replacedNotify) }
+if (Test-Path -LiteralPath $recordPath) { $replaced = @((Get-Content -Raw -Encoding UTF8 -LiteralPath $recordPath | ConvertFrom-Json).replacedNotify) | Where-Object { $null -ne $_ } }
 $lines = $configContent -split '\r?\n'; $span = Get-NotifySpan $lines
-if ($null -ne $span -and ($lines[$span[0]..$span[1]] -join "`n") -notmatch 'iriscale-voice') { $replaced = @($lines[$span[0]..$span[1]]) }
-# Record recovery data before displacing anything; reinstall keeps the original value.
-Write-Utf8NoBom $recordPath (([pscustomobject]@{ replacedNotify = $replaced; home = $CodexHome } | ConvertTo-Json -Depth 20) + "`n")
-Backup-File $configPath
-Write-Utf8NoBom $configPath (Replace-NotifyText $configContent @($notify))
-[void]$script:done.Add('config.toml')
+if ($null -ne $span -and (Test-LegacyVoiceNotify @($lines[$span[0]..$span[1]]))) {
+    Backup-File $configPath
+    Write-Utf8NoBom $configPath (Replace-NotifyText $configContent @($replaced))
+    [void]$script:done.Add('config.toml')
+} elseif (-not (Test-Path -LiteralPath $configPath)) { Write-Utf8NoBom $configPath '' }
+Write-Utf8NoBom $recordPath (([pscustomobject]@{ replacedNotify = @(); home = $CodexHome } | ConvertTo-Json -Depth 20) + "`n")
 
 $hooksPath = Join-Path $CodexHome 'hooks.json'
 if (Test-Path -LiteralPath $hooksPath) {
@@ -329,9 +357,11 @@ if (Test-Path -LiteralPath $hooksPath) {
     $hooksDoc = Get-Content -Raw -Encoding UTF8 -LiteralPath $hooksPath | ConvertFrom-Json
 } else { $hooksDoc = [pscustomobject]@{ hooks = [pscustomobject]@{} } }
 if ($hooksDoc.hooks -isnot [pscustomobject]) { $hooksDoc | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) -Force }
-foreach ($definition in @(@('UserPromptSubmit','stamp',10), @('PermissionRequest','PermissionRequest',30), @('PostToolUse','resume',10))) {
+foreach ($definition in @(@('UserPromptSubmit','stamp',10), @('PermissionRequest','PermissionRequest',30), @('PostToolUse','resume',10), @('Stop','Stop',10), @('SessionEnd','SessionEnd',3))) {
     $event, $argument, $timeout = $definition
-    $commandWindows = '"' + $launcherPath + '" codex-' + $argument
+    # The session shell can be PowerShell or cmd. Neither may reinterpret paths.
+    $invocation = "& '" + $launcherPath.Replace("'", "''") + "' codex-" + $argument + '; exit $LASTEXITCODE'
+    $commandWindows = 'powershell.exe -NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($invocation))
     # Codex requires the portable command field even when commandWindows is
     # present. The Windows override alone is ignored and appears as Installed 0.
     $hook = @([pscustomobject]@{ hooks = @([pscustomobject]@{
@@ -354,4 +384,4 @@ Write-Host "  release:    $Ref"
 Write-Host "  Codex config: $configPath"
 Write-Host "  Codex hooks:  $hooksPath"
 Write-Host "  Codex skill:  $skillDir"
-Write-Host 'Restart Codex and your terminal, then open /hooks and trust hooks showing Installed 1.'
+Write-Host 'Requires Codex 0.154.0+. Restart Codex and your terminal, then open /hooks and trust all five hooks.'
