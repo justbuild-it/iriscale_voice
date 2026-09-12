@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.30"
+VERSION="0.1.31"
 EVENT="${1:-Stop}"
 # Old Codex processes can retain notify configuration until restarted. Never
 # accept that unscoped stream: it includes Codex's internal temporary requests.
