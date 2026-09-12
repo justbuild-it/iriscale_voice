@@ -1673,9 +1673,9 @@ if [ "$EVENT" = resume ]; then
             esac
             _rout="$_rout$_l$NL"
         done < "$_rf"
-        if [ "$_rs" = blocked ]; then
+        if [ "$_rs" = blocked ] || { [ -n "$codex_auto_resume" ] && [ "$_rs" = working ]; }; then
             printf '%s' "$_rout" > "$_rf" 2>/dev/null
-            [ "$NOW" -gt 0 ] && printf '%s\n' "$NOW" > "$STATE/last_prompt" 2>/dev/null
+            [ -z "$codex_auto_resume" ] && [ "$NOW" -gt 0 ] && printf '%s\n' "$NOW" > "$STATE/last_prompt" 2>/dev/null
             [ -n "$IRISCALE_VOICE_DEBUG" ] && echo "(resume: $sid answered, working again)"
         fi
     fi
