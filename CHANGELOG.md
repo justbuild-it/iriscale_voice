@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.30] - 2026-09-12
+
+Codex integration fixes: [#42](https://github.com/justbuild-it/iriscale_voice/pull/42).
+
 ### Fixed
 - Launch Windows Codex hooks correctly from PowerShell as well as cmd, fixing
   prompt-submit "Hook failed / hook exited with code 1" errors before the runtime starts.
