@@ -116,9 +116,12 @@ try {
     // Debug mode skips the watcher that retained Codex's pipes in real sessions.
     env.IRISCALE_VOICE_DEBUG = ''
     fs.writeFileSync(path.join(env.CLAUDE_CONFIG_DIR, 'iriscale-voice.conf'), 'enabled=false\nboard_autostart=false\n')
+    const permissionTranscript = path.join(root, 'permission.jsonl')
+    fs.writeFileSync(permissionTranscript, JSON.stringify({ type: 'turn_context', payload: { turn_id: 'human-turn', approvals_reviewer: 'user' } }) + '\n')
     for (const event of ['Stop', 'PermissionRequest']) {
       const started = Date.now()
-      assert.equal(invokeHook(event, { session_id: 'background-' + event, hook_event_name: event, cwd }), '')
+      assert.equal(invokeHook(event, { session_id: 'background-' + event, hook_event_name: event, cwd,
+        turn_id: 'human-turn', transcript_path: permissionTranscript }), '')
       assert.ok(Date.now() - started < 5000, `${event} waited for its background watcher`)
       assert.equal(invokeHook('SessionEnd', { session_id: 'background-' + event }), '')
     }
