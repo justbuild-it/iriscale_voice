@@ -11,7 +11,7 @@ function layout () {
   const root = U.installRoot()
   const binDir = path.join(root, 'bin')
   const script = path.join(binDir, 'iriscale-voice')
-  return { root, binDir, script, notifyBridge: path.join(binDir, 'iriscale-voice-notify.ps1'),
+  return { root, binDir, script, hookBridge: path.join(binDir, 'iriscale-voice-hook.ps1'), notifyBridge: path.join(binDir, 'iriscale-voice-notify.ps1'),
     launcher: U.isWindows ? path.join(binDir, 'iriscale-voice.cmd') : script }
 }
 
@@ -46,6 +46,7 @@ function materialize (L) {
   fs.chmodSync(L.script, 0o755)      // Codex's `notify` execs it directly
   if (U.isWindows) {
     fs.copyFileSync(path.join(U.packageRoot(), 'bin', 'iriscale-voice-notify.ps1'), L.notifyBridge)
+    fs.copyFileSync(path.join(U.packageRoot(), 'bin', 'iriscale-voice-hook.ps1'), L.hookBridge)
     // No --login: Git's bin\bash.exe wrapper already fixes PATH, while --login costs
     // ~550 ms per hook event and sources .bash_profile, whose output corrupts captures.
     //
@@ -58,7 +59,16 @@ function materialize (L) {
       console.error('  A .cmd file is read in the console code page, so the launcher may fail.')
       console.error('  If it does, reinstall Git for Windows somewhere ASCII-only.')
     }
-    fs.writeFileSync(L.launcher, `@echo off\r\n"${bash}" "%~dp0iriscale-voice" %*\r\n`, 'latin1')
+    const launcher = [
+      '@echo off',
+      'for %%E in (codex-stamp codex-resume codex-PermissionRequest codex-Stop codex-SessionEnd) do if "%~1"=="%%E" goto codex_hook',
+      `"${bash}" "%~dp0iriscale-voice" %*`,
+      'exit /b %errorlevel%',
+      ':codex_hook',
+      `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0iriscale-voice-hook.ps1" -ShellPath "${bash}" -Event %1`,
+      'exit /b %errorlevel%', ''
+    ].join('\r\n')
+    fs.writeFileSync(L.launcher, launcher, 'latin1')
   }
 }
 
@@ -183,7 +193,7 @@ const OUR_ARGS = new Set([
 
 function isOurCommand (command) {
   if (typeof command === 'string') {
-    const encoded = /^powershell\.exe -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$/.exec(command)
+    const encoded = /^powershell\.exe -NoProfile -NonInteractive (?:-ExecutionPolicy Bypass )?-EncodedCommand ([A-Za-z0-9+/=]+)$/.exec(command)
     if (encoded) {
       command = Buffer.from(encoded[1], 'base64').toString('utf16le')
       if (!command.startsWith('& ') || !command.endsWith('; exit $LASTEXITCODE')) return false

@@ -381,7 +381,7 @@ if npm pack --dry-run --json >"$SANDBOX/pack.json" 2>/dev/null; then
     missing=$(PACK="$SANDBOX/pack.json" node -e '
       const fs=require("fs")
       const files=JSON.parse(fs.readFileSync(process.env.PACK,"utf8"))[0].files.map(f=>f.path)
-      const need=["bin/iriscale-voice","hooks/hooks.json","package.json",
+      const need=["bin/iriscale-voice","bin/iriscale-voice-hook.ps1","hooks/hooks.json","package.json",
                   "npm/cli.js","npm/core.js","npm/util.js","npm/codex.js","npm/claude.js",
                   "skills/iriscale-voice/SKILL.md","skills/iriscale-voice/agents/openai.yaml"]
       // every slash command the Claude Code installer copies must ship too

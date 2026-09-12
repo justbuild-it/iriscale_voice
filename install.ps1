@@ -27,6 +27,7 @@ $binDir = Join-Path $InstallRoot 'bin'
 $scriptPath = Join-Path $binDir 'iriscale-voice'
 $launcherPath = Join-Path $binDir 'iriscale-voice.cmd'
 $notifyBridge = Join-Path $binDir 'iriscale-voice-notify.ps1'
+$hookBridge = Join-Path $binDir 'iriscale-voice-hook.ps1'
 $completionPath = Join-Path $InstallRoot 'iriscale-voice-completion.ps1'
 $profileMarker = '# iriscale-voice completion'
 $skillDir = Join-Path $CodexHome 'skills\iriscale-voice'
@@ -135,7 +136,7 @@ function Test-LegacyVoiceNotify([string[]]$Lines) {
 }
 
 function Test-OurCommand($Command) {
-    if ($Command -is [string] -and $Command -cmatch '^powershell\.exe -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$') {
+    if ($Command -is [string] -and $Command -cmatch '^powershell\.exe -NoProfile -NonInteractive (?:-ExecutionPolicy Bypass )?-EncodedCommand ([A-Za-z0-9+/=]+)$') {
         try { $Command = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($Matches[1])) } catch { return $false }
         if (-not $Command.StartsWith('& ') -or -not $Command.EndsWith('; exit $LASTEXITCODE')) { return $false }
         $Command = $Command.Substring(0, $Command.Length - '; exit $LASTEXITCODE'.Length)
@@ -284,6 +285,12 @@ if ($SourcePath) {
     Invoke-WebRequest "$repo/bin/iriscale-voice-notify.ps1" -OutFile "$notifyBridge.new"
 }
 Replace-File "$notifyBridge.new" $notifyBridge
+if ($SourcePath) {
+    Copy-Item -LiteralPath (Join-Path $SourcePath 'bin\iriscale-voice-hook.ps1') -Destination "$hookBridge.new" -Force
+} else {
+    Invoke-WebRequest "$repo/bin/iriscale-voice-hook.ps1" -OutFile "$hookBridge.new"
+}
+Replace-File "$hookBridge.new" $hookBridge
 $installedInstaller = Join-Path $InstallRoot 'install.ps1'
 if ($PSCommandPath) {
     if ((Resolve-Path -LiteralPath $PSCommandPath).Path -ne $installedInstaller) {
@@ -310,7 +317,16 @@ if ($SourcePath) {
 # --login costs ~550 ms per hook event AND sources the user's .bash_profile -
 # anything it echoes would corrupt captured output (measured: profile noise
 # became line 1 of the generated completion file, breaking the PS profile).
-$launcher = "@echo off`r`n`"$gitBash`" `"%~dp0iriscale-voice`" %*`r`n"
+$launcher = @(
+    '@echo off'
+    'for %%E in (codex-stamp codex-resume codex-PermissionRequest codex-Stop codex-SessionEnd) do if "%~1"=="%%E" goto codex_hook'
+    ('"' + $gitBash + '" "%~dp0iriscale-voice" %*')
+    'exit /b %errorlevel%'
+    ':codex_hook'
+    ('powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0iriscale-voice-hook.ps1" -ShellPath "' + $gitBash + '" -Event %1')
+    'exit /b %errorlevel%'
+    ''
+) -join "`r`n"
 Set-Content -LiteralPath $launcherPath -Value $launcher -Encoding ASCII -NoNewline
 
 $completion = @(& $launcherPath completions powershell) -join [Environment]::NewLine
@@ -360,8 +376,8 @@ if ($hooksDoc.hooks -isnot [pscustomobject]) { $hooksDoc | Add-Member -NotePrope
 foreach ($definition in @(@('UserPromptSubmit','stamp',10), @('PermissionRequest','PermissionRequest',30), @('PostToolUse','resume',10), @('Stop','Stop',10), @('SessionEnd','SessionEnd',3))) {
     $event, $argument, $timeout = $definition
     # The session shell can be PowerShell or cmd. Neither may reinterpret paths.
-    $invocation = "& '" + $launcherPath.Replace("'", "''") + "' codex-" + $argument + '; exit $LASTEXITCODE'
-    $commandWindows = 'powershell.exe -NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($invocation))
+    $invocation = "& '" + $hookBridge.Replace("'", "''") + "' -ShellPath '" + $gitBash.Replace("'", "''") + "' -Event codex-" + $argument + '; exit $LASTEXITCODE'
+    $commandWindows = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($invocation))
     # Codex requires the portable command field even when commandWindows is
     # present. The Windows override alone is ignored and appears as Installed 0.
     $hook = @([pscustomobject]@{ hooks = @([pscustomobject]@{

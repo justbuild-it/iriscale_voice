@@ -13,7 +13,8 @@ const home = path.join(root, "O'Neil caf\u00e9")
 const install = path.join(home, 'iriscale-voice')
 const env = { ...process.env, HOME: home, USERPROFILE: home,
   IRISCALE_VOICE_INSTALL_ROOT: install, CLAUDE_CONFIG_DIR: path.join(home, 'claude'),
-  CODEX_HOME: path.join(home, 'codex'), IRISCALE_VOICE_DEBUG: '1' }
+  CODEX_HOME: path.join(home, 'codex'), TEMP: path.join(root, 'temp'), TMP: path.join(root, 'temp'), IRISCALE_VOICE_DEBUG: '1' }
+fs.mkdirSync(env.TEMP)
 fs.mkdirSync(env.CLAUDE_CONFIG_DIR, { recursive: true })
 fs.mkdirSync(env.CODEX_HOME)
 const shell = U.isWindows ? U.gitBash() : 'sh'
@@ -41,9 +42,10 @@ try {
     if (U.isWindows) {
       const powerShell = process.argv.includes('--hook-powershell')
       const r = spawnSync(powerShell ? 'powershell.exe' : (process.env.COMSPEC || 'cmd.exe'),
-        powerShell ? ['-NoProfile', '-NonInteractive', '-Command', command.commandWindows]
+        powerShell ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Restricted', '-Command', command.commandWindows]
           : ['/d', '/s', '/c', `"${command.commandWindows}"`],
-        { env, input: JSON.stringify(payload), encoding: 'utf8', windowsVerbatimArguments: !powerShell, timeout: 60000 })
+        { env, input: JSON.stringify(payload), encoding: 'utf8', windowsVerbatimArguments: !powerShell, timeout: command.timeout * 1000 })
+      assert.equal(r.error, undefined, `${event}: ${r.error}`)
       assert.equal(r.status, 0, r.stdout + r.stderr)
       return r.stdout
     }
@@ -110,6 +112,49 @@ try {
   assert.equal(fs.existsSync(stateFile), false, 'ended session was retained')
   assert.ok(fs.existsSync(path.join(env.CLAUDE_CONFIG_DIR, 'iriscale-voice-sessions/second-user')), 'cleanup removed a different session sharing the folder')
   console.log('ok: two real sessions sharing a folder remain distinct; SessionEnd removes only its own row')
+  if (U.isWindows) {
+    // Debug mode skips the watcher that retained Codex's pipes in real sessions.
+    env.IRISCALE_VOICE_DEBUG = ''
+    fs.writeFileSync(path.join(env.CLAUDE_CONFIG_DIR, 'iriscale-voice.conf'), 'enabled=false\nboard_autostart=false\n')
+    for (const event of ['Stop', 'PermissionRequest']) {
+      const started = Date.now()
+      assert.equal(invokeHook(event, { session_id: 'background-' + event, hook_event_name: event, cwd }), '')
+      assert.ok(Date.now() - started < 5000, `${event} waited for its background watcher`)
+      assert.equal(invokeHook('SessionEnd', { session_id: 'background-' + event }), '')
+    }
+    console.log('ok: non-debug hooks return while lifecycle watchers remain detached')
+    const current = hooks.Stop[0].hooks[0].commandWindows
+    const cached = `& '${path.join(install, 'bin/iriscale-voice.cmd').replace(/'/g, "''")}' codex-Stop; exit $LASTEXITCODE`
+    hooks.Stop[0].hooks[0].commandWindows = 'powershell.exe -NoProfile -NonInteractive -EncodedCommand ' + Buffer.from(cached, 'utf16le').toString('base64')
+    assert.equal(invokeHook('Stop', { session_id: 'cached-probe', cwd }), '')
+    assert.equal(invokeHook('SessionEnd', { session_id: 'cached-probe' }), '')
+    hooks.Stop[0].hooks[0].commandWindows = current
+    console.log('ok: cached v0.1.30 launcher commands also use the isolated worker')
+    assert.equal(fs.readdirSync(env.TEMP).filter(name => name.startsWith('iriscale-hook-')).length, 0, 'hook staging files were retained')
+    fs.writeFileSync(script, '#!/bin/sh\ncat >/dev/null\n(sleep 4; printf survived > "$CLAUDE_CONFIG_DIR/worker-survived") </dev/null >/dev/null 2>&1 &\nexit 0\n')
+    assert.equal(invokeHook('Stop', { session_id: 'survival-probe' }), '')
+    const survivor = path.join(env.CLAUDE_CONFIG_DIR, 'worker-survived')
+    const until = Date.now() + 6000
+    while (!fs.existsSync(survivor) && Date.now() < until) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100)
+    assert.equal(fs.readFileSync(survivor, 'utf8'), 'survived', 'background worker was killed when the hook completed')
+    console.log('ok: background worker survives hook completion')
+    fs.writeFileSync(script, '#!/bin/sh\nprintf \'{"continue":true}\\n\'\nprintf \'hook failure probe\\n\' >&2\nexit 7\n')
+    const failure = spawnSync('powershell.exe', hooks.Stop[0].hooks[0].commandWindows.split(' ').slice(1),
+      { env, input: '{}', encoding: 'utf8', timeout: 10000 })
+    assert.equal(failure.error, undefined)
+    assert.equal(failure.status, 7, failure.stderr)
+    assert.equal(failure.stdout.trim(), '{"continue":true}')
+    assert.match(failure.stderr, /hook failure probe/)
+    console.log('ok: hook worker preserves failure status and output, and removes staging files')
+    fs.writeFileSync(script, '#!/bin/sh\ncat >/dev/null\nsleep 20\n')
+    const timedOut = spawnSync('powershell.exe', hooks.Stop[0].hooks[0].commandWindows.split(' ').slice(1),
+      { env, input: '{}', encoding: 'utf8', timeout: 10000 })
+    assert.equal(timedOut.error, undefined)
+    assert.equal(timedOut.status, 1)
+    assert.match(timedOut.stderr, /exceeded its execution limit/)
+    assert.equal(fs.readdirSync(env.TEMP).filter(name => name.startsWith('iriscale-hook-')).length, 0)
+    console.log('ok: stalled foreground hook returns an error and removes staging files')
+  }
 } finally {
-  fs.rmSync(root, { recursive: true, force: true })
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 }
