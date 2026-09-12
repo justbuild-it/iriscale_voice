@@ -1613,6 +1613,16 @@ fi
 # Its permission_mode does not distinguish those routes. Use only the current
 # turn's recorded reviewer; never infer a human wait from this event alone.
 # Bound transcript reads and cache at prompt submit for long-running turns.
+codex_context_reviewer() {
+    # Keep case parsing outside $(...) for macOS's Bash 3.2.
+    while IFS= read -r _ctx; do
+        case $_ctx in '{'*) ;; *) continue ;; esac
+        [ "$(jget type "$_ctx")" = turn_context ] || continue
+        [ "$(jget turn_id "$_ctx")" = "$_ct" ] || continue
+        jget approvals_reviewer "$_ctx"
+        printf '\n'
+    done
+}
 codex_reviewer() {
     _ct=$(jget turn_id "$payload")
     case $_ct in ''|*[!A-Za-z0-9._-]*) return ;; esac
@@ -1622,13 +1632,7 @@ codex_reviewer() {
     case $_cached in "$_ct|user") printf user; return ;; "$_ct|auto_review") printf auto_review; return ;; esac
     _transcript=$(jget transcript_path "$payload")
     [ -f "$_transcript" ] || return
-    _reviewer=$(tail -c 262144 "$_transcript" 2>/dev/null | grep '"turn_context"' | while IFS= read -r _ctx; do
-        case $_ctx in '{'*) ;; *) continue ;; esac
-        [ "$(jget type "$_ctx")" = turn_context ] || continue
-        [ "$(jget turn_id "$_ctx")" = "$_ct" ] || continue
-        jget approvals_reviewer "$_ctx"
-        printf '\n'
-    done | tail -n 1)
+    _reviewer=$(tail -c 262144 "$_transcript" 2>/dev/null | grep '"turn_context"' | codex_context_reviewer | tail -n 1)
     case $_reviewer in user|auto_review)
         printf '%s|%s\n' "$_ct" "$_reviewer" > "$_cache"
         printf '%s' "$_reviewer" ;;
