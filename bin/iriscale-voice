@@ -587,10 +587,10 @@ npm_only() {
 }
 
 codex_windows_command() {
-    IRISCALE_HOOK_SHELL="$shell_path" IRISCALE_HOOK_SCRIPT="$script_path" IRISCALE_HOOK_EVENT="codex-$1" powershell.exe -NoProfile -NonInteractive -Command '
+    IRISCALE_HOOK_SHELL="$shell_path" IRISCALE_HOOK_SCRIPT="${script_path%/*}/iriscale-voice-hook.ps1" IRISCALE_HOOK_EVENT="codex-$1" powershell.exe -NoProfile -NonInteractive -Command '
         $q = [string][char]39
-        $invoke = "& " + $q + $env:IRISCALE_HOOK_SHELL.Replace($q, $q+$q) + $q + " " + $q + $env:IRISCALE_HOOK_SCRIPT.Replace($q, $q+$q) + $q + " " + $env:IRISCALE_HOOK_EVENT + "; exit " + [char]36 + "LASTEXITCODE"
-        "powershell.exe -NoProfile -NonInteractive -EncodedCommand " + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($invoke))
+        $invoke = "& " + $q + $env:IRISCALE_HOOK_SCRIPT.Replace($q, $q+$q) + $q + " -ShellPath " + $q + $env:IRISCALE_HOOK_SHELL.Replace($q, $q+$q) + $q + " -Event " + $env:IRISCALE_HOOK_EVENT + "; exit " + [char]36 + "LASTEXITCODE"
+        "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($invoke))
     ' | tr -d '\r\n'
 }
 

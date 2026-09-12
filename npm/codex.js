@@ -39,8 +39,8 @@ function hookCommand (L, arg) {
   if (!U.isWindows) return `sh '${L.script.replace(/'/g, "'\\''")}' ${arg}`
   // Codex uses the session shell, which may be PowerShell or cmd. Encode the
   // literal invocation so neither outer shell interprets the installed path.
-  const invocation = `& '${L.launcher.replace(/'/g, "''")}' ${arg}; exit $LASTEXITCODE`
-  return 'powershell.exe -NoProfile -NonInteractive -EncodedCommand ' + Buffer.from(invocation, 'utf16le').toString('base64')
+  const invocation = `& '${L.hookBridge.replace(/'/g, "''")}' -ShellPath '${U.gitBash().replace(/'/g, "''")}' -Event ${arg}; exit $LASTEXITCODE`
+  return 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + Buffer.from(invocation, 'utf16le').toString('base64')
 }
 
 function hookEntry (L, arg, timeout) {
@@ -262,7 +262,7 @@ function doctor () {
       else console.log(`  OK    ${event} handler is configured`)
     }
   } catch (err) { bad(`cannot verify ${L.hooks}: ${err.message}`) }
-  for (const target of new Set([L.script, L.launcher])) {
+  for (const target of new Set([L.script, L.launcher, ...(U.isWindows ? [L.hookBridge] : [])])) {
     try { fs.accessSync(target, fs.constants.X_OK) } catch { bad(`missing or non-executable hook target: ${target}`) }
   }
   const stale = core.driftWarning()

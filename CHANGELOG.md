@@ -5,6 +5,11 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+### Fixed
+- Prevent Windows Codex hook timeouts when background lifecycle watchers retain
+  inherited output pipes. Isolate the runtime from Codex's streams while preserving
+  foreground results and background notifications; test normal mode, not only debug mode.
+
 ## [0.1.30] - 2026-09-12
 
 Codex integration fixes: [#42](https://github.com/justbuild-it/iriscale_voice/pull/42).

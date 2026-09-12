@@ -9,6 +9,12 @@
   (`~/.claude/iriscale-voice-sessions/`), and scratch files under
   `~/.claude/iriscale-voice-runtime/` (mode 700; symlinks and other owners rejected).
   `CLAUDE_CONFIG_DIR` relocates these files. Shared temporary directories are not reused.
+- **Windows Codex hooks** briefly stage the raw JSON input in a fresh GUID-named
+  directory under the Windows temporary directory. An explicit current-user-only
+  ACL is applied before writing, including when `TEMP` points at shared storage.
+  The worker deletes the input before launching the runtime; result files and the
+  directory are removed on completion or handled failure. Forced process termination
+  can leave a private staging directory behind. Raw input is not added to the activity log.
 - **Speaks and logs what the agent asked permission for** - up to 60 characters of the
   command, because that is what lets you decide from across the room. Words that look
   like credentials (`Bearer …`, `sk-…`, `ghp_…`, `AKIA…`, `password=…`, `user:pass@host`)

@@ -11,7 +11,7 @@ function layout () {
   const root = U.installRoot()
   const binDir = path.join(root, 'bin')
   const script = path.join(binDir, 'iriscale-voice')
-  return { root, binDir, script, notifyBridge: path.join(binDir, 'iriscale-voice-notify.ps1'),
+  return { root, binDir, script, hookBridge: path.join(binDir, 'iriscale-voice-hook.ps1'), notifyBridge: path.join(binDir, 'iriscale-voice-notify.ps1'),
     launcher: U.isWindows ? path.join(binDir, 'iriscale-voice.cmd') : script }
 }
 
@@ -46,6 +46,7 @@ function materialize (L) {
   fs.chmodSync(L.script, 0o755)      // Codex's `notify` execs it directly
   if (U.isWindows) {
     fs.copyFileSync(path.join(U.packageRoot(), 'bin', 'iriscale-voice-notify.ps1'), L.notifyBridge)
+    fs.copyFileSync(path.join(U.packageRoot(), 'bin', 'iriscale-voice-hook.ps1'), L.hookBridge)
     // No --login: Git's bin\bash.exe wrapper already fixes PATH, while --login costs
     // ~550 ms per hook event and sources .bash_profile, whose output corrupts captures.
     //
@@ -183,7 +184,7 @@ const OUR_ARGS = new Set([
 
 function isOurCommand (command) {
   if (typeof command === 'string') {
-    const encoded = /^powershell\.exe -NoProfile -NonInteractive -EncodedCommand ([A-Za-z0-9+/=]+)$/.exec(command)
+    const encoded = /^powershell\.exe -NoProfile -NonInteractive (?:-ExecutionPolicy Bypass )?-EncodedCommand ([A-Za-z0-9+/=]+)$/.exec(command)
     if (encoded) {
       command = Buffer.from(encoded[1], 'base64').toString('utf16le')
       if (!command.startsWith('& ') || !command.endsWith('; exit $LASTEXITCODE')) return false
