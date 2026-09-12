@@ -74,6 +74,13 @@ restarting Codex.
 
 ## Why lifecycle hooks are required
 
+Codex's `PermissionRequest` runs before automatic review or the human approval UI.
+Voice announces a permission wait only when the current turn's transcript records
+`approvals_reviewer: "user"`. Automatic review and bypass mode stay quiet. If that
+metadata cannot be verified, Voice also stays quiet instead of reporting a false wait.
+It reads at most the final 256 KiB and caches the reviewer per session and turn at
+prompt submit, so long transcripts do not slow every hook. Completion alerts still run.
+
 On Windows, Codex runs hooks through the session's shell. Voice generates an
 explicit PowerShell invocation that also works from cmd. The UTF-16 encoded
 command preserves literal installation paths across both shells; it decodes to

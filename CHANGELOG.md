@@ -5,6 +5,11 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+### Fixed
+- Suppress Codex permission alerts and blocked dashboard states for automatic
+  approval review. Alert only when the current turn records a human reviewer;
+  missing or unverifiable reviewer metadata stays quiet. Claude alerts are unchanged.
+
 ## [0.1.31] - 2026-09-12
 
 Windows Codex hook timeout fix: [#44](https://github.com/justbuild-it/iriscale_voice/pull/44).
