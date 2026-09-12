@@ -1609,8 +1609,43 @@ if [ -n "$sid" ]; then
     case $sid in ..|.|"") sid="" ;; *..*) sid=$(printf '%s' "$sid" | tr '.' '_') ;; esac
 fi
 
+# Codex PermissionRequest precedes BOTH automatic review and the human UI.
+# Its permission_mode does not distinguish those routes. Use only the current
+# turn's recorded reviewer; never infer a human wait from this event alone.
+# Bound transcript reads and cache at prompt submit for long-running turns.
+codex_reviewer() {
+    _ct=$(jget turn_id "$payload")
+    case $_ct in ''|*[!A-Za-z0-9._-]*) return ;; esac
+    [ -n "$sid" ] || return
+    _cache="$STATE/$sid.codex-reviewer"; _cached=""
+    [ ! -f "$_cache" ] || IFS= read -r _cached < "$_cache" || :
+    case $_cached in "$_ct|user") printf user; return ;; "$_ct|auto_review") printf auto_review; return ;; esac
+    _transcript=$(jget transcript_path "$payload")
+    [ -f "$_transcript" ] || return
+    _reviewer=$(tail -c 262144 "$_transcript" 2>/dev/null | grep '"turn_context"' | while IFS= read -r _ctx; do
+        case $_ctx in '{'*) ;; *) continue ;; esac
+        [ "$(jget type "$_ctx")" = turn_context ] || continue
+        [ "$(jget turn_id "$_ctx")" = "$_ct" ] || continue
+        jget approvals_reviewer "$_ctx"
+        printf '\n'
+    done | tail -n 1)
+    case $_reviewer in user|auto_review)
+        printf '%s|%s\n' "$_ct" "$_reviewer" > "$_cache"
+        printf '%s' "$_reviewer" ;;
+    esac
+}
+codex_auto_resume=""
+if [ "$AGENT_HINT" = codex ]; then
+    case $EVENT in
+        stamp) codex_reviewer >/dev/null ;;
+        PermissionRequest)
+            if [ "$(jget permission_mode "$payload")" = bypassPermissions ] || [ "$(codex_reviewer)" != user ]; then
+                EVENT=resume; codex_auto_resume=1
+            fi ;;
+    esac
+fi
 if [ "$AGENT_HINT" = codex ] && [ "$EVENT" = SessionEnd ]; then
-    [ -z "$sid" ] || rm -f "$SESS/$sid" "$STATE/$sid.start" 2>/dev/null
+    [ -z "$sid" ] || rm -f "$SESS/$sid" "$STATE/$sid.start" "$STATE/$sid.codex-reviewer" 2>/dev/null
     exit 0
 fi
 
@@ -1634,6 +1669,7 @@ if [ "$EVENT" = resume ]; then
                 note=*)      _l="note=" ;;
                 remind_at=*) _l="remind_at=" ;;
                 reminded=*)  _l="reminded=0" ;;
+                said=*)      [ -z "$codex_auto_resume" ] || _l="said=" ;;
             esac
             _rout="$_rout$_l$NL"
         done < "$_rf"

@@ -47,7 +47,7 @@
     "win32"
   ],
   "scripts": {
-    "test": "sh test/run.sh && sh test/npm.sh && sh test/audit-runtime.sh && node test/audit-installer.js && node test/codex-board.js",
+    "test": "sh test/run.sh && sh test/npm.sh && sh test/audit-runtime.sh && node test/audit-installer.js && node test/codex-board.js && node test/codex-permissions.js",
     "prepublishOnly": "npm test"
   },
   "publishConfig": {
