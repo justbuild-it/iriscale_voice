@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.31] - 2026-09-12
+
+Windows Codex hook timeout fix: [#44](https://github.com/justbuild-it/iriscale_voice/pull/44).
+
 ### Fixed
 - Prevent Windows Codex hook timeouts when background lifecycle watchers retain
   inherited output pipes. Isolate the runtime from Codex's streams while preserving
