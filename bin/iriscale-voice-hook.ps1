@@ -36,7 +36,10 @@ if ($Stage) {
         try { $process.StandardInput.Close() } catch [IO.IOException] {}
         $limit = if ($meta.event -eq 'codex-SessionEnd') { 1000 } else { 5000 }
         if (-not $process.WaitForExit($limit)) {
-            $process.Kill()
+            # Git's wrapper can have its own bash/sleep descendants. On failure
+            # stop this specific tree; killing just the wrapper leaks children.
+            & "$env:SystemRoot\System32\taskkill.exe" /PID $process.Id /T /F >$null 2>$null
+            if (-not $process.HasExited) { $process.Kill() }
             $result.stderr = 'Iriscale hook runtime exceeded its execution limit.'
         } else {
             $result.code = $process.ExitCode
