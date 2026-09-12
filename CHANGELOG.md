@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.32] - 2026-09-12
+
+Codex automatic-review alert fix: [#46](https://github.com/justbuild-it/iriscale_voice/pull/46).
+
 ### Fixed
 - Suppress Codex permission alerts and blocked dashboard states for automatic
   approval review. Alert only when the current turn records a human reviewer;
