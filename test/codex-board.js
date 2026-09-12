@@ -123,6 +123,13 @@ try {
       assert.equal(invokeHook('SessionEnd', { session_id: 'background-' + event }), '')
     }
     console.log('ok: non-debug hooks return while lifecycle watchers remain detached')
+    const current = hooks.Stop[0].hooks[0].commandWindows
+    const cached = `& '${path.join(install, 'bin/iriscale-voice.cmd').replace(/'/g, "''")}' codex-Stop; exit $LASTEXITCODE`
+    hooks.Stop[0].hooks[0].commandWindows = 'powershell.exe -NoProfile -NonInteractive -EncodedCommand ' + Buffer.from(cached, 'utf16le').toString('base64')
+    assert.equal(invokeHook('Stop', { session_id: 'cached-probe', cwd }), '')
+    assert.equal(invokeHook('SessionEnd', { session_id: 'cached-probe' }), '')
+    hooks.Stop[0].hooks[0].commandWindows = current
+    console.log('ok: cached v0.1.30 launcher commands also use the isolated worker')
     assert.equal(fs.readdirSync(env.TEMP).filter(name => name.startsWith('iriscale-hook-')).length, 0, 'hook staging files were retained')
     fs.writeFileSync(script, '#!/bin/sh\ncat >/dev/null\n(sleep 4; printf survived > "$CLAUDE_CONFIG_DIR/worker-survived") </dev/null >/dev/null 2>&1 &\nexit 0\n')
     assert.equal(invokeHook('Stop', { session_id: 'survival-probe' }), '')

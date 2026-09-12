@@ -317,7 +317,16 @@ if ($SourcePath) {
 # --login costs ~550 ms per hook event AND sources the user's .bash_profile -
 # anything it echoes would corrupt captured output (measured: profile noise
 # became line 1 of the generated completion file, breaking the PS profile).
-$launcher = "@echo off`r`n`"$gitBash`" `"%~dp0iriscale-voice`" %*`r`n"
+$launcher = @(
+    '@echo off'
+    'for %%E in (codex-stamp codex-resume codex-PermissionRequest codex-Stop codex-SessionEnd) do if "%~1"=="%%E" goto codex_hook'
+    ('"' + $gitBash + '" "%~dp0iriscale-voice" %*')
+    'exit /b %errorlevel%'
+    ':codex_hook'
+    ('powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0iriscale-voice-hook.ps1" -ShellPath "' + $gitBash + '" -Event %1')
+    'exit /b %errorlevel%'
+    ''
+) -join "`r`n"
 Set-Content -LiteralPath $launcherPath -Value $launcher -Encoding ASCII -NoNewline
 
 $completion = @(& $launcherPath completions powershell) -join [Environment]::NewLine

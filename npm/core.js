@@ -59,7 +59,16 @@ function materialize (L) {
       console.error('  A .cmd file is read in the console code page, so the launcher may fail.')
       console.error('  If it does, reinstall Git for Windows somewhere ASCII-only.')
     }
-    fs.writeFileSync(L.launcher, `@echo off\r\n"${bash}" "%~dp0iriscale-voice" %*\r\n`, 'latin1')
+    const launcher = [
+      '@echo off',
+      'for %%E in (codex-stamp codex-resume codex-PermissionRequest codex-Stop codex-SessionEnd) do if "%~1"=="%%E" goto codex_hook',
+      `"${bash}" "%~dp0iriscale-voice" %*`,
+      'exit /b %errorlevel%',
+      ':codex_hook',
+      `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0iriscale-voice-hook.ps1" -ShellPath "${bash}" -Event %1`,
+      'exit /b %errorlevel%', ''
+    ].join('\r\n')
+    fs.writeFileSync(L.launcher, launcher, 'latin1')
   }
 }
 
