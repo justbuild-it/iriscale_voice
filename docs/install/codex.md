@@ -3,6 +3,16 @@
 Requires Codex CLI 0.154.0 or newer with `Stop` and `SessionEnd` lifecycle hooks.
 Review all five hooks in `/hooks` after installation. Windows also needs Git for Windows.
 
+Typing in a Codex terminal without submitting does not send a lifecycle event, so
+Voice cannot use it to mark a result reviewed. A completed result remains green
+until another lifecycle event changes its status. Claude's passive gray/reviewed
+behavior depends on its idle notifications and does not apply to Codex.
+
+After reading a result, press **r, then the row number** in the dashboard, or run
+`iriscale-voice review "voice.codex"`. The row becomes gray and review reminders
+stop. This acknowledges only completed results, not working sessions or pending
+answers/actions. Escape cancels the dashboard selection.
+
 ## Recommended: one command, any OS
 
 With Node 18+ (macOS, Linux, Windows):
