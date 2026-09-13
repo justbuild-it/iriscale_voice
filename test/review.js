@@ -53,8 +53,13 @@ try {
   assert.equal(run('sessions', '--keys', '--plain').status, 0)
   const map = fs.readFileSync(path.join(root, 'iriscale-voice-runtime/board.rows'), 'utf8').trim().split('\n')
   assert.equal(map.length, 1)
+  assert.match(map[0], /caf\u00e9 split second line/)
   assert.equal(map[0].split('|')[4], 'one')
   assert.equal(run('review-row', '1').status, 0)
+  fs.unlinkSync(path.join(sessions, 'one'))
+  row('replacement', 'one', 'ready', 201)
+  assert.notEqual(run('review-row', '1').status, 0)
+  assert.match(state('replacement'), /status=ready/)
   console.log('ok: board review targets the displayed completion, rejecting stale rows')
 } finally {
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })

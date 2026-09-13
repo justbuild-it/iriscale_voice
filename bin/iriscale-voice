@@ -1240,6 +1240,7 @@ cli_review() {
     for _file in "$SESS"/*; do
         [ -f "$_file" ] || continue
         if [ "${_file##*/}" = "$_target" ]; then _match=$_file; _matches=1; break; fi
+        [ -z "${2:-}" ] || continue # board selections require that exact session ID
         _agent=$(st_get "$_file" agent)
         _name=$(session_display_name "$_agent" "${_file##*/}" "$(st_get "$_file" name)")
         [ "$_name" = "$_target" ] || continue
