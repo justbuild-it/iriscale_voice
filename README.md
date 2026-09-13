@@ -178,13 +178,17 @@ Approval itself is not a prompt event, so a long-running tool can remain marked 
 waiting until its result arrives. Codex supports completion and approval alerts;
 this integration does not currently receive a Codex failure or idle event.
 
-**A session counts as reviewed when you press any key in it within the review window
+**A Claude session counts as reviewed when you press any key in it within the review window
 of it finishing. Clicking into it or giving it focus is not enough** — that is what Claude
 Code's own idle notice keys on, and the plugin reads that notice. The window is 60 seconds by
 default, which is too short if you let a finished session sit, so run
 `/iriscale-voice:review-window 10` once (the npm installer sets it for you) and restart
-Claude Code. `/iriscale-voice:status` shows the value in effect. Codex sessions stay
-*ready for review* until your next prompt there. The `standard` preset also
+Claude Code. The gray status appears after the idle window, not immediately on a
+keypress. `/iriscale-voice:status` shows the value in effect. Codex's hooks do not
+report typing without submission or whether you read a result. A completed Codex
+session therefore shows gray **DONE**, meaning finished, with no review reminders.
+The next submitted prompt changes it to *working*. Completion speech still runs;
+no dashboard interaction is required. The `standard` preset also
 stays silent on turns under 30 seconds so it isn't chatty while you're actively working
 in that session. Underscores and hyphens are spoken as spaces, so name sessions like
 `payments-api`.

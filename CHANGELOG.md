@@ -5,6 +5,11 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+### Fixed
+- Keep the dashboard passive: Codex completion shows gray DONE without requiring
+  acknowledgement. Preserve completion speech, suppress unsupported review reminders
+  and review summaries, and clarify that typing-based review detection is Claude-only.
+
 ## [0.1.32] - 2026-09-12
 
 Codex automatic-review alert fix: [#46](https://github.com/justbuild-it/iriscale_voice/pull/46).

@@ -3,6 +3,13 @@
 Requires Codex CLI 0.154.0 or newer with `Stop` and `SessionEnd` lifecycle hooks.
 Review all five hooks in `/hooks` after installation. Windows also needs Git for Windows.
 
+Codex sessions automatically show gray **DONE** when a turn finishes and *working*
+when a new prompt is submitted. DONE reports completion, not whether you read the
+result. Codex's hooks do not report typing without submission, so Claude's passive
+review detection does not apply. Completion speech remains enabled by the preset,
+but finished Codex sessions do not receive review reminders or appear as unreviewed
+in welcome-back summaries. No dashboard action is required.
+
 ## Recommended: one command, any OS
 
 With Node 18+ (macOS, Linux, Windows):

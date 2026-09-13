@@ -518,7 +518,8 @@ cli_status() {
     echo "  config:   $CONF $( [ -f "$CONF" ] && echo '' || echo '(not created yet - using defaults)')"
     echo "  enabled:  $(cfg enabled true)   preset: $p   speaks on: $(preset_events "$p")"
     echo "  quiet:    $(cfg quiet_hours none)   min_turn: $(cfg min_turn_seconds "$(preset_min_turn "$p")")s   cooldown: $(cfg repeat_cooldown 60)s"
-    echo "  review:   a key pressed in a session within $(idle_window_label) of its turn ending marks it reviewed"
+    echo "  review:   Claude: a key within $(idle_window_label) of finishing marks it reviewed after the idle window"
+    echo "            Codex: DONE means finished; typing and review activity are not reported"
     [ "$(idle_window_label)" = 60s ] && echo "            60 s is Claude Code's default and too short if you let a finished session sit: run /iriscale-voice:review-window 10"
     echo "  muted:    $(cfg mute_sessions none)   only: $(cfg only_sessions all)"
     echo "  voice:    $(cfg voice default)   volume: $(cfg volume 100)   rate: $(cfg rate 0)   os: $(os)"
@@ -1042,7 +1043,7 @@ spoken() {   # '_' and '-' read as spaces
 # pending_kind <status> <agent> -> answer|review|action, or "" when the row is not waiting on you
 pending_kind() {
     case $1 in blocked) echo answer ;; error) echo action ;; review|waiting) echo review ;;
-                ready) [ "$2" = claude ] || echo review ;; esac   # a Codex READY has no idle notice to graduate it
+                ready) case $2 in claude|codex) ;; *) echo review ;; esac ;; esac
 }
 # One line naming every pending row: "<a> needs your answer, <b> ready for review, <c> stopped"
 pending_summary() {
@@ -1062,6 +1063,11 @@ cli_tick() {
     _sf="$SESS/$1"; [ -f "$_sf" ] || return 0
     _now=$(date +%s 2>/dev/null); case $_now in ''|*[!0-9]*) return 0 ;; esac
     _st=$(st_get "$_sf" status); _since=$(st_get "$_sf" since); case $_since in ''|*[!0-9]*) _since=$_now ;; esac
+    # Migrate old Codex READY records without claiming the user reviewed them.
+    if [ "$_st" = ready ] && [ "$(st_get "$_sf" agent)" = codex ]; then
+        st_put "$_sf" status done; st_put "$_sf" remind_at ""; st_put "$_sf" reminded 0
+        return 0
+    fi
     if [ "$_st" = ready ] && [ "$(st_get "$_sf" agent)" = claude ] && [ $(( _now - _since )) -ge "$(idle_window)" ]; then
         st_put "$_sf" status reviewed; st_put "$_sf" since "$_now"; st_put "$_sf" remind_at ""
         [ -n "$IRISCALE_VOICE_DEBUG" ] && echo "(tick: $1 reviewed - no idle notice inside the window, so a key was pressed there)"
@@ -1252,6 +1258,7 @@ cli_sessions() {
                        since=*) since=${l#since=} ;; updated=*) upd=${l#updated=} ;; said=*) said=${l#said=} ;; pid=*) fp=${l#pid=} ;; note=*) snote=${l#note=} ;; esac
         done < "$sf"
         [ "$a" != codex ] || n=$(session_display_name "$a" "${sf##*/}" "$n")
+        [ "$a" != codex ] || [ "$st" != ready ] || st=done
         seen="$seen ${sf##*/} "
         [ -n "$snote" ] && said=$snote   # what it is waiting on beats what it last said
         rows="$rows$(_row "$a" "$n" "$st" "${since:-0}" "${upd:-0}" "$said" "$fp")$NL"
@@ -1282,6 +1289,7 @@ cli_sessions() {
             error)     dot="${M}*${N}"; label="NEEDS ACTION" ;;
             review|waiting) dot="${G}*${N}"; label="NEEDS REVIEW" ;;
             ready)     dot="${G}*${N}"; label="READY" ;;
+            done)      dot="${D}o${N}"; label="DONE" ;;
             working)   dot="${Y}*${N}"; label="working" ;;
             scheduled) dot="${D}*${N}"; label="scheduled" ;;
             reviewed)  dot="${D}o${N}"; label="reviewed" ;;
@@ -1295,12 +1303,15 @@ cli_sessions() {
             printf "  %s  %-26.26s %-10s %-6s %-8s ${D}%.44s${N}${EL}\n" "$dot" "$n" "$label" "$(_ago "$age")" "$a" "$said"
         fi
     done
-    printf "\n  ${R}*${N} needs your answer   ${M}*${N} needs your action   ${G}*${N} ready for review   ${Y}*${N} working   ${D}o${N} reviewed${EL}\n"
+    printf "\n  ${R}*${N} needs your answer   ${M}*${N} needs your action   ${G}*${N} ready for review   ${Y}*${N} working   ${D}o${N} done / reviewed${EL}\n"
     if [ "$keys" = 1 ]; then
         if [ "$_focus_os" = mac ]; then printf "  ${D}q quits - window focusing is unavailable on macOS${N}${EL}\n"
         else printf "  ${D}click a numbered row or press its number to focus - q quits${N}${EL}\n"; fi
     fi
-    [ "$keys" = 1 ] && printf "  ${D}reviewed = a key pressed there within %s of finishing (not a click or focus)${N}${EL}\n" "$(idle_window_label)"
+    if [ "$keys" = 1 ]; then
+        printf "  ${D}Claude: key within %s of finishing; gray after the idle window${N}${EL}\n" "$(idle_window_label)"
+        printf "  ${D}Codex: gray DONE means finished; typing/review activity is not reported${N}${EL}\n"
+    fi
     return 0   # (a trailing failed [ ] test made `sessions` exit 1 - caught by CI)
 }
 # _row agent name status since updated said pid -> "prio|agent|name|status|age|said|pid" (or nothing if hidden)
@@ -1810,7 +1821,7 @@ if [ "$EVENT" = "stamp" ]; then
     exit 0
 fi
 case $EVENT in
-    Stop)              st_new=ready ;;
+    Stop)              if [ "$agent" = codex ]; then st_new=done; else st_new=ready; fi ;;
     StepDone)          st_new=working ;;
     Scheduled)         st_new=scheduled ;;
     PermissionRequest) st_new=blocked ;;

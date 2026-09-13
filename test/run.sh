@@ -654,7 +654,10 @@ out=$(sh "$S" sessions --plain)
 printf '%s' "$out" | grep -q 'payments.*NEEDS ANSWER';        ok $? 0 "board: NEEDS ANSWER"
 printf '%s' "$out" | grep -q 'migration.*NEEDS ACTION';       ok $? 0 "board: NEEDS ACTION"
 printf '%s' "$out" | grep -q 'needs your action';             ok $? 0 "board legend names the three verbs"
-[ "$(sh "$S" sessions --keys --plain | grep 'reviewed = a key' | awk '{print length}')" -le 80 ]; ok $? 0 "board note about keypresses fits 80 columns"
+out=$(sh "$S" sessions --keys --plain)
+printf '%s' "$out" | grep -q 'Claude: key within'; ok $? 0 "board scopes passive review to Claude"
+printf '%s' "$out" | grep -q 'Codex: gray DONE means finished'; ok $? 0 "board explains Codex completion status"
+[ "$(printf '%s' "$out" | grep 'Claude: key within' | awk '{print length}')" -le 80 ]; ok $? 0 "board note about keypresses fits 80 columns"
 sh "$S" events | grep -q '^  Remind';                         ok $? 0 "events table lists Remind"
 # 10. answering the dialog. A permission prompt / AskUserQuestion answer fires no
 # UserPromptSubmit; PostToolUse (our `resume`) is the signal that the tool you were asked
