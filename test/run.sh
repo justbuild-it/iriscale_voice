@@ -166,7 +166,7 @@ sh "$S" config unset board_autostart >/dev/null
 sh "$S" --help | grep -- '--open' >/dev/null;              ok $? 0 "help mentions board --open"
 # click-to-focus: numbered rows, a rows map, and `focus` resolution
 kout=$(sh "$S" sessions --keys --plain)
-printf '%s' "$kout" | grep -q '^1 .*payments_api';        ok $? 0 "rows without a pid have a review shortcut"
+printf '%s' "$kout" | grep -q '^1 .*payments_api';        ok $? 1 "rows without a pid have no focus shortcut"
 printf '%s' "$kout" | grep -q 'q quits';                 ok $? 0 "keys mode explains the keys"
 [ -f "$CLAUDE_CONFIG_DIR/iriscale-voice-runtime/board.rows" ];       ok $? 0 "keys mode writes the rows map"
 sh "$S" focus no_such_session >/dev/null 2>&1;            ok $? 1 "focus unknown session exits 1"
@@ -656,7 +656,7 @@ printf '%s' "$out" | grep -q 'migration.*NEEDS ACTION';       ok $? 0 "board: NE
 printf '%s' "$out" | grep -q 'needs your action';             ok $? 0 "board legend names the three verbs"
 out=$(sh "$S" sessions --keys --plain)
 printf '%s' "$out" | grep -q 'Claude: key within'; ok $? 0 "board scopes passive review to Claude"
-printf '%s' "$out" | grep -q 'Codex: typing is not detected'; ok $? 0 "board explains Codex review limitation"
+printf '%s' "$out" | grep -q 'Codex: gray DONE means finished'; ok $? 0 "board explains Codex completion status"
 [ "$(printf '%s' "$out" | grep 'Claude: key within' | awk '{print length}')" -le 80 ]; ok $? 0 "board note about keypresses fits 80 columns"
 sh "$S" events | grep -q '^  Remind';                         ok $? 0 "events table lists Remind"
 # 10. answering the dialog. A permission prompt / AskUserQuestion answer fires no

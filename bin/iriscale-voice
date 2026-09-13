@@ -480,7 +480,6 @@ COMMANDS
                          its number to bring that session's window to the front; q quits
                          (--once prints one frame; --open starts it in its own window)
   focus <n|name|pid>     bring a session's window (or its host IDE/terminal) to the front
-  review <name|id>      mark a completed result reviewed (board: r then row number)
   forget <name|--all>    drop a session from the board now (it returns on its next event)
   review-window [N|default]  how long after a turn ends a keypress there still marks it reviewed
                          (sets Claude Code's idle window in settings.json; 10 minutes recommended)
@@ -520,7 +519,7 @@ cli_status() {
     echo "  enabled:  $(cfg enabled true)   preset: $p   speaks on: $(preset_events "$p")"
     echo "  quiet:    $(cfg quiet_hours none)   min_turn: $(cfg min_turn_seconds "$(preset_min_turn "$p")")s   cooldown: $(cfg repeat_cooldown 60)s"
     echo "  review:   Claude: a key within $(idle_window_label) of finishing marks it reviewed after the idle window"
-    echo "            Codex: use review <session-name> or r then its row number on the board"
+    echo "            Codex: DONE means finished; typing and review activity are not reported"
     [ "$(idle_window_label)" = 60s ] && echo "            60 s is Claude Code's default and too short if you let a finished session sit: run /iriscale-voice:review-window 10"
     echo "  muted:    $(cfg mute_sessions none)   only: $(cfg only_sessions all)"
     echo "  voice:    $(cfg voice default)   volume: $(cfg volume 100)   rate: $(cfg rate 0)   os: $(os)"
@@ -726,7 +725,7 @@ Register-ArgumentCompleter -Native -CommandName iriscale-voice -ScriptBlock {
   $argument = $elements.Count - 1
   if ($commandAst.Extent.Text -match '\s$') { $argument++ }
   if ($argument -le 1) {
-    $choices = 'status','sessions','board','focus','review','test','say','speaker','voices','mute','unmute','config','install','doctor','presets','events','completions','update','uninstall','help'
+    $choices = 'status','sessions','board','focus','test','say','speaker','voices','mute','unmute','config','install','doctor','presets','events','completions','update','uninstall','help'
   } else {
     $choices = switch ($elements[1]) {
       'config' { 'list','get','set','unset','path','edit' }
@@ -745,7 +744,7 @@ EOF
             cat <<'EOF'
 _iriscale_voice() {
   if [ "$COMP_CWORD" -eq 1 ]; then
-    choices='status sessions board focus review test say mute unmute config install doctor presets events completions update uninstall help'
+    choices='status sessions board focus test say mute unmute config install doctor presets events completions update uninstall help'
   else
     case ${COMP_WORDS[1]} in
       config) choices='list get set unset path edit' ;;
@@ -1044,7 +1043,7 @@ spoken() {   # '_' and '-' read as spaces
 # pending_kind <status> <agent> -> answer|review|action, or "" when the row is not waiting on you
 pending_kind() {
     case $1 in blocked) echo answer ;; error) echo action ;; review|waiting) echo review ;;
-                ready) [ "$2" = claude ] || echo review ;; esac   # a Codex READY has no idle notice to graduate it
+                ready) case $2 in claude|codex) ;; *) echo review ;; esac ;; esac
 }
 # One line naming every pending row: "<a> needs your answer, <b> ready for review, <c> stopped"
 pending_summary() {
@@ -1064,6 +1063,11 @@ cli_tick() {
     _sf="$SESS/$1"; [ -f "$_sf" ] || return 0
     _now=$(date +%s 2>/dev/null); case $_now in ''|*[!0-9]*) return 0 ;; esac
     _st=$(st_get "$_sf" status); _since=$(st_get "$_sf" since); case $_since in ''|*[!0-9]*) _since=$_now ;; esac
+    # Migrate old Codex READY records without claiming the user reviewed them.
+    if [ "$_st" = ready ] && [ "$(st_get "$_sf" agent)" = codex ]; then
+        st_put "$_sf" status done; st_put "$_sf" remind_at ""; st_put "$_sf" reminded 0
+        return 0
+    fi
     if [ "$_st" = ready ] && [ "$(st_get "$_sf" agent)" = claude ] && [ $(( _now - _since )) -ge "$(idle_window)" ]; then
         st_put "$_sf" status reviewed; st_put "$_sf" since "$_now"; st_put "$_sf" remind_at ""
         [ -n "$IRISCALE_VOICE_DEBUG" ] && echo "(tick: $1 reviewed - no idle notice inside the window, so a key was pressed there)"
@@ -1233,51 +1237,6 @@ cli_forget() {
     return 0
 }
 
-# Deliberate acknowledgement of a completed result, never of a pending action.
-cli_review() {
-    _target=${1:-}; _match=""; _matches=0
-    [ -n "$_target" ] || { echo 'usage: iriscale-voice review <session-name|session-id>' >&2; return 2; }
-    for _file in "$SESS"/*; do
-        [ -f "$_file" ] || continue
-        if [ "${_file##*/}" = "$_target" ]; then _match=$_file; _matches=1; break; fi
-        [ -z "${2:-}" ] || continue # board selections require that exact session ID
-        _agent=$(st_get "$_file" agent)
-        _name=$(session_display_name "$_agent" "${_file##*/}" "$(st_get "$_file" name)")
-        [ "$_name" = "$_target" ] || continue
-        _match=$_file; _matches=$((_matches+1))
-    done
-    [ "$_matches" -gt 0 ] || { echo "no session called '$_target'" >&2; return 1; }
-    [ "$_matches" -eq 1 ] || { echo 'multiple sessions have that name; use a session ID or a board row' >&2; return 1; }
-    if [ -n "${2:-}" ] && [ "$(st_get "$_match" since)" != "$2" ]; then
-        echo 'session changed; review its current result first' >&2; return 1
-    fi
-    case $(st_get "$_match" status) in
-        ready|review|waiting) ;;
-        reviewed) echo 'already reviewed'; return 0 ;;
-        *) echo 'only completed results can be marked reviewed' >&2; return 1 ;;
-    esac
-    _review_now=$(date +%s 2>/dev/null)
-    st_put "$_match" status reviewed
-    st_put "$_match" remind_at ""
-    st_put "$_match" reminded 0
-    st_put "$_match" since "$_review_now"
-    st_put "$_match" updated "$_review_now"
-    printf '%s\n' "$_review_now" > "$STATE/last_prompt"
-    echo "reviewed $(st_get "$_match" name)"
-}
-
-cli_review_row() {
-    _review_map=${2:-$(cat "$STATE/board.rows" 2>/dev/null)}
-    while IFS='|' read -r _i _pid _name _agent _id _since; do
-        [ "$_i" = "$1" ] || continue
-        [ -n "$_id" ] && [ -n "$_since" ] || { echo 'this row has no recorded completion'; return 1; }
-        cli_review "$_id" "$_since"; return $?
-    done <<EOF
-$_review_map
-EOF
-    echo 'no such row'; return 1
-}
-
 # Render one frame of the board to stdout. Rows come from $SESS state files; Claude
 # sessions that predate the state layer are synthesized from ~/.claude/sessions so
 # nothing is missing on first run. Sorted: needs you first, then ready, working, idle.
@@ -1299,9 +1258,10 @@ cli_sessions() {
                        since=*) since=${l#since=} ;; updated=*) upd=${l#updated=} ;; said=*) said=${l#said=} ;; pid=*) fp=${l#pid=} ;; note=*) snote=${l#note=} ;; esac
         done < "$sf"
         [ "$a" != codex ] || n=$(session_display_name "$a" "${sf##*/}" "$n")
+        [ "$a" != codex ] || [ "$st" != ready ] || st=done
         seen="$seen ${sf##*/} "
         [ -n "$snote" ] && said=$snote   # what it is waiting on beats what it last said
-        rows="$rows$(_row "$a" "$n" "$st" "${since:-0}" "${upd:-0}" "$said" "$fp" "${sf##*/}")$NL"
+        rows="$rows$(_row "$a" "$n" "$st" "${since:-0}" "${upd:-0}" "$said" "$fp")$NL"
     done
     # Claude sessions with no state file yet (started before this version)
     if [ -d "$CLAUDE_DIR/sessions" ]; then
@@ -1321,7 +1281,7 @@ cli_sessions() {
     else printf "     %-26s %-13s %-6s %-8s %s\n" "SESSION" "STATE" "FOR" "AGENT" "LAST SAID"; fi
     [ "$keys" = 1 ] && : > "$STATE/board.rows"
     idx=0
-    printf '%s' "$rows" | sort | while IFS='|' read -r _p a n st age said spid row_id row_since; do
+    printf '%s' "$rows" | sort | while IFS='|' read -r _p a n st age said spid; do
         [ -n "$n" ] || continue
         idx=$((idx+1))
         case $st in
@@ -1329,28 +1289,28 @@ cli_sessions() {
             error)     dot="${M}*${N}"; label="NEEDS ACTION" ;;
             review|waiting) dot="${G}*${N}"; label="NEEDS REVIEW" ;;
             ready)     dot="${G}*${N}"; label="READY" ;;
+            done)      dot="${D}o${N}"; label="DONE" ;;
             working)   dot="${Y}*${N}"; label="working" ;;
             scheduled) dot="${D}*${N}"; label="scheduled" ;;
             reviewed)  dot="${D}o${N}"; label="reviewed" ;;
             *)         dot="${D}o${N}"; label="idle" ;;
         esac
         if [ "$keys" = 1 ]; then
-            printf '%s|%s|%s|%s|%s|%s\n' "$idx" "$spid" "$n" "$a" "$row_id" "$row_since" >> "$STATE/board.rows"
-            k=$idx; [ "$idx" -gt 9 ] && k=" "
+            printf '%s|%s|%s|%s\n' "$idx" "$spid" "$n" "$a" >> "$STATE/board.rows"
+            k=$idx; [ "$idx" -gt 9 ] || [ -z "$spid" ] || [ "$_focus_os" = mac ] && k=" "
             printf "${D}%s${N} %s  %-26.26s %-10s %-6s %-8s ${D}%.44s${N}${EL}\n" "$k" "$dot" "$n" "$label" "$(_ago "$age")" "$a" "$said"
         else
             printf "  %s  %-26.26s %-10s %-6s %-8s ${D}%.44s${N}${EL}\n" "$dot" "$n" "$label" "$(_ago "$age")" "$a" "$said"
         fi
     done
-    printf "\n  ${R}*${N} needs your answer   ${M}*${N} needs your action   ${G}*${N} ready for review   ${Y}*${N} working   ${D}o${N} reviewed${EL}\n"
+    printf "\n  ${R}*${N} needs your answer   ${M}*${N} needs your action   ${G}*${N} ready for review   ${Y}*${N} working   ${D}o${N} done / reviewed${EL}\n"
     if [ "$keys" = 1 ]; then
-        printf "  ${D}r then row number: mark reviewed - q quits${N}${EL}\n"
-        if [ "$_focus_os" = mac ]; then printf "  ${D}window focusing is unavailable on macOS${N}${EL}\n"
-        else printf "  ${D}click or number: focus where supported${N}${EL}\n"; fi
+        if [ "$_focus_os" = mac ]; then printf "  ${D}q quits - window focusing is unavailable on macOS${N}${EL}\n"
+        else printf "  ${D}click a numbered row or press its number to focus - q quits${N}${EL}\n"; fi
     fi
     if [ "$keys" = 1 ]; then
         printf "  ${D}Claude: key within %s of finishing; gray after the idle window${N}${EL}\n" "$(idle_window_label)"
-        printf "  ${D}Codex: typing is not detected; use r then its row number to review${N}${EL}\n"
+        printf "  ${D}Codex: gray DONE means finished; typing/review activity is not reported${N}${EL}\n"
     fi
     return 0   # (a trailing failed [ ] test made `sessions` exit 1 - caught by CI)
 }
@@ -1361,10 +1321,7 @@ _row() {
     [ "$quiet" -gt $(( hideh * 3600 )) ] && return 0
     st=$3
     case $st in blocked) p=0 ;; error) p=1 ;; review|waiting) p=2 ;; ready) p=3 ;; working) p=4 ;; scheduled) p=5 ;; *) p=6 ;; esac
-    # Display text must not introduce extra rows/fields into the action map.
-    _row_name=$(printf '%s' "$2" | tr '[:cntrl:]|' ' ')
-    _row_said=$(printf '%s' "$6" | tr '[:cntrl:]|' ' ')
-    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s' "$p" "$1" "$_row_name" "$st" "$age" "$_row_said" "${7:-}" "${8:-}" "$4"
+    printf '%s|%s|%s|%s|%s|%s|%s' "$p" "$1" "$2" "$st" "$age" "$6" "${7:-}"
 }
 
 # focus <row-number | session name | pid>: bring that session's window to the front.
@@ -1375,7 +1332,7 @@ cli_focus() {
     target=$1; fpid=""; fname=""
     [ -n "$target" ] || { echo "usage: iriscale-voice focus <row-number|session-name|pid>" >&2; return 2; }
     case $target in
-        [1-9]) [ -f "$STATE/board.rows" ] && while IFS='|' read -r i p n a unused; do [ "$i" = "$target" ] && { fpid=$p; fname=$n; break; }; done < "$STATE/board.rows" ;;
+        [1-9]) [ -f "$STATE/board.rows" ] && while IFS='|' read -r i p n a; do [ "$i" = "$target" ] && { fpid=$p; fname=$n; break; }; done < "$STATE/board.rows" ;;
     esac
     if [ -z "$fname" ]; then
         for sf in "$SESS"/*; do
@@ -1488,7 +1445,7 @@ cli_board() {
     board_exit() { printf '\033[?1006l\033[?1000l\033[?25h'; [ -n "$old_stty" ] && stty "$old_stty" 2>/dev/null; rm -f "$STATE/board.pid" 2>/dev/null; }
     trap 'board_exit; exit 0' INT TERM EXIT
     printf '\033[?25l\033[?1000h\033[?1006h'
-    last_sig=""; last_paint=0; last_prune=0; note=""; review_map=""
+    last_sig=""; last_paint=0; last_prune=0; note=""
     while :; do
         t=$(date +%s 2>/dev/null); case $t in ""|*[!0-9]*) t=0 ;; esac
         if [ $(( t - last_prune )) -ge 60 ]; then prune_dead; last_prune=$t; fi
@@ -1511,15 +1468,11 @@ cli_board() {
         else rc=$?; [ "$rc" -gt 128 ] || { IFS= read -r -t 1 seq 2>/dev/null || sleep 1; }; fi
         case $seq in
             *[qQ]*) break ;;
-            r|R) review_map=$(cat "$STATE/board.rows" 2>/dev/null); note='press a row number to mark its displayed result reviewed (Esc cancels)' ;;
-            "$ESC") review_map=""; note='review cancelled' ;;
             *'[<'*)   # SGR mouse press: ESC[<button;col;rowM  (rows start on screen line 4)
                 m=${seq#*\[<}; case $m in *M*) ;; *) continue ;; esac
                 m=${m%%[Mm]*}; b=${m%%;*}; rest=${m#*;}; y=${rest#*;}
                 if [ "${b:-1}" = 0 ] && [ "$y" -gt 3 ] 2>/dev/null; then note=$(cli_focus $((y-3)) 2>&1); fi ;;
-            [1-9]*) if [ -n "$review_map" ]; then
-                        note=$(cli_review_row "${seq%%[!1-9]*}" "$review_map" 2>&1); review_map=""
-                    else note=$(cli_focus "${seq%%[!1-9]*}" 2>&1); fi ;;
+            [1-9]*) note=$(cli_focus "${seq%%[!1-9]*}" 2>&1) ;;
         esac
     done
     board_exit; trap - INT TERM EXIT
@@ -1589,8 +1542,6 @@ case "$EVENT" in
     board)   shift; cli_board "$@"; exit $? ;;
     focus)   shift; cli_focus "$@"; exit $? ;;
     forget)  shift; cli_forget "$@"; exit $? ;;
-    review)  shift; cli_review "$@"; exit $? ;;
-    review-row) shift; cli_review_row "$@"; exit $? ;; # board action, also exercised by tests
     review-window) shift; cli_review_window "$@"; exit $? ;;
     tick)    shift; cli_tick "$@"; exit $? ;;      # (internal) apply the review lifecycle now
     watch)   shift; cli_watch "$@"; exit $? ;;     # (internal) follow one session-turn
@@ -1870,7 +1821,7 @@ if [ "$EVENT" = "stamp" ]; then
     exit 0
 fi
 case $EVENT in
-    Stop)              st_new=ready ;;
+    Stop)              if [ "$agent" = codex ]; then st_new=done; else st_new=ready; fi ;;
     StepDone)          st_new=working ;;
     Scheduled)         st_new=scheduled ;;
     PermissionRequest) st_new=blocked ;;

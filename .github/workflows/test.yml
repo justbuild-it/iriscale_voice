@@ -73,8 +73,8 @@ jobs:
         run: node test/codex-board.js
       - name: Codex automatic and human permission review
         run: node test/codex-permissions.js
-      - name: Explicit result review
-        run: node test/review.js
+      - name: Passive Codex completion status
+        run: node test/codex-review.js
       - name: standalone PowerShell installer preservation
         if: runner.os == 'Windows' && matrix.node == '22'
         run: node test/audit-installer.js --powershell

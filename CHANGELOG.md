@@ -6,13 +6,9 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 ## [Unreleased]
 
 ### Fixed
-- Clarify that passive keypress review detection is Claude-only. Codex does not
-  report typing without submission and must not infer review from elapsed time.
-
-### Added
-- Mark a completed result reviewed with `review <name|id>` or **r, then row number**
-  in the dashboard. Keep the row, stop review reminders, and reject working or
-  blocked sessions, ambiguous names, and stale dashboard selections.
+- Keep the dashboard passive: Codex completion shows gray DONE without requiring
+  acknowledgement. Preserve completion speech, suppress unsupported review reminders
+  and review summaries, and clarify that typing-based review detection is Claude-only.
 
 ## [0.1.32] - 2026-09-12
 

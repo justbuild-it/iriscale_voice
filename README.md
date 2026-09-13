@@ -185,13 +185,10 @@ default, which is too short if you let a finished session sit, so run
 `/iriscale-voice:review-window 10` once (the npm installer sets it for you) and restart
 Claude Code. The gray status appears after the idle window, not immediately on a
 keypress. `/iriscale-voice:status` shows the value in effect. Codex's hooks do not
-report typing without submission. Its sessions stay *ready for review* until your
-next submitted prompt changes them to *working*; elapsed time alone does not prove
-you reviewed a result. To acknowledge a completed result, press **r, then its row
-number** in the dashboard, or run `iriscale-voice review "voice.codex"`. This turns
-the row gray and stops review reminders without removing the session. Working
-sessions and pending answers/actions cannot be dismissed this way. If names are
-duplicated, use the dashboard row or exact session ID. The `standard` preset also
+report typing without submission or whether you read a result. A completed Codex
+session therefore shows gray **DONE**, meaning finished, with no review reminders.
+The next submitted prompt changes it to *working*. Completion speech still runs;
+no dashboard interaction is required. The `standard` preset also
 stays silent on turns under 30 seconds so it isn't chatty while you're actively working
 in that session. Underscores and hyphens are spoken as spaces, so name sessions like
 `payments-api`.
