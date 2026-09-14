@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+### Added
+- Publish `@iriscale/voice` to npm automatically when a GitHub release is published:
+  `.github/workflows/publish.yml` checks out the tag, refuses to run unless
+  `package.json` matches it, and publishes with provenance through npm trusted
+  publishing. Releases no longer depend on someone remembering to publish by hand.
+
 ### Fixed
 - Keep the dashboard passive: Codex completion shows gray DONE without requiring
   acknowledgement. Preserve completion speech, suppress unsupported review reminders

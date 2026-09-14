@@ -46,12 +46,20 @@ A release is its own small PR:
    git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
    gh release create vX.Y.Z --title "vX.Y.Z" --notes-file <(sed -n '/^## \[X.Y.Z\]/,/^## \[/p' CHANGELOG.md | sed '$d')
    ```
-   finally publish the npm package — `npx @iriscale/voice@latest install <codex|claude>
-   --apply` installs from it on every OS, so a release that skips this step leaves those
-   users on the old version:
+   Publishing the release is what puts it on npm: `.github/workflows/publish.yml` runs on
+   `release: published`, checks out the tag, refuses to continue unless `package.json`
+   matches the tag minus its `v`, and runs `npm publish --access public --provenance`
+   through npm trusted publishing (OIDC — no token in the repo). Watch that run finish;
+   `npx @iriscale/voice@latest install <codex|claude> --apply` installs from npm on every
+   OS, so a release that is not on npm leaves those users on the old version.
+
+   If the workflow is unavailable — npm outage, a broken runner, a version that has to go
+   out now — publish it by hand from the tag, never from an arbitrary main:
    ```sh
+   git fetch --tags && git checkout vX.Y.Z
+   npm whoami             # a member of the iriscale org with publish rights
    npm publish --dry-run  # check the file list, then:
-   npm publish            # prepublishOnly runs both suites first
+   npm publish            # prepublishOnly runs the suites first
    ```
 Users get it with `/plugin marketplace update iriscale`, or `iriscale-voice update`.
 
@@ -63,8 +71,9 @@ the release commit's CI matrix to pass, including the audit regression fixtures.
 Use an explicit `gh release create --target <verified-merge-sha>` and keep the tag,
 release target, package version, and pinned installer URLs in agreement.
 
-Puneet (`PuneetKandpal`) owns npm publication. After merge and tagging, hand off the
-exact tag and commit to him if the releasing maintainer cannot publish. Verify
+Publishing the GitHub release publishes npm (`publish.yml`). Puneet (`PuneetKandpal`)
+owns the npm credentials and the trusted-publisher configuration: if the workflow fails,
+hand him the exact tag and commit rather than publishing from an untagged checkout. Verify
 `npm view @iriscale/voice@<version> version dist.integrity` and unpack the published
 tarball to check its runtime version and installation fixtures before marking the
 release complete. A GitHub release alone does not update npm users.

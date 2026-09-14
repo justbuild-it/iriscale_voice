@@ -1,0 +1,48 @@
+name: publish
+
+# Every release here is created from a v* tag (see CONTRIBUTING → Releasing).
+# Publishing it to npm is what makes `npx @iriscale/voice@latest install ...` —
+# the install line in the README, SECURITY.md and docs/install — resolve to it.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write        # npm trusted publishing (OIDC): no long-lived token needed
+
+concurrency:
+  group: publish-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  npm:
+    name: publish ${{ github.event.release.tag_name }} to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}   # publish exactly the tagged commit
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+      - name: npm new enough for trusted publishing
+        # OIDC publishing landed in npm 11.5.1; Node 22 still ships npm 10.
+        run: npm install -g npm@latest && npm --version
+      - name: package version equals the release tag
+        # The same agreement test/run.sh enforces across the five version places,
+        # applied once more against the tag the release was cut from.
+        run: |
+          tag='${{ github.event.release.tag_name }}'
+          have=$(node -p "require('./package.json').version")
+          [ "$have" = "${tag#v}" ] || { echo "package.json is $have, release tag is $tag"; exit 1; }
+      - name: what will be published
+        run: npm pack --dry-run
+      - name: publish
+        # prepublishOnly runs the full suite (npm test) before anything is uploaded.
+        # NODE_AUTH_TOKEN is the fallback path: with a trusted publisher configured on
+        # npmjs for this repo + workflow it is empty and unused, and OIDC is used instead.
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
