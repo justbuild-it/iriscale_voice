@@ -42,6 +42,19 @@ iriscale-voice install codex --apply
 > node: Codex calls `bin/iriscale-voice` — the same zero-dependency POSIX shell script
 > — directly. Uninstall node afterwards and the voice keeps working.
 
+## Verify
+
+The version on npm should be the tag you meant to install:
+
+```sh
+npm view @iriscale/voice version     # the latest published release
+iriscale-voice --version             # what your hooks will actually run
+```
+
+Those two disagree when a newer release has not reached npm yet, or when a global
+install upgraded the CLI without reapplying the script (`iriscale-voice update` fixes the
+second — see [Update](#update)). `iriscale-voice status` and `doctor` say so too.
+
 ## What `--apply` writes
 
 Nothing runs on `npm install`; the installer only touches your files when you ask it to
