@@ -169,10 +169,12 @@ if it isn't already there (after an update, a reboot, a stray close):
 | you come back after 10 quiet minutes | *"while you were away: payments needs your answer, billing ready for review"* | one summary, before your prompt runs |
 | subagent / session end *(verbose preset)* | *"…sub agent done"*, *"…session ended"* | usually noise; off by default |
 
-Each first line is spoken **once**. Reminders follow only while a session still needs
-you: merged into one sentence when several do, skipped while you are typing elsewhere
-(`remind_pause`), and capped by the schedule (`remind_answer` 3,10 · `remind_review` 15 ·
-`remind_action` 10 minutes; `basic` never reminds). Then silence; the board keeps the row.
+Each first line is spoken **once**. Permission and error reminders are merged when
+several are due, skipped after a recently submitted prompt (`remind_pause`), and
+capped by their schedules (`remind_answer` 3,10 and `remind_action` 10 minutes;
+`basic` never reminds). Review reminders are off by default, and completed review
+states are excluded from welcome-back summaries unless `remind_review` is explicitly
+enabled. Then silence; the board keeps the row.
 The `PostToolUse` hook clears *needs your answer* after the approved tool finishes.
 Approval itself is not a prompt event, so a long-running tool can remain marked as
 waiting until its result arrives. Codex supports completion and approval alerts;
@@ -184,7 +186,9 @@ Code's own idle notice keys on, and the plugin reads that notice. The window is 
 default, which is too short if you let a finished session sit, so run
 `/iriscale-voice:review-window 10` once (the npm installer sets it for you) and restart
 Claude Code. The gray status appears after the idle window, not immediately on a
-keypress. `/iriscale-voice:status` shows the value in effect. Codex's hooks do not
+keypress. **After the idle alert has fired, later typing is not reported to hooks.**
+The board's review state can therefore remain stale; it does not trigger repeated
+announcements by default. `/iriscale-voice:status` shows the value in effect. Codex's hooks do not
 report typing without submission or whether you read a result. A completed Codex
 session therefore shows gray **DONE**, meaning finished, with no review reminders.
 The next submitted prompt changes it to *working*. Completion speech still runs;

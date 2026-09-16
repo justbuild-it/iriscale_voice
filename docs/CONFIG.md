@@ -50,7 +50,7 @@ The file is created the first time a setting is written (`config set`, a preset 
 | `serialize` | `true` | queue announcements so concurrent sessions never talk over each other |
 | `repeat_cooldown` | `60` | seconds; the *same* announcement for the *same* session inside this window is said once. Guards against a looping subagent or a double-firing hook. `0` disables |
 | `remind_answer` | `3,10` | minutes after a permission prompt to say "still needs your answer" (comma list); `off` = never. Presets: standard `3,10`, verbose `3,10,20`, basic never |
-| `remind_review` | `15` | minutes after a turn ends to remind about a session nobody reviewed; `off` = never. Presets: standard `15`, verbose `10,30` |
+| `remind_review` | `off` | opt-in review reminder minutes (comma list). Disabled in every preset because typing after Claude's idle alert is not reported. Setting a schedule also includes these sessions in welcome-back summaries; it may repeat after you have read or typed in the session. |
 | `remind_action` | `10` | minutes after an error to remind; `off` = never |
 | `remind_pause` | `2` | skip a reminder (it still counts toward the cap) if you sent a prompt anywhere within this many minutes |
 | `welcome_back` | `10` | after this many quiet minutes, your next prompt is preceded by *"while you were away: …"* naming what waits; `0` = off |

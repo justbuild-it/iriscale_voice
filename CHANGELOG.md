@@ -12,6 +12,9 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
   publishing. Releases no longer depend on someone remembering to publish by hand.
 
 ### Fixed
+- Make repeated review reminders opt-in and omit stale review states from default
+  welcome-back announcements. Claude typing after an idle alert is not reported;
+  initial completion/idle notifications and permission/error reminders remain.
 - Keep the dashboard passive: Codex completion shows gray DONE without requiring
   acknowledgement. Preserve completion speech, suppress unsupported review reminders
   and review summaries, and clarify that typing-based review detection is Claude-only.

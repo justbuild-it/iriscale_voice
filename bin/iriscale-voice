@@ -414,7 +414,7 @@ say_elapsed|true|append "after N minutes" to "done" for turns of 60s or more
 command_detail|redacted|what a permission prompt says about the command: redacted = up to 60 chars with credential-looking words scrubbed; program = program + first word only ("git push"); full = verbatim
 repeat_cooldown|60|seconds; identical line for the same session inside the window is said once; 0 disables
 remind_answer|$(preset_remind "$p" answer)|minutes after a permission prompt to say "still needs your answer" (comma list); off = never. standard 3,10 · verbose 3,10,20 · basic never
-remind_review|$(preset_remind "$p" review)|minutes after a turn ends to remind about an unreviewed session; off = never. standard 15 · verbose 10,30
+remind_review|$(preset_remind "$p" review)|opt-in review reminder minutes; off by default because typing after an idle alert is not reported
 remind_action|$(preset_remind "$p" action)|minutes after an error to remind; off = never. standard 10 · verbose 10
 remind_pause|2|skip a reminder (it still counts) if you sent a prompt anywhere within this many minutes
 welcome_back|10|after this many quiet minutes, your next prompt is preceded by "while you were away: ..."; 0 = off
@@ -1004,8 +1004,9 @@ st_put() {   # st_put <state-file> <key> <value>  (builtins; adds the key if mis
 }
 preset_remind() {   # preset_remind <preset> <answer|review|action> -> minutes, comma list, or ""
     case "$1:$2" in
-        verbose:answer)  echo "3,10,20" ;; verbose:review)  echo "10,30" ;; verbose:action)  echo "10" ;;
-        standard:answer) echo "3,10" ;;    standard:review) echo "15" ;;    standard:action) echo "10" ;;
+        *:review) echo off ;;
+        verbose:answer)  echo "3,10,20" ;; verbose:action) echo "10" ;;
+        standard:answer) echo "3,10" ;; standard:action) echo "10" ;;
         *) echo "" ;;
     esac
 }
@@ -1051,6 +1052,8 @@ pending_summary() {
     for _f in "$SESS"/*; do
         [ -f "$_f" ] || continue
         _k=$(pending_kind "$(st_get "$_f" status)" "$(st_get "$_f" agent)"); [ -n "$_k" ] || continue
+        # An old idle alert cannot establish that the user still has not returned.
+        [ "$_k" != review ] || [ -n "$(remind_schedule review)" ] || continue
         _nm=$(spoken "$(st_get "$_f" name)")
         case $_k in answer) _ps="$_ps, $_nm needs your answer" ;; review) _ps="$_ps, $_nm ready for review" ;; action) _ps="$_ps, $_nm stopped" ;; esac
     done
@@ -1077,6 +1080,10 @@ cli_tick() {
     for _f in "$SESS"/*; do
         [ -f "$_f" ] || continue
         _k=$(pending_kind "$(st_get "$_f" status)" "$(st_get "$_f" agent)"); [ -n "$_k" ] || continue
+        if [ "$_k" = review ] && [ -z "$(remind_schedule review)" ]; then
+            st_put "$_f" remind_at "" # retire schedules persisted by older versions
+            continue
+        fi
         _ra=$(st_get "$_f" remind_at); case $_ra in ''|*[!0-9]*) continue ;; esac
         [ "$_now" -ge "$_ra" ] || continue
         _rc=$(st_get "$_f" reminded); case $_rc in ''|*[!0-9]*) _rc=0 ;; esac; _rc=$((_rc+1))
