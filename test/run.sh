@@ -570,6 +570,7 @@ rm -f "$BGDIR/bg-1.start"
 
 # Passive review lifecycle (0.1.23). Driven through `tick` so nothing sleeps.
 sh "$S" set preset standard >/dev/null; sh "$S" set repeat_cooldown 0 >/dev/null
+sh "$S" set remind_review 15 >/dev/null # exercise the optional review schedule
 LCDIR="$CLAUDE_CONFIG_DIR/iriscale-voice-runtime"; rm -f "$LCDIR/last_prompt"
 LC1='{"session_id":"lc-1","cwd":"/x/billing","hook_event_name":"Stop","background_tasks":[],"session_crons":[]}'
 LC2='{"session_id":"lc-2","cwd":"/x/payments","tool_name":"Bash","tool_input":{"command":"git push"}}'
@@ -579,7 +580,7 @@ printf '%s' "$LC1" | sh "$S" Stop >/dev/null
 grep -q '^status=ready' "$SESSD/lc-1";                       ok $? 0 "lifecycle: Stop -> ready"
 grep -q '^reminded=0' "$SESSD/lc-1";                         ok $? 0 "lifecycle: Stop arms the reminder counter"
 ra=$(sed -n 's/^remind_at=//p' "$SESSD/lc-1"); since=$(sed -n 's/^since=//p' "$SESSD/lc-1")
-[ "$ra" = "$((since + 900))" ];                              ok $? 0 "lifecycle: standard review reminder is 15 min after the turn end"
+[ "$ra" = "$((since + 900))" ];                              ok $? 0 "lifecycle: explicit review reminder is 15 min after the turn end"
 # the state file says agent=claude only for payloads shaped like Claude's; brd payloads carried hook_event_name
 grep -q '^agent=claude' "$SESSD/lc-1";                       ok $? 0 "lifecycle: Claude-shaped payload -> agent=claude"
 # 1. reviewed: READY outlives the idle window with no idle notice -> a key was pressed there
@@ -625,9 +626,10 @@ STAMP2='{"session_id":"lc-2","cwd":"/x/payments","hook_event_name":"UserPromptSu
 STAMP1='{"session_id":"lc-1","cwd":"/x/billing","hook_event_name":"UserPromptSubmit","source":"user"}'
 sh "$S" set preset basic >/dev/null; printf '%s' "$STAMP2" | sh "$S" stamp >/dev/null; printf '%s' "$LC2" | sh "$S" PermissionRequest >/dev/null
 grep -q '^remind_at=$' "$SESSD/lc-2";                        ok $? 0 "basic preset never reminds"
+sh "$S" unset remind_review >/dev/null
 sh "$S" set preset verbose >/dev/null; printf '%s' "$STAMP1" | sh "$S" stamp >/dev/null; printf '%s' "$LC1" | sh "$S" Stop >/dev/null
 ra=$(sed -n 's/^remind_at=//p' "$SESSD/lc-1"); since=$(sed -n 's/^since=//p' "$SESSD/lc-1")
-[ "$ra" = "$((since + 600))" ];                              ok $? 0 "verbose review reminder is 10 min"
+[ -z "$ra" ];                                               ok $? 0 "verbose review reminders are off unless explicitly configured"
 sh "$S" set preset standard >/dev/null; sh "$S" set remind_review off >/dev/null; printf '%s' "$STAMP1" | sh "$S" stamp >/dev/null; printf '%s' "$LC1" | sh "$S" Stop >/dev/null
 grep -q '^remind_at=$' "$SESSD/lc-1";                        ok $? 0 "remind_review=off disables review reminders"
 sh "$S" set remind_review 5 >/dev/null; printf '%s' "$STAMP1" | sh "$S" stamp >/dev/null; printf '%s' "$LC1" | sh "$S" Stop >/dev/null
