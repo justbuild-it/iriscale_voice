@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.33] - 2026-09-19
+
+Passive Codex status: [#48](https://github.com/justbuild-it/iriscale_voice/pull/48).
+Automatic npm publishing: [#49](https://github.com/justbuild-it/iriscale_voice/pull/49).
+Claude review reminders: [#50](https://github.com/justbuild-it/iriscale_voice/pull/50).
+
 ### Added
 - Publish `@iriscale/voice` to npm automatically when a GitHub release is published:
   `.github/workflows/publish.yml` checks out the tag, refuses to run unless
