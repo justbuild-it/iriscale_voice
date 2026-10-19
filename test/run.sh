@@ -774,5 +774,91 @@ if [ "$(sh "$S" status | sed -n "s/.*os: //p" | sed "s/ .*//")" = win ]; then
     sh "$S" config list | grep '^mic_aware ' >/dev/null;             ok $? 0 "mic: mic_aware is a documented setting"
 fi
 
+# 14. meetings: announcements are held while you are in one and said once afterwards (0.1.34)
+export IRISCALE_VOICE_NO_WATCHER=1   # the suite drives meeting-flush / meeting-watch itself
+sh "$S" set preset standard >/dev/null; sh "$S" set repeat_cooldown 0 >/dev/null
+MQ="$CLAUDE_CONFIG_DIR/iriscale-voice-runtime"; rm -f "$MQ/meeting.queue" "$MQ/meeting.state" "$MQ/meeting.until" "$MQ/meeting.pid"
+sh "$S" meeting 30 | grep -q 'holding announcements for 30 minutes';   ok $? 0 "meeting 30 sets a manual hold"
+[ -f "$MQ/meeting.until" ];                                             ok $? 0 "  until file written"
+sh "$S" meeting | grep -q 'in a meeting (manual hold';                  ok $? 0 "  meeting (no argument) says so"
+sh "$S" status | grep -q '^  meeting:  in a meeting';                   ok $? 0 "  status shows it"
+: > "$CLAUDE_CONFIG_DIR/iriscale-voice.log"
+printf '%s' '{"session_id":"mt-1","cwd":"/x/sales_ai","reason":"rate_limit"}' | IRISCALE_VOICE_DEBUG= PATH="$SHIM:$PATH" sh "$S" StopFailure >/dev/null 2>&1
+i=0; while [ $i -lt 20 ] && [ ! -f "$MQ/meeting.queue" ]; do sleep 1; i=$((i+1)); done
+grep -q '^action|sales ai.*stopped' "$MQ/meeting.queue";                ok $? 0 "a StopFailure during the hold is queued, not spoken"
+grep -q 'MeetingHold.*sales ai.*stopped.*(manual)' "$CLAUDE_CONFIG_DIR/iriscale-voice.log"; ok $? 0 "  and logged as held"
+grep -q '^held=1' "$MQ/meeting.state";                                  ok $? 0 "  meeting.state counts it"
+sh "$S" sessions --plain | grep -q 'in a meeting (manual, 0 min) - 1 held'; ok $? 0 "  the board header shows the hold"
+sh "$S" set meeting_urgent answer >/dev/null
+printf '%s' '{"session_id":"mt-2","cwd":"/x/payments","tool_name":"Bash","tool_input":{"command":"git push"}}' | IRISCALE_VOICE_DEBUG= PATH="$SHIM:$PATH" sh "$S" PermissionRequest >/dev/null 2>&1; sleep 2
+[ "$(grep -c . "$MQ/meeting.queue")" = 1 ];                              ok $? 0 "meeting_urgent=answer lets a permission prompt through"
+sh "$S" unset meeting_urgent >/dev/null
+IRISCALE_VOICE_DEBUG= PATH="$SHIM:$PATH" sh "$S" say "forced" >/dev/null 2>&1; sleep 1
+[ "$(grep -c . "$MQ/meeting.queue")" = 1 ];                              ok $? 0 "say is never held (you asked to hear it)"
+sh "$S" meeting off | grep -q 'manual hold ended';                      ok $? 0 "meeting off ends the hold"
+[ ! -f "$MQ/meeting.until" ];                                           ok $? 0 "  until file removed"
+out=$(sh "$S" meeting-flush)
+case "$out" in *"SPEAK [AfterMeeting] while you were in a meeting: "*"payments needs your answer"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL meeting summary names the blocked session: $out" ;; esac
+case "$out" in *"sales ai stopped"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL meeting summary names the stopped session: $out" ;; esac
+[ ! -f "$MQ/meeting.queue" ] && [ ! -f "$MQ/meeting.state" ];           ok $? 0 "  flush clears the queue and the state"
+[ -f "$MQ/last_prompt" ];                                               ok $? 0 "  flush counts as you being back (no welcome-back on top)"
+out=$(sh "$S" meeting-flush); [ -z "$out" ];                            ok $? 0 "  a second flush with nothing queued is silent"
+sh "$S" mute >/dev/null
+out=$(printf '%s' '{"session_id":"meeting","message":"while you were in a meeting: x"}' | sh "$S" AfterMeeting)
+case "$out" in SKIP*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL AfterMeeting must honour mute: $out" ;; esac
+sh "$S" unmute >/dev/null
+sh "$S" set meeting_summary false >/dev/null; printf 'other|x\n' > "$MQ/meeting.queue"; printf 'since=1\nreason=manual\napp=\nminutes=0\nheld=1\n' > "$MQ/meeting.state"
+out=$(sh "$S" meeting-flush); [ -z "$out" ] && [ ! -f "$MQ/meeting.queue" ]; ok $? 0 "meeting_summary=false flushes silently"
+sh "$S" unset meeting_summary >/dev/null
+sh "$S" forget --all >/dev/null; printf 'other|a\nother|b\n' > "$MQ/meeting.queue"; printf 'since=1\nreason=mic\napp=chrome.exe\nminutes=9\nheld=2\n' > "$MQ/meeting.state"
+out=$(sh "$S" meeting-flush)
+case "$out" in *"while you were in a meeting: 2 announcements, nothing still needs you"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL nothing-pending summary: $out" ;; esac
+# the watcher: with meeting awareness off there is nothing to wait for, so it flushes after the grace period
+sh "$S" set meeting_aware false >/dev/null; sh "$S" set meeting_grace 1 >/dev/null
+unset IRISCALE_VOICE_NO_WATCHER
+printf 'other|a\n' > "$MQ/meeting.queue"; printf 'since=1\nreason=manual\napp=\nminutes=0\nheld=1\n' > "$MQ/meeting.state"
+sh "$S" meeting-watch; [ ! -f "$MQ/meeting.pid" ] && [ ! -f "$MQ/meeting.queue" ]; ok $? 0 "meeting-watch flushes once the meeting has been over for meeting_grace"
+sh "$S" meeting | grep -q 'off (meeting_aware=false)';                  ok $? 0 "meeting_aware=false is reported"
+sh "$S" unset meeting_aware >/dev/null; sh "$S" unset meeting_grace >/dev/null
+sh "$S" meeting abc >/dev/null 2>&1;                                    ok $? 2 "meeting rejects a non-number (exit 2)"
+sh "$S" events | grep -q '^  AfterMeeting';                             ok $? 0 "events table lists AfterMeeting"
+sh "$S" --help | grep -q 'meeting \[on|off|N|status\]';                 ok $? 0 "help lists meeting"
+sh "$S" config list | grep -q '^meeting_aware ';                        ok $? 0 "meeting_aware is a documented setting"
+grep -q "^description:" "$here/../commands/meeting.md";                 ok $? 0 "commands/meeting.md exists"
+if [ "$(sh "$S" status | sed -n "s/.*os: //p" | sed "s/ .*//")" = win ]; then
+    SPK="$MQ/speak.ps1"; FR='HKCU:\Software\iriscale-voice-test'
+    CLS() { powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SPK" -Classify -MeetingAfter 120 "$@" -ConsentRoot "$FR\microphone" -WebcamRoot "$FR\webcam" -NotifRoot "$FR\notif" 2>/dev/null | tr -d '\r'; }
+    sh "$S" meeting >/dev/null 2>&1   # writes speak.ps1
+    powershell.exe -NoProfile -Command "Remove-Item -Path '$FR' -Recurse -Force -ErrorAction SilentlyContinue" >/dev/null 2>&1
+    [ "$(CLS)" = "state=free reason=none app= minutes=0" ];               ok $? 0 "classify: nothing open is free"
+    powershell.exe -NoProfile -Command "New-Item -Path '$FR\microphone\NonPackaged\chrome.exe' -Force | Out-Null; Set-ItemProperty -Path '$FR\microphone\NonPackaged\chrome.exe' -Name LastUsedTimeStart -Value ((Get-Date).AddMinutes(-5).ToFileTime()) -Type QWord; Set-ItemProperty -Path '$FR\microphone\NonPackaged\chrome.exe' -Name LastUsedTimeStop -Value 0 -Type QWord" >/dev/null 2>&1
+    [ "$(CLS)" = "state=meeting reason=mic app=chrome.exe minutes=5" ];    ok $? 0 "classify: a mic held 5 minutes is a meeting"
+    t0=$(date +%s); powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$SPK" -MeetingAware -MeetingAfter 120 -Text "must not be spoken" -ConsentRoot "$FR\microphone" -WebcamRoot "$FR\webcam" -NotifRoot "$FR\notif" >/dev/null 2>&1; rc=$?
+    [ "$rc" = 3 ] && [ $(( $(date +%s) - t0 )) -le 5 ];                  ok $? 0 "speaking in a meeting refuses with exit 3 without waiting"
+    powershell.exe -NoProfile -Command "Set-ItemProperty -Path '$FR\microphone\NonPackaged\chrome.exe' -Name LastUsedTimeStart -Value ((Get-Date).AddSeconds(-10).ToFileTime()) -Type QWord" >/dev/null 2>&1
+    case "$(CLS)" in "state=dictation reason=mic app=chrome.exe minutes=0") pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL classify: a 10 s hold must be dictation: $(CLS)" ;; esac
+    powershell.exe -NoProfile -Command "New-Item -Path '$FR\webcam\NonPackaged\Zoom.exe' -Force | Out-Null; Set-ItemProperty -Path '$FR\webcam\NonPackaged\Zoom.exe' -Name LastUsedTimeStart -Value ((Get-Date).ToFileTime()) -Type QWord; Set-ItemProperty -Path '$FR\webcam\NonPackaged\Zoom.exe' -Name LastUsedTimeStop -Value 0 -Type QWord" >/dev/null 2>&1
+    case "$(CLS)" in "state=meeting reason=camera app=Zoom.exe"*) pass=$((pass+1)) ;; *) fail=$((fail+1)); echo "FAIL classify: an open camera is a meeting: $(CLS)" ;; esac
+    powershell.exe -NoProfile -Command "Remove-Item -Path '$FR\webcam' -Recurse -Force; Remove-Item -Path '$FR\microphone' -Recurse -Force; New-Item -Path '$FR\notif' -Force | Out-Null; Set-ItemProperty -Path '$FR\notif' -Name NOC_GLOBAL_SETTING_TOASTS_ENABLED -Value 0 -Type DWord" >/dev/null 2>&1
+    [ "$(CLS -Dnd)" = "state=meeting reason=dnd app= minutes=0" ];         ok $? 0 "classify: Do Not Disturb is a meeting when respected"
+    [ "$(CLS)" = "state=free reason=none app= minutes=0" ];               ok $? 0 "classify: ...and ignored when not"
+    powershell.exe -NoProfile -Command "Remove-Item -Path '$FR' -Recurse -Force -ErrorAction SilentlyContinue" >/dev/null 2>&1
+    # end to end: the real speaker, pointed at a fake hive with a mic held 5 min, must queue the line and not speak
+    powershell.exe -NoProfile -Command "New-Item -Path '$FR\microphone\NonPackaged\chrome.exe' -Force | Out-Null; Set-ItemProperty -Path '$FR\microphone\NonPackaged\chrome.exe' -Name LastUsedTimeStart -Value ((Get-Date).AddMinutes(-5).ToFileTime()) -Type QWord; Set-ItemProperty -Path '$FR\microphone\NonPackaged\chrome.exe' -Name LastUsedTimeStop -Value 0 -Type QWord" >/dev/null 2>&1
+    rm -f "$MQ/meeting.queue" "$MQ/meeting.state"; : > "$CLAUDE_CONFIG_DIR/iriscale-voice.log"; t0=$(date +%s)
+    printf '%s' '{"session_id":"mt-3","cwd":"/x/billing","reason":"rate_limit"}' | IRISCALE_VOICE_DEBUG= IRISCALE_VOICE_CONSENT_ROOT="$FR" sh "$S" StopFailure >/dev/null 2>&1
+    i=0; while [ $i -lt 20 ] && [ ! -f "$MQ/meeting.queue" ]; do sleep 1; i=$((i+1)); done
+    grep -q '^action|billing' "$MQ/meeting.queue";                     ok $? 0 "e2e: the real speaker in a (fake) meeting queues the line"
+    [ $(( $(date +%s) - t0 )) -le 12 ];                                 ok $? 0 "  and returns without waiting out mic_wait"
+    grep -q 'MeetingHold.*billing.*(mic)' "$CLAUDE_CONFIG_DIR/iriscale-voice.log"; ok $? 0 "  logged with the reason"
+    grep -q '^app=chrome.exe' "$MQ/meeting.state";                      ok $? 0 "  meeting.state names the app"
+    IRISCALE_VOICE_CONSENT_ROOT="$FR" sh "$S" meeting | grep -q 'in a meeting (mic held 5 min by chrome.exe) - 1 announcement held'; ok $? 0 "  meeting reports it"
+    IRISCALE_VOICE_CONSENT_ROOT="$FR" sh "$S" sessions --plain | grep -q 'in a meeting (mic chrome.exe, 0 min) - 1 held'; ok $? 0 "  and so does the board"
+    powershell.exe -NoProfile -Command "Remove-Item -Path '$FR' -Recurse -Force -ErrorAction SilentlyContinue" >/dev/null 2>&1
+    rm -f "$MQ/meeting.queue" "$MQ/meeting.state"
+fi
+unset IRISCALE_VOICE_NO_WATCHER
+sleep 4   # let stubbed background speakers finish before the trap removes the shim dir
+
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

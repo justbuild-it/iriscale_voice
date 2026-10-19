@@ -28,6 +28,7 @@ installation or user configuration.
   `iriscale-voice config list`
 - Test: `iriscale-voice test` (Windows: also reports PowerShell's Volume Mixer level; `test --fix` restores it to 100%)
 - Review window: `iriscale-voice review-window 10` (Claude Code: `/iriscale-voice:review-window 10`) — a key pressed in a session within 10 minutes of its turn ending marks it reviewed; 60 s is Claude Code's default. Restart Claude Code after changing it.
+- Meetings: `iriscale-voice meeting` (Claude Code: `/iriscale-voice:meeting`) shows whether announcements are being held; `meeting 45` holds by hand for 45 minutes, `meeting off` ends it. On Windows a mic held over 2 minutes, an open camera or Do Not Disturb holds automatically and one summary is spoken when the meeting ends.
 - Speaker: `iriscale-voice speaker` shows the voices worth using on this machine, `speaker --all`
   every one (alias: `voices`);
   `iriscale-voice speaker "<name>"` sets one and speaks a sample; `speaker default` restores

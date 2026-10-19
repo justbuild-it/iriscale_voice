@@ -5,6 +5,30 @@ versions follow [SemVer](https://semver.org/). Every entry links the PR that shi
 
 ## [Unreleased]
 
+## [0.1.34] - 2026-10-19
+
+### Added
+- **Meeting awareness (Windows).** The microphone record from 0.1.28 sees a meeting exactly
+  as it sees dictation - an app holding the mic - except that it lasts an hour, so the
+  30-second wait expired and announcements landed in Google Meet, Teams and Zoom calls
+  (and in a screen recording). The speaker now classifies the hold: Do Not Disturb on,
+  a camera open, or a mic held longer than `meeting_after` (2) minutes is a meeting; a
+  shorter hold is dictation and is waited out as before. In a meeting nothing is spoken:
+  lines are queued, the board header says *in a meeting (chrome.exe, 12 min) - 3 held*,
+  the log records each as `MeetingHold`, and once the mic has been free for
+  `meeting_grace` (60) seconds one line is spoken through the normal pipeline -
+  *"while you were in a meeting: payments needs your answer, billing ready for review"*
+  (`AfterMeeting` event, so presets, quiet hours, mutes and the cooldown apply). Held
+  review rows count only if they changed during the meeting. `meeting_urgent=answer` lets
+  permission prompts through; `meeting_summary=false` drops the summary; `respect_dnd`
+  covers presenting (Windows turns Do Not Disturb on when you duplicate your display).
+  Nothing changed on the hook path.
+- **`/iriscale-voice:meeting`** (CLI: `iriscale-voice meeting [on|off|N|status]`): hold by
+  hand for N minutes (phone calls, listen-only joins), end early with `off`, or see whether
+  you are in one. `status` and the board show the same. `say`, `test` and `speaker` are
+  never held - you asked to hear them.
+- macOS/Linux meeting detection is planned alongside microphone awareness there.
+
 ## [0.1.33] - 2026-09-19
 
 Passive Codex status: [#48](https://github.com/justbuild-it/iriscale_voice/pull/48).
@@ -667,7 +691,12 @@ First release as a Claude Code plugin.
 ### Removed
 - `userConfig` block from `plugin.json`: it made the CLI nag on every install.
 
-[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.29...HEAD
+[Unreleased]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.34...HEAD
+[0.1.34]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.33...v0.1.34
+[0.1.30]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.29...v0.1.30
+[0.1.31]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.30...v0.1.31
+[0.1.32]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.31...v0.1.32
+[0.1.33]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.32...v0.1.33
 [0.1.29]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.28...v0.1.29
 [0.1.28]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.27...v0.1.28
 [0.1.27]: https://github.com/justbuild-it/iriscale_voice/compare/v0.1.26...v0.1.27

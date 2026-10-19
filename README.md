@@ -24,6 +24,11 @@ you're on and then switch. That's the whole product.
 - **Dictating?** On Windows it waits while any app has the microphone open (Wispr Flow, voice
   typing, a call) and, if the mic opens mid-sentence, stops and repeats itself afterwards —
   its words stay out of your transcript. Off with `mic_aware=false`.
+- **In a meeting?** Nothing is spoken while a mic has been held over two minutes, a camera is
+  open, or Do Not Disturb is on (Meet, Zoom, Teams, a recording). The board keeps updating,
+  and when the meeting ends you hear one line: *"while you were in a meeting: payments needs
+  your answer, billing ready for review."* `/iriscale-voice:meeting 45` holds by hand (phone
+  calls, listen-only joins). Windows today; macOS and Linux planned.
 - Waits for background agents: a turn that pauses while subagents run is *working*, not
   "done", and Claude Code's own "waiting for you" is ignored until the job really ends
 - Concurrent sessions **queue** instead of talking over each other; the same line is never
@@ -101,7 +106,7 @@ Windows without Node? The PowerShell installer does the same job, and additional
 up tab completion (Git for Windows is its only prerequisite):
 
 ```powershell
-irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.33/install.ps1 | iex
+irm https://raw.githubusercontent.com/justbuild-it/iriscale_voice/v0.1.34/install.ps1 | iex
 ```
 
 Prefer to read either installer first? [SECURITY.md](SECURITY.md) shows how.
