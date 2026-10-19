@@ -1,5 +1,12 @@
 # Roadmap
 
+Version 1.1 · 2026-10-19
+
+| version | date | PR | change |
+|---|---|---|---|
+| 1.1 | 2026-10-19 | #52 | 0.1.29-0.1.33 rows now say what actually shipped; 0.1.34 meeting awareness; displaced items moved to 0.1.39-0.1.42 |
+| 1.0 | 2026-09-19 | #51 | table as of 0.1.33, unversioned before this |
+
 Tracking every capability proposed for iriscale_voice, its status, and the reasoning.
 Update this file when something ships or gets cut. Order within a tier is priority.
 
@@ -40,14 +47,20 @@ Each release is small and ships as soon as it's done. Target contents, in order:
 | 0.1.26 | Test suite isolates `$TMPDIR` state from live sessions | shipped 2026-09-10 |
 | 0.1.27 | `review-window` sets Claude Code's idle window (npm installer too); welcome-back lines spoken (stdin fix); window shown in `status` and the board | shipped 2026-09-10 |
 | 0.1.28 | Idle notice ignored while background agents run; microphone awareness on Windows (`mic_aware`, `mic_wait`) | shipped 2026-09-10 |
-| 0.1.29 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
-| 0.1.30 | Microphone awareness on macOS (CoreAudio) and Linux (PulseAudio/PipeWire) | planned |
-| 0.1.31 | Speak a one-line summary of what was done (from `transcript_path`) (`last_assistant_message` is on the Stop payload) | planned |
-| 0.1.32 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
-| 0.1.33 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
-| 0.1.34 | Per-session voice signatures; stamp housekeeping | planned |
-| 0.1.35 | Windows-without-Git-Bash PowerShell fallback | planned |
-| 0.1.36 | Windsurf, Cline, Aider (done-only) | planned |
+| 0.1.29 | Codex on Windows: notification JSON kept intact through a native stdin bridge; TOML settings preserved; credential prefixes scrubbed | shipped 2026-09-11 |
+| 0.1.30 | Windows Codex hooks launch from PowerShell as well as cmd; Codex `Stop` / `SessionEnd` lifecycle hooks | shipped 2026-09-12 |
+| 0.1.31 | Windows Codex hook timeouts fixed: background watchers no longer hold the hook open | shipped 2026-09-12 |
+| 0.1.32 | Codex permission alerts and blocked board states suppressed for automatic approvals | shipped 2026-09-12 |
+| 0.1.33 | Passive Codex status (DONE without acknowledgement); automatic npm publishing on release; review reminders opt-in (PRs #48-#50) | shipped 2026-09-19 |
+| 0.1.34 | Meeting awareness: announcements held while in a meeting (mic over 2 min, camera, Do Not Disturb), one summary afterwards; `meeting` manual hold | this PR |
+| 0.1.35 | Toast / Notification Center / notify-send alongside speech; earcons mode | planned |
+| 0.1.36 | Per-session voice signatures; stamp housekeeping | planned |
+| 0.1.37 | Windows-without-Git-Bash PowerShell fallback | planned |
+| 0.1.38 | Windsurf, Cline, Aider (done-only) | planned |
+| 0.1.39 | Copilot CLI + Grok Build + Gemini CLI install snippets | planned |
+| 0.1.40 | Microphone and meeting awareness on macOS (CoreAudio) and Linux (PulseAudio/PipeWire) | planned |
+| 0.1.41 | Speak a one-line summary of what was done (`last_assistant_message` is on the Stop payload) | planned |
+| 0.1.42 | Junie, Cursor, Devin, OpenCode/Kilo adapters | planned |
 | later | macOS/Linux bar plugins; Windows tray (opt-in); macOS/Linux live verification as users report | |
 | out of scope | **Selecting the terminal tab inside an IDE.** Real setups run several IDE windows across screens, each with several terminal tabs; IDE tabs are not addressable from outside. The board raises the correct window and names the tab. Windows Terminal tabs via UI Automation remains a possible opt-in if sessions run there. | decided 2026-08-28 |
 

@@ -47,6 +47,12 @@ The file is created the first time a setting is written (`config set`, a preset 
 | `volume` | `100` | 0–100 (Windows only; others use system volume) |
 | `mic_aware` | `true` | Windows: hold an announcement while any app has the microphone open (Wispr Flow, voice typing, a call) so it cannot land in your dictation; if the mic opens mid-sentence, stop and say the line again once it closes. Uses the per-app record Windows keeps for its privacy indicator. macOS/Linux: planned |
 | `mic_wait` | `30` | seconds to wait for the microphone to close before speaking anyway |
+| `meeting_aware` | `true` | Windows: hold announcements while you are in a meeting - a mic held longer than `meeting_after`, a camera open, or Do Not Disturb on (Meet, Zoom, Teams, note-takers and screen recorders all show up the same way) - and say one summary when it ends: *"while you were in a meeting: payments needs your answer, billing ready for review"*. The board and log keep everything meanwhile. macOS/Linux: planned; `meeting 45` holds by hand anywhere |
+| `meeting_after` | `2` | minutes a microphone must have been held before it counts as a meeting rather than dictation |
+| `meeting_grace` | `60` | seconds the mic must stay free after a meeting before the held summary is spoken |
+| `meeting_summary` | `true` | `false` = drop held announcements silently when the meeting ends |
+| `respect_dnd` | `true` | Windows Do Not Disturb counts as a meeting (Windows turns it on when you duplicate your display to present) |
+| `meeting_urgent` | *(none)* | kinds never held: `answer` (permission prompts), `action` (errors); comma-separated |
 | `serialize` | `true` | queue announcements so concurrent sessions never talk over each other |
 | `repeat_cooldown` | `60` | seconds; the *same* announcement for the *same* session inside this window is said once. Guards against a looping subagent or a double-firing hook. `0` disables |
 | `remind_answer` | `3,10` | minutes after a permission prompt to say "still needs your answer" (comma list); `off` = never. Presets: standard `3,10`, verbose `3,10,20`, basic never |
@@ -145,6 +151,7 @@ iriscale-voice board               # live board; click/number a row to raise it;
 iriscale-voice focus <n|name|pid>  # raise a session's window (Windows; Linux with wmctrl)
 iriscale-voice forget <name|--all> # drop a row from the board now
 iriscale-voice review-window [N|default] # how long a keypress after a turn still marks it reviewed (sets Claude Code's idle window)
+iriscale-voice meeting [on|off|N|status] # hold announcements by hand for N minutes; no argument shows whether you are in one
 iriscale-voice config list         # every key: current value, default, meaning
 iriscale-voice config get preset
 iriscale-voice config set preset basic

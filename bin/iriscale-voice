@@ -9,7 +9,7 @@
 # Strict POSIX sh, zero dependencies: no jq, node, python. Speech uses whatever the
 # OS ships: PowerShell/System.Speech (Windows), say (macOS), spd-say/espeak (Linux).
 
-VERSION="0.1.33"
+VERSION="0.1.34"
 EVENT="${1:-Stop}"
 # Old Codex processes can retain notify configuration until restarted. Never
 # accept that unscoped stream: it includes Codex's internal temporary requests.
@@ -301,53 +301,69 @@ hour_now() { h=$(date +%H 2>/dev/null); case $h in ??) h=${h#0} ;; esac; printf 
 preset_events() {
     case "$1" in
         basic)    echo "Stop idle_prompt" ;;
-        verbose)  echo "Stop StopFailure PermissionRequest idle_prompt agent_completed SubagentStop SessionEnd StepDone Scheduled Remind WelcomeBack" ;;
+        verbose)  echo "Stop StopFailure PermissionRequest idle_prompt agent_completed SubagentStop SessionEnd StepDone Scheduled Remind WelcomeBack AfterMeeting" ;;
         off)      echo "" ;;
-        *)        echo "Stop StopFailure PermissionRequest idle_prompt Remind WelcomeBack" ;;   # standard
+        *)        echo "Stop StopFailure PermissionRequest idle_prompt Remind WelcomeBack AfterMeeting" ;;   # standard
     esac
 }
 preset_min_turn() { case "$1" in standard) echo 30 ;; *) echo 0 ;; esac; }
 
 # ---------- speaking backends -------------------------------------------------
-speak() {
-    text=$(clean "$(sayable "$1")")
-    cfgv vol volume 100; cfgv rate rate 0; cfgv voice voice ""
-    # config values are interpolated into the speech command: keep them boring. Voice
-    # names need ( ) too: macOS lists its clearer voices as "Eddy (English (US))" and
-    # downloaded ones as "Samantha (Enhanced)"; parentheses are inert inside the
-    # single-quoted PowerShell string and the quoted say argument.
-    case $vol in ''|*[!0-9]*) vol=100 ;; esac
-    case $rate in ''|-) rate=0 ;; -[0-9]*|[0-9]*) case ${rate#-} in *[!0-9]*) rate=0 ;; esac ;; *) rate=0 ;; esac
-    case $voice in *[!A-Za-z0-9\ ._\(\)-]*) voice="" ;; esac
-    case "$(os)" in
-        win)
-            # Speech runs through a small PowerShell file so it can watch the microphone:
-            # Windows keeps a per-app record of mic use for its privacy indicator, and while
-            # an app holds the mic (dictation such as Wispr Flow or voice typing, a call)
-            # LastUsedTimeStop is 0. An announcement spoken then lands in the transcript, so
-            # with mic_aware the speaker waits up to mic_wait seconds for the mic to close,
-            # and if it opens mid-sentence it stops and says the line again afterwards.
-            # This runs in the detached speaker, never on the hook path.
-            cfgv mic_aware mic_aware true; cfgv mic_wait mic_wait 30
-            case $mic_wait in ''|*[!0-9]*) mic_wait=30 ;; esac
-            [ -d "$STATE" ] || mkdir -p -m 700 "$STATE" 2>/dev/null
-            cat > "$STATE/speak.ps1.$$" <<'EOF'
+# ---------- meetings: hold announcements while you are in one ------------------
+# The microphone record (0.1.28) sees a meeting exactly as it sees dictation - an app
+# holding the mic - except that it lasts an hour. mic_wait then expired and the
+# announcement landed in the call. Now the speaker classifies the hold: Do Not Disturb
+# on, a camera open, or a mic held longer than meeting_after minutes is a meeting, and a
+# shorter hold is dictation (waited out as before). In a meeting nothing is spoken:
+# lines go to a queue, the board and log keep everything, and one detached watcher
+# says a single summary once the mic has been free for meeting_grace seconds. The
+# hook path is untouched; all of this runs in the detached speaker or from the CLI.
+# Windows only for now (the record is Windows'); `meeting 45` holds by hand anywhere.
+write_speaker() {   # (re)write $STATE/speak.ps1 - the Windows speaker and classifier
+    [ -d "$STATE" ] || mkdir -p -m 700 "$STATE" 2>/dev/null
+    cat > "$STATE/speak.ps1.$$" <<'EOF'
 # iriscale voice speaker (Windows) - rewritten by bin/iriscale-voice before each announcement.
 param([string]$Text = '', [int]$Volume = 100, [int]$Rate = 0, [string]$Voice = '', [int]$MicWait = 30,
-      [switch]$MicAware, [switch]$Probe,
-      [string]$ConsentRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone')
-function MicInUse {
+      [switch]$MicAware, [switch]$Probe, [switch]$Classify, [switch]$MeetingAware, [int]$MeetingAfter = 120, [switch]$Dnd,
+      [string]$ConsentRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone',
+      [string]$WebcamRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam',
+      [string]$NotifRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings')
+# Who holds a capability right now: the longest-open entry under a consent-store root.
+# Windows writes LastUsedTimeStart when an app opens the mic or camera and
+# LastUsedTimeStop when it lets go; stop = 0 means still open.
+function Holder ($root) {
+  $best = $null
   try {
-    foreach ($k in (Get-ChildItem -Path $ConsentRoot -Recurse -ErrorAction SilentlyContinue)) {
+    foreach ($k in (Get-ChildItem -Path $root -Recurse -ErrorAction SilentlyContinue)) {
       $p = Get-ItemProperty -Path $k.PSPath -ErrorAction SilentlyContinue
       if ($null -ne $p.LastUsedTimeStart -and $p.LastUsedTimeStart -gt 0 -and
-          ($p.LastUsedTimeStop -eq 0 -or $p.LastUsedTimeStart -gt $p.LastUsedTimeStop)) { return $true }
+          ($p.LastUsedTimeStop -eq 0 -or $p.LastUsedTimeStart -gt $p.LastUsedTimeStop)) {
+        $app = ((($k.PSChildName -replace '#','\') -replace '.*\\','') -replace ' ','_')
+        if ($null -eq $best -or $p.LastUsedTimeStart -lt $best.Start) { $best = @{ App = $app; Start = $p.LastUsedTimeStart } }
+      }
     }
   } catch {}
-  return $false
+  return $best
+}
+function MicInUse { return ($null -ne (Holder $ConsentRoot)) }
+function DndOn { try { return ((Get-ItemProperty -Path $NotifRoot -ErrorAction Stop).NOC_GLOBAL_SETTING_TOASTS_ENABLED -eq 0) } catch { return $false } }
+function Minutes ($start) { return [int][math]::Floor(((Get-Date) - [DateTime]::FromFileTime($start)).TotalMinutes) }
+# meeting: Do Not Disturb on (Windows turns it on when you present), a camera open, or a
+# mic held longer than MeetingAfter seconds. dictation: a shorter mic hold. Else free.
+function Classify {
+  if ($Dnd -and (DndOn)) { return 'state=meeting reason=dnd app= minutes=0' }
+  $cam = Holder $WebcamRoot
+  if ($null -ne $cam) { return "state=meeting reason=camera app=$($cam.App) minutes=$(Minutes $cam.Start)" }
+  $mic = Holder $ConsentRoot
+  if ($null -eq $mic) { return 'state=free reason=none app= minutes=0' }
+  $sec = ((Get-Date) - [DateTime]::FromFileTime($mic.Start)).TotalSeconds
+  if ($sec -ge $MeetingAfter) { return "state=meeting reason=mic app=$($mic.App) minutes=$(Minutes $mic.Start)" }
+  return "state=dictation reason=mic app=$($mic.App) minutes=$(Minutes $mic.Start)"
 }
 if ($Probe) { if (MicInUse) { 'mic=inuse' } else { 'mic=free' }; exit 0 }
+if ($Classify) { Classify; exit 0 }
 if ($Text -eq '') { exit 0 }
+if ($MeetingAware) { $c = Classify; if ($c -like 'state=meeting*') { $c; exit 3 } }
 function WaitMic { $w = 0; while ($MicAware -and (MicInUse) -and $w -lt $MicWait) { Start-Sleep -Seconds 1; $w++ } }
 Add-Type -AssemblyName System.Speech
 $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
@@ -366,9 +382,167 @@ do {
 } while ($cut -and $attempt -lt 3)
 $s.Dispose()
 EOF
-            mv -f "$STATE/speak.ps1.$$" "$STATE/speak.ps1" 2>/dev/null
+    mv -f "$STATE/speak.ps1.$$" "$STATE/speak.ps1" 2>/dev/null
+}
+meeting_alive() {   # is the meeting watcher running?
+    [ -f "$STATE/meeting.pid" ] || return 1
+    IFS= read -r _mp < "$STATE/meeting.pid" 2>/dev/null || return 1
+    case $_mp in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$_mp" 2>/dev/null
+}
+meeting_manual() {   # 0 while a `meeting <minutes>` hold is in force; sets meeting_manual_left
+    [ -f "$STATE/meeting.until" ] || return 1
+    IFS= read -r _mu < "$STATE/meeting.until" 2>/dev/null || return 1
+    case $_mu in ''|*[!0-9]*) return 1 ;; esac
+    _mn=$(date +%s 2>/dev/null); case $_mn in ''|*[!0-9]*) return 1 ;; esac
+    [ "$_mn" -lt "$_mu" ] || { rm -f "$STATE/meeting.until" 2>/dev/null; return 1; }
+    meeting_manual_left=$(( (_mu - _mn + 59) / 60 )); return 0
+}
+meeting_classify() {   # one line: state=meeting|dictation|free reason=manual|dnd|camera|mic|none|off|unsupported app= minutes=
+    if meeting_manual; then printf 'state=meeting reason=manual app= minutes=%s\n' "$meeting_manual_left"; return 0; fi
+    cfgv _mw meeting_aware true; [ "$_mw" = true ] || { echo "state=free reason=off app= minutes=0"; return 0; }
+    case "$(os)" in win) ;; *) echo "state=free reason=unsupported app= minutes=0"; return 0 ;; esac
+    cfgv _after meeting_after 2; case $_after in ''|*[!0-9]*) _after=2 ;; esac
+    cfgv _rd respect_dnd true; _dnd=""; [ "$_rd" = true ] && _dnd=-Dnd
+    write_speaker
+    _roots=""; [ -n "${IRISCALE_VOICE_CONSENT_ROOT:-}" ] && _roots="-ConsentRoot $IRISCALE_VOICE_CONSENT_ROOT\microphone -WebcamRoot $IRISCALE_VOICE_CONSENT_ROOT\webcam -NotifRoot $IRISCALE_VOICE_CONSENT_ROOT\notif"
+    powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$STATE/speak.ps1" -Classify -MeetingAfter $(( _after * 60 )) $_dnd $_roots 2>/dev/null | tr -d '\r' | sed -n 1p
+}
+meeting_hold() {   # meeting_hold <line> <kind> <classification>: queue it, note it, make sure a watcher runs
+    [ -d "$STATE" ] || mkdir -p -m 700 "$STATE" 2>/dev/null
+    printf '%s|%s\n' "$2" "$1" >> "$STATE/meeting.queue"
+    _r=""; _a=""; _m=""; for _kv in $3; do case $_kv in reason=*) _r=${_kv#reason=} ;; app=*) _a=${_kv#app=} ;; minutes=*) _m=${_kv#minutes=} ;; esac; done
+    _since=""; [ -f "$STATE/meeting.state" ] && _since=$(st_get "$STATE/meeting.state" since)
+    _n=0; while IFS= read -r _l || [ -n "$_l" ]; do _n=$((_n+1)); done < "$STATE/meeting.queue"
+    _t=$(date +%s 2>/dev/null); case $_since in ''|*[!0-9]*) _since=$_t ;; esac
+    printf 'since=%s\nreason=%s\napp=%s\nminutes=%s\nheld=%s\n' "$_since" "$_r" "$_a" "$_m" "$_n" > "$STATE/meeting.state"
+    cfgv _log log "$CLAUDE_DIR/iriscale-voice.log"
+    [ "$_log" != none ] && printf '%s\tMeetingHold\t%s (%s)\n' "$(date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null)" "$1" "${_r:-meeting}" >> "$_log" 2>/dev/null
+    if [ -z "${IRISCALE_VOICE_NO_WATCHER:-}" ] && ! meeting_alive; then sh "$0" meeting-watch </dev/null >/dev/null 2>&1 & fi   # tests set the variable
+    return 0
+}
+meeting_summary() {   # meeting_summary <since>: what still needs you; review rows only if they changed during the meeting
+    _ps=""
+    for _f in "$SESS"/*; do
+        [ -f "$_f" ] || continue
+        _k=$(pending_kind "$(st_get "$_f" status)" "$(st_get "$_f" agent)"); [ -n "$_k" ] || continue
+        if [ "$_k" = review ]; then _s=$(st_get "$_f" since); case $_s in ''|*[!0-9]*) continue ;; esac; [ "$_s" -ge "$1" ] || continue; fi
+        _nm=$(spoken "$(st_get "$_f" name)")
+        case $_k in answer) _ps="$_ps, $_nm needs your answer" ;; review) _ps="$_ps, $_nm ready for review" ;; action) _ps="$_ps, $_nm stopped" ;; esac
+    done
+    printf '%s' "${_ps#, }"
+}
+cli_meeting_flush() {   # (internal) the meeting is over: say one line for everything that was held
+    [ -f "$STATE/meeting.queue" ] || { rm -f "$STATE/meeting.state" 2>/dev/null; return 0; }
+    _n=0; while IFS= read -r _l || [ -n "$_l" ]; do _n=$((_n+1)); done < "$STATE/meeting.queue"
+    _since=""; [ -f "$STATE/meeting.state" ] && _since=$(st_get "$STATE/meeting.state" since); case $_since in ''|*[!0-9]*) _since=0 ;; esac
+    rm -f "$STATE/meeting.queue" "$STATE/meeting.state" 2>/dev/null
+    cfgv _ms meeting_summary true; [ "$_ms" = true ] || return 0
+    [ "$_n" -gt 0 ] || return 0
+    _sum=$(meeting_summary "$_since")
+    if [ -n "$_sum" ]; then _wl="while you were in a meeting: $_sum"
+    else _wl="while you were in a meeting: $_n announcement$( [ "$_n" -ne 1 ] && echo s ), nothing still needs you"; fi
+    _t=$(date +%s 2>/dev/null); case $_t in ''|*[!0-9]*) ;; *) printf '%s\n' "$_t" > "$STATE/last_prompt" 2>/dev/null ;; esac   # you are back: no welcome-back on top of this
+    printf '{"session_id":"meeting","message":"%s"}' "$(clean "$_wl")" | sh "$0" AfterMeeting
+}
+cli_meeting_watch() {   # (internal, detached) wait until the meeting has been over for meeting_grace seconds, then flush
+    [ -d "$STATE" ] || mkdir -p -m 700 "$STATE" 2>/dev/null
+    if meeting_alive; then return 0; fi          # one watcher is enough
+    printf '%s\n' "$$" > "$STATE/meeting.pid" 2>/dev/null
+    cfgv grace meeting_grace 60; case $grace in ''|*[!0-9]*) grace=60 ;; esac
+    _iv=15; [ "$grace" -lt 15 ] && _iv=$grace; [ "$_iv" -ge 1 ] || _iv=1
+    free_since=""; i=0
+    while [ "$i" -lt 2880 ]; do                  # 12 h at 15 s, then flush regardless
+        i=$((i+1))
+        _c=$(meeting_classify); _now=$(date +%s 2>/dev/null); case $_now in ''|*[!0-9]*) break ;; esac
+        case $_c in state=meeting*) free_since="" ;; *) [ -n "$free_since" ] || free_since=$_now ;; esac
+        if [ -n "$free_since" ] && [ $(( _now - free_since )) -ge "$grace" ]; then break; fi
+        sleep "$_iv"
+    done
+    rm -f "$STATE/meeting.pid" 2>/dev/null
+    cli_meeting_flush >/dev/null 2>&1
+    return 0
+}
+meeting_describe() {   # one line for status / `meeting`
+    _c=$(meeting_classify); _st=""; _r=""; _a=""; _m=""
+    for _kv in $_c; do case $_kv in state=*) _st=${_kv#state=} ;; reason=*) _r=${_kv#reason=} ;; app=*) _a=${_kv#app=} ;; minutes=*) _m=${_kv#minutes=} ;; esac; done
+    _held=0; [ -f "$STATE/meeting.state" ] && { _held=$(st_get "$STATE/meeting.state" held); case $_held in ''|*[!0-9]*) _held=0 ;; esac; }
+    case $_st in
+        meeting)
+            case $_r in manual) _why="manual hold, ${_m} min left" ;; dnd) _why="Windows Do Not Disturb is on" ;; camera) _why="camera open in $_a" ;; *) _why="mic held ${_m} min by $_a" ;; esac
+            echo "in a meeting ($_why) - $_held announcement$( [ "$_held" -ne 1 ] && echo s ) held, spoken when it ends" ;;
+        dictation) echo "not in one (mic open in $_a - dictation; announcements wait for it)" ;;
+        *)  case $_r in
+                off) echo "off (meeting_aware=false); 'meeting 45' still holds by hand" ;;
+                unsupported) echo "not watched on $(os) yet (Windows only); 'meeting 45' holds by hand" ;;
+                *) echo "not in one (watching: mic held over $(cfg meeting_after 2) min, camera, Do Not Disturb; 'meeting 45' holds by hand)" ;;
+            esac ;;
+    esac
+}
+# meeting [on|off|<minutes>|status]: hold announcements by hand (phone call, listen-only join)
+cli_meeting() {
+    case ${1:-} in
+        off|end)
+            if [ -f "$STATE/meeting.until" ]; then
+                rm -f "$STATE/meeting.until" 2>/dev/null; cfgv grace meeting_grace 60
+                echo "manual hold ended; anything held is spoken once the mic has been free for ${grace}s"
+            else echo "no manual hold was set ($(meeting_describe))"; fi
+            return 0 ;;
+        ''|status) echo "meeting: $(meeting_describe)"; return 0 ;;
+        on) _min=60 ;;
+        *[!0-9]*) echo "usage: iriscale-voice meeting [on|off|<minutes>|status]   (on = 60 minutes)" >&2; return 2 ;;
+        *) _min=$1; [ "$_min" -ge 1 ] && [ "$_min" -le 720 ] || { echo "meeting: minutes must be 1-720" >&2; return 2; } ;;
+    esac
+    [ -d "$STATE" ] || mkdir -p -m 700 "$STATE" 2>/dev/null
+    _t=$(date +%s 2>/dev/null); case $_t in ''|*[!0-9]*) echo "meeting: clock unavailable" >&2; return 1 ;; esac
+    printf '%s\n' $(( _t + _min * 60 )) > "$STATE/meeting.until"
+    [ -f "$STATE/meeting.state" ] || printf 'since=%s\nreason=manual\napp=\nminutes=0\nheld=0\n' "$_t" > "$STATE/meeting.state"
+    if [ -z "${IRISCALE_VOICE_NO_WATCHER:-}" ] && ! meeting_alive; then sh "$0" meeting-watch </dev/null >/dev/null 2>&1 & fi   # tests set the variable
+    echo "holding announcements for $_min minutes; the board and log keep everything, one summary is spoken when it ends; 'meeting off' ends it early"
+    return 0
+}
+
+speak() {
+    text=$(clean "$(sayable "$1")")
+    cfgv vol volume 100; cfgv rate rate 0; cfgv voice voice ""
+    # config values are interpolated into the speech command: keep them boring. Voice
+    # names need ( ) too: macOS lists its clearer voices as "Eddy (English (US))" and
+    # downloaded ones as "Samantha (Enhanced)"; parentheses are inert inside the
+    # single-quoted PowerShell string and the quoted say argument.
+    case $vol in ''|*[!0-9]*) vol=100 ;; esac
+    case $rate in ''|-) rate=0 ;; -[0-9]*|[0-9]*) case ${rate#-} in *[!0-9]*) rate=0 ;; esac ;; *) rate=0 ;; esac
+    case $voice in *[!A-Za-z0-9\ ._\(\)-]*) voice="" ;; esac
+    # meetings (see the meeting section): decide whether this line may be held. Forced
+    # speech (say, test, speaker) and kinds listed in meeting_urgent are never held.
+    cfgv meeting_aware meeting_aware true; cfgv meeting_after meeting_after 2
+    cfgv respect_dnd respect_dnd true; cfgv meeting_urgent meeting_urgent ""
+    case $meeting_after in ''|*[!0-9]*) meeting_after=2 ;; esac
+    kind=other; case ${EVENT:-} in PermissionRequest) kind=answer ;; StopFailure) kind=action ;; esac
+    hold_ok=0
+    if [ "$meeting_aware" = true ] && [ -z "${SPEAK_FORCE:-}" ]; then
+        hold_ok=1; case ",$meeting_urgent," in *",$kind,"*) hold_ok=0 ;; esac
+    fi
+    if [ "$hold_ok" = 1 ] && meeting_manual; then
+        meeting_hold "$1" "$kind" "state=meeting reason=manual app= minutes=$meeting_manual_left"; return 0
+    fi
+    case "$(os)" in
+        win)
+            # Windows speech runs through $STATE/speak.ps1 (see write_speaker): it waits
+            # out dictation (mic_aware / mic_wait), cuts and repeats if the mic opens
+            # mid-sentence, and with meeting awareness refuses (exit 3) when you are in a
+            # meeting so the line is queued instead. Detached speaker, never the hook path.
+            cfgv mic_aware mic_aware true; cfgv mic_wait mic_wait 30
+            case $mic_wait in ''|*[!0-9]*) mic_wait=30 ;; esac
+            write_speaker
             _mic=""; [ "$mic_aware" = true ] && _mic=-MicAware
-            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$STATE/speak.ps1" -Voice "$voice" -Volume "$vol" -Rate "$rate" -MicWait "$mic_wait" $_mic -Text "$text" >/dev/null 2>&1 ;;
+            _ma=""; _dnd=""
+            if [ "$hold_ok" = 1 ]; then _ma="-MeetingAware -MeetingAfter $(( meeting_after * 60 ))"; [ "$respect_dnd" = true ] && _dnd=-Dnd; fi
+            _roots=""; [ -n "${IRISCALE_VOICE_CONSENT_ROOT:-}" ] && _roots="-ConsentRoot $IRISCALE_VOICE_CONSENT_ROOT\microphone -WebcamRoot $IRISCALE_VOICE_CONSENT_ROOT\webcam -NotifRoot $IRISCALE_VOICE_CONSENT_ROOT\notif"   # tests point at a fake hive
+            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$STATE/speak.ps1" -Voice "$voice" -Volume "$vol" -Rate "$rate" -MicWait "$mic_wait" $_mic $_ma $_dnd $_roots -Text "$text" > "$STATE/speak.out" 2>/dev/null; _rc=$?
+            if [ "$_rc" = 3 ]; then
+                _cls=""; IFS= read -r _cls < "$STATE/speak.out" 2>/dev/null || :; _cls=${_cls%"$CR"}
+                meeting_hold "$1" "$kind" "$_cls"
+            fi ;;
         mac)
             # say: rate is words/min (default ~175); map our -10..10 onto 120..300
             wpm=$((175 + rate * 12))
@@ -426,6 +600,12 @@ rate|0|speaking speed, -10 slow .. 10 fast
 volume|100|0-100 (Windows only; others use system volume)
 mic_aware|true|Windows: hold an announcement while any app has the microphone open (dictation, a call); if it opens mid-sentence, stop and say the line again after
 mic_wait|30|seconds to wait for the microphone to close before speaking anyway
+meeting_aware|true|Windows: hold announcements while you are in a meeting (mic held over meeting_after minutes, camera open, or Do Not Disturb), then say one summary; the board and log keep everything
+meeting_after|2|minutes a microphone must have been held before it counts as a meeting rather than dictation
+meeting_grace|60|seconds the mic must stay free after a meeting before the held summary is spoken
+meeting_summary|true|false = held announcements are dropped silently when the meeting ends (the board still showed them)
+respect_dnd|true|Windows Do Not Disturb counts as a meeting (Windows turns it on when you present)
+meeting_urgent|(none)|kinds never held: answer (permission prompts), action (errors); comma-separated
 serialize|true|queue announcements so concurrent sessions never overlap
 log|$CLAUDE_DIR/iriscale-voice.log|tab-separated activity log; \`none\` disables
 board_hide_hours|24|a session with no process and no event for this long is forgotten (Codex records no pid)
@@ -448,6 +628,7 @@ Scheduled|turn paused until a /loop or scheduled wake-up|"<session> paused until
 SessionEnd|session closed|"<session> session ended"
 Remind|a session has needed you for a while (remind_answer / remind_review / remind_action)|"<session> still needs your answer, 10 minutes"
 WelcomeBack|your first prompt after welcome_back quiet minutes, if anything waits|"while you were away: payments needs your answer, billing ready for review"
+AfterMeeting|the meeting is over (mic free for meeting_grace), if anything was held|"while you were in a meeting: payments needs your answer, billing ready for review"
 stamp|(internal) marks turn start for min_turn_seconds|—
 resume|(internal) a tool ran, so the dialog you were asked about is answered: clears "needs your answer" and its reminders|—
 EOF
@@ -484,6 +665,8 @@ COMMANDS
   review-window [N|default]  how long after a turn ends a keypress there still marks it reviewed
                          (sets Claude Code's idle window in settings.json; 10 minutes recommended)
                          (Windows; Linux with wmctrl; not yet on macOS)
+  meeting [on|off|N|status]  hold announcements by hand for N minutes (on = 60); automatic on
+                         Windows when a mic is held over 2 min, a camera is open, or Do Not Disturb
   install codex          print Codex config snippets with absolute paths
   install codex --apply  install script, PATH, skill and lifecycle hooks (Windows; on
                          macOS/Linux: npx @iriscale/voice@latest install codex --apply)
@@ -521,6 +704,7 @@ cli_status() {
     echo "  review:   Claude: a key within $(idle_window_label) of finishing marks it reviewed after the idle window"
     echo "            Codex: DONE means finished; typing and review activity are not reported"
     [ "$(idle_window_label)" = 60s ] && echo "            60 s is Claude Code's default and too short if you let a finished session sit: run /iriscale-voice:review-window 10"
+    echo "  meeting:  $(meeting_describe)"
     echo "  muted:    $(cfg mute_sessions none)   only: $(cfg only_sessions all)"
     echo "  voice:    $(cfg voice default)   volume: $(cfg volume 100)   rate: $(cfg rate 0)   os: $(os)"
     echo "  log:      $(cfg log "$CLAUDE_DIR/iriscale-voice.log")"
@@ -1284,6 +1468,11 @@ cli_sessions() {
         done
     fi
     printf "${B}iriscale voice${N} ${D}v$VERSION${N}   ${B}sessions${N}   ${D}updated %s${N}\n\n" "$(date +%H:%M:%S 2>/dev/null)"
+    if [ -f "$STATE/meeting.state" ]; then
+        _mr=$(st_get "$STATE/meeting.state" reason); _mapp=$(st_get "$STATE/meeting.state" app); _mh=$(st_get "$STATE/meeting.state" held); _msn=$(st_get "$STATE/meeting.state" since)
+        _mm=0; case $_msn in ''|*[!0-9]*) ;; *) [ "$now" -gt 0 ] && _mm=$(( (now - _msn) / 60 )) ;; esac
+        printf "  ${M}in a meeting${N} ${D}(%s%s, %s min) - %s held, spoken when it ends${N}${EL}\n\n" "${_mr:-meeting}" "${_mapp:+ $_mapp}" "$_mm" "${_mh:-0}"
+    fi
     if [ "$keys" = 1 ]; then printf "   %-26s %-13s %-6s %-8s %s\n" "SESSION" "STATE" "FOR" "AGENT" "LAST SAID"
     else printf "     %-26s %-13s %-6s %-8s %s\n" "SESSION" "STATE" "FOR" "AGENT" "LAST SAID"; fi
     [ "$keys" = 1 ] && : > "$STATE/board.rows"
@@ -1457,7 +1646,7 @@ cli_board() {
         t=$(date +%s 2>/dev/null); case $t in ""|*[!0-9]*) t=0 ;; esac
         if [ $(( t - last_prune )) -ge 60 ]; then prune_dead; last_prune=$t; fi
         sig=""
-        for sf in "$SESS"/* "$CLAUDE_DIR"/sessions/*.json; do [ -f "$sf" ] || continue; IFS= read -r l < "$sf" 2>/dev/null || :; sig="$sig$l"; done
+        for sf in "$SESS"/* "$CLAUDE_DIR"/sessions/*.json "$STATE"/meeting.state; do [ -f "$sf" ] || continue; IFS= read -r l < "$sf" 2>/dev/null || :; sig="$sig$l"; done
         # state files are multi-line; fold the whole file in
         for sf in "$SESS"/*; do [ -f "$sf" ] || continue; while IFS= read -r l || [ -n "$l" ]; do sig="$sig$l"; done < "$sf"; done
         if [ "$sig" != "$last_sig" ] || [ $(( t - last_paint )) -ge "$interval" ] || [ -n "$note" ]; then
@@ -1550,6 +1739,9 @@ case "$EVENT" in
     focus)   shift; cli_focus "$@"; exit $? ;;
     forget)  shift; cli_forget "$@"; exit $? ;;
     review-window) shift; cli_review_window "$@"; exit $? ;;
+    meeting) shift; cli_meeting "$@"; exit $? ;;
+    meeting-watch) cli_meeting_watch; exit $? ;;   # (internal, detached) flush once the meeting is over
+    meeting-flush) cli_meeting_flush; exit $? ;;   # (internal) say the held summary now
     tick)    shift; cli_tick "$@"; exit $? ;;      # (internal) apply the review lifecycle now
     watch)   shift; cli_watch "$@"; exit $? ;;     # (internal) follow one session-turn
     install) shift; cli_install "$@"; exit $? ;;
@@ -1575,10 +1767,10 @@ case "$EVENT" in
     events)
         printf '  %-18s %-46s %s\n' EVENT "WHEN IT FIRES" "WHAT IT SAYS"
         events_table | while IFS='|' read -r e w s; do printf '  %-18s %-46s %s\n' "$e" "$w" "$s"; done; exit 0 ;;
-    say|speak) shift; speak "${*:-iriscale voice test}"; exit 0 ;;
-    speaker) shift; cli_speaker "$@"; exit $? ;;
+    say|speak) shift; SPEAK_FORCE=1; speak "${*:-iriscale voice test}"; exit 0 ;;
+    speaker) shift; SPEAK_FORCE=1; cli_speaker "$@"; exit $? ;;
     voices)  shift; cli_speaker_list "$@"; exit $? ;;   # the list under the word people reach for
-    test)    shift; cli_test "$@"; exit $? ;;
+    test)    shift; SPEAK_FORCE=1; cli_test "$@"; exit $? ;;
     mixer-verdict) mixer_verdict "$2"; exit 0 ;;   # (test suite) render one mixer report line
     -*)      echo "unknown option: $EVENT" >&2; usage >&2; exit 2 ;;
 esac
@@ -1967,7 +2159,7 @@ line="$spoken_name $tail"
 # "payments api, done" is heard as a name and a verdict, not one run-on phrase. The
 # log, the board and the repeat guard keep the plain line.
 say_line="$spoken_name, $tail"
-case $EVENT in Remind|WelcomeBack) line=$(jget message "$payload"); say_line=$line ;; esac   # whole line comes from tick / stamp
+case $EVENT in Remind|WelcomeBack|AfterMeeting) line=$(jget message "$payload"); say_line=$line ;; esac   # whole line comes from tick / stamp
 
 # repeat guard: the same announcement for the same session within repeat_cooldown
 # seconds is noise (a subagent looping, a hook double-firing) — say it once.
