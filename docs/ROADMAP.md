@@ -4,7 +4,7 @@ Version 1.1 · 2026-10-19
 
 | version | date | PR | change |
 |---|---|---|---|
-| 1.1 | 2026-10-19 | 0.1.34 release PR | 0.1.29-0.1.33 rows now say what actually shipped; 0.1.34 meeting awareness; displaced items moved to 0.1.39-0.1.42 |
+| 1.1 | 2026-10-19 | #52 | 0.1.29-0.1.33 rows now say what actually shipped; 0.1.34 meeting awareness; displaced items moved to 0.1.39-0.1.42 |
 | 1.0 | 2026-09-19 | #51 | table as of 0.1.33, unversioned before this |
 
 Tracking every capability proposed for iriscale_voice, its status, and the reasoning.
